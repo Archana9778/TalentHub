@@ -1,0 +1,38 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+target/
+*.class
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Uploaded candidate files during testing
+backend/uploads/resumes/*
+!backend/uploads/resumes/sample-alex-morgan-resume.pdf
+backend/data/*.tmp

@@ -1,0 +1,805 @@
+{
+  "users": [
+    {
+      "id": "user-admin-1",
+      "email": "admin@talenthub.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "Eleanor Vance",
+      "role": "admin",
+      "status": "active",
+      "title": "Platform Administrator",
+      "location": "Seattle, WA",
+      "phone": "+1 (555) 019-2834",
+      "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+      "bio": "TalentHub System Director & Governance Lead",
+      "createdAt": "2026-01-10T08:00:00Z"
+    },
+    {
+      "id": "user-recruiter-1",
+      "email": "recruiter@techcorp.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "Sarah Jenkins",
+      "role": "recruiter",
+      "status": "active",
+      "companyId": "comp-1",
+      "companyName": "CloudScale Technologies",
+      "title": "Lead Talent Acquisition Partner",
+      "location": "San Francisco, CA",
+      "phone": "+1 (555) 345-6789",
+      "avatarUrl": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+      "bio": "Hiring top engineering talent for cloud infrastructure and distributed systems.",
+      "createdAt": "2026-01-15T09:30:00Z"
+    },
+    {
+      "id": "user-recruiter-2",
+      "email": "hiring@nexusaidata.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "Michael Chang",
+      "role": "recruiter",
+      "status": "active",
+      "companyId": "comp-2",
+      "companyName": "Nexus AI Labs",
+      "title": "Technical Recruiter",
+      "location": "Austin, TX",
+      "phone": "+1 (555) 789-0123",
+      "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+      "bio": "Building world-class AI, ML and LLM product teams.",
+      "createdAt": "2026-01-20T10:15:00Z"
+    },
+    {
+      "id": "user-candidate-1",
+      "email": "candidate@talenthub.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "Alex Morgan",
+      "role": "candidate",
+      "status": "active",
+      "title": "Senior Full-Stack Cloud Engineer",
+      "location": "Seattle, WA",
+      "phone": "+1 (555) 432-8765",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+      "bio": "Passionate full-stack developer with 6+ years of expertise in React, TypeScript, Spring Boot, MySQL, and Microsoft Azure Cloud.",
+      "skills": [
+        "React",
+        "TypeScript",
+        "Node.js",
+        "Java",
+        "Spring Boot",
+        "MySQL",
+        "Azure",
+        "Docker",
+        "Kubernetes",
+        "Tailwind CSS"
+      ],
+      "experience": [
+        {
+          "title": "Senior Software Engineer",
+          "company": "Apex Cloud Solutions",
+          "period": "2023 - Present",
+          "description": "Led development of high-throughput microservices in Spring Boot and modern React UI on Azure AKS."
+        },
+        {
+          "title": "Full Stack Engineer",
+          "company": "Vanguard Tech",
+          "period": "2020 - 2023",
+          "description": "Built customer-facing portals using React, TypeScript and Node.js REST APIs."
+        }
+      ],
+      "education": [
+        {
+          "degree": "B.S. in Computer Science",
+          "school": "University of Washington",
+          "year": "2020"
+        }
+      ],
+      "resumeUrl": "/uploads/resumes/sample-alex-morgan-resume.pdf",
+      "resumeOriginalName": "Alex_Morgan_Resume_2026.pdf",
+      "parsedResumeData": {
+        "fullName": "Alex Morgan",
+        "email": "candidate@talenthub.com",
+        "phone": "+1 (555) 432-8765",
+        "summary": "Experienced Full Stack Engineer with strong expertise in React, Spring Boot, Azure Cloud architecture, and database optimization.",
+        "extractedSkills": [
+          "React",
+          "TypeScript",
+          "Node.js",
+          "Java",
+          "Spring Boot",
+          "MySQL",
+          "Azure",
+          "Docker",
+          "Kubernetes"
+        ],
+        "experienceYears": 6,
+        "educationLevel": "Bachelor of Science in Computer Science",
+        "extractedAt": "2026-01-22T14:30:00Z"
+      },
+      "createdAt": "2026-01-22T11:00:00Z"
+    },
+    {
+      "id": "user-candidate-2",
+      "email": "david.chen@example.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "David Chen",
+      "role": "candidate",
+      "status": "active",
+      "title": "DevOps & Site Reliability Engineer",
+      "location": "Chicago, IL",
+      "phone": "+1 (555) 654-9871",
+      "avatarUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+      "bio": "DevOps professional specializing in Terraform, Kubernetes, CI/CD pipelines, and Azure Infrastructure.",
+      "skills": [
+        "Terraform",
+        "Azure",
+        "Kubernetes",
+        "Docker",
+        "CI/CD",
+        "Linux",
+        "Ansible",
+        "Packer",
+        "Python",
+        "Prometheus"
+      ],
+      "experience": [
+        {
+          "title": "DevOps Engineer",
+          "company": "Northwind Systems",
+          "period": "2022 - Present",
+          "description": "Managed VMSS, Terraform modules, and automated blue-green releases."
+        }
+      ],
+      "education": [
+        {
+          "degree": "B.S. in Software Engineering",
+          "school": "Purdue University",
+          "year": "2021"
+        }
+      ],
+      "resumeUrl": "/uploads/resumes/sample-david-chen.pdf",
+      "resumeOriginalName": "David_Chen_DevOps.pdf",
+      "createdAt": "2026-01-25T14:00:00Z"
+    },
+    {
+      "id": "user-candidate-3",
+      "email": "priya.patel@example.com",
+      "password": "$2b$10$6lMHHMtBcPuy399XjyBtgOvIOaWDBHBL8ATGCOiBBc5zkcZWCyP7.",
+      "name": "Priya Patel",
+      "role": "candidate",
+      "status": "active",
+      "title": "Lead Frontend Architect",
+      "location": "New York, NY",
+      "phone": "+1 (555) 321-9870",
+      "avatarUrl": "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150",
+      "bio": "Frontend enthusiast creating accessible, responsive, and blazing-fast web applications.",
+      "skills": [
+        "React",
+        "TypeScript",
+        "Next.js",
+        "Tailwind CSS",
+        "Redux",
+        "GraphQL",
+        "Jest",
+        "Vite",
+        "Figma"
+      ],
+      "experience": [
+        {
+          "title": "Lead Frontend Developer",
+          "company": "FinTech Dynamics",
+          "period": "2021 - Present",
+          "description": "Architected design systems and core UI components in React & TypeScript."
+        }
+      ],
+      "education": [
+        {
+          "degree": "M.S. in Human-Computer Interaction",
+          "school": "Columbia University",
+          "year": "2020"
+        }
+      ],
+      "resumeUrl": "/uploads/resumes/sample-priya-patel.pdf",
+      "resumeOriginalName": "Priya_Patel_Frontend_Lead.pdf",
+      "createdAt": "2026-02-01T16:20:00Z"
+    },
+    {
+      "id": "user-e97157ae",
+      "email": "aravindvnair20@gmail.com",
+      "password": "$2a$10$wFEfcDEJfMMMiQ3ChGbHZO9MeAuJC/f4Bca.FwslGp5Iyy9rPdZmq",
+      "name": "Aravind v nair",
+      "role": "candidate",
+      "status": "active",
+      "title": "Full Stack Developer",
+      "location": "Remote, US",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Aravind%20v%20nair",
+      "skills": [
+        "React",
+        "TypeScript",
+        "Node.js"
+      ],
+      "experience": [],
+      "education": [],
+      "createdAt": "2026-11-02T08:26:53.888Z"
+    }
+  ],
+  "companies": [
+    {
+      "id": "comp-1",
+      "name": "CloudScale Technologies",
+      "description": "Enterprise cloud management, VMSS orchestration, and immutable infrastructure solutions for Fortune 500 companies.",
+      "logo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
+      "website": "https://cloudscale.example.com",
+      "location": "San Francisco, CA & Remote",
+      "industry": "Cloud Infrastructure & Enterprise Software",
+      "size": "500-1,000 employees",
+      "verified": true,
+      "createdAt": "2025-11-10T10:00:00Z"
+    },
+    {
+      "id": "comp-2",
+      "name": "Nexus AI Labs",
+      "description": "Pioneering multimodal intelligence, generative AI models, and document cognition engines.",
+      "logo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
+      "website": "https://nexusai.example.com",
+      "location": "Austin, TX & Hybrid",
+      "industry": "Artificial Intelligence & Machine Learning",
+      "size": "100-250 employees",
+      "verified": true,
+      "createdAt": "2025-12-05T12:00:00Z"
+    },
+    {
+      "id": "comp-3",
+      "name": "FinTech Velocity",
+      "description": "Next-generation payment rail and automated compliance engines with bank-grade security.",
+      "logo": "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=120",
+      "website": "https://fintechvelocity.example.com",
+      "location": "New York, NY",
+      "industry": "Financial Technology",
+      "size": "250-500 employees",
+      "verified": true,
+      "createdAt": "2026-01-05T09:00:00Z"
+    },
+    {
+      "id": "comp-4",
+      "name": "SecureNet Cyber",
+      "description": "Zero-trust architecture, automated threat detection, and cloud security compliance posture monitoring.",
+      "logo": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=120",
+      "website": "https://securenet.example.com",
+      "location": "Washington, DC",
+      "industry": "Cybersecurity",
+      "size": "50-100 employees",
+      "verified": false,
+      "createdAt": "2026-01-18T15:00:00Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-1",
+      "name": "Full Stack & Web Engineering",
+      "description": "React, Node.js, Spring Boot, full lifecycle modern web development",
+      "icon": "Code2",
+      "jobCount": 14
+    },
+    {
+      "id": "cat-2",
+      "name": "Cloud Architecture & DevOps",
+      "description": "Azure, AWS, Kubernetes, Terraform, CI/CD and immutable scale sets",
+      "icon": "Cloud",
+      "jobCount": 10
+    },
+    {
+      "id": "cat-3",
+      "name": "AI & Data Science",
+      "description": "Machine Learning, LLM integrations, Azure AI Document Intelligence, analytics",
+      "icon": "BrainCircuit",
+      "jobCount": 8
+    },
+    {
+      "id": "cat-4",
+      "name": "Cyber Security & Compliance",
+      "description": "Zero trust, penetration testing, CIS benchmark compliance, security operations",
+      "icon": "ShieldCheck",
+      "jobCount": 6
+    },
+    {
+      "id": "cat-5",
+      "name": "Product Management & UI/UX",
+      "description": "Product strategy, wireframing, UX research, user interaction design",
+      "icon": "LayoutDashboard",
+      "jobCount": 5
+    },
+    {
+      "id": "cat-6",
+      "name": "Quality Assurance & Testing",
+      "description": "Selenium, Playwright, automated integration testing, performance testing",
+      "icon": "CheckCircle2",
+      "jobCount": 4
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job-1",
+      "title": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyId": "comp-1",
+      "companyName": "CloudScale Technologies",
+      "companyLogo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
+      "recruiterId": "user-recruiter-1",
+      "recruiterName": "Sarah Jenkins",
+      "categoryId": "cat-1",
+      "categoryName": "Full Stack & Web Engineering",
+      "location": "Seattle, WA",
+      "workplaceType": "Hybrid",
+      "jobType": "Full-time",
+      "experienceLevel": "Senior",
+      "salaryMin": 145000,
+      "salaryMax": 185000,
+      "salaryCurrency": "USD",
+      "description": "Join our flagship Platform Engineering team building mission-critical enterprise recruitment & scale-set management applications. You will architect responsive React frontend interfaces and implement robust Spring Boot 3 microservices backed by MySQL on Azure.",
+      "requirements": [
+        "5+ years hands-on experience with modern React, TypeScript, and state management",
+        "Solid experience building RESTful APIs using Java 17/21 and Spring Boot 3",
+        "Proficiency with relational databases (MySQL / PostgreSQL) and JPA/Hibernate",
+        "Experience containerizing applications with Docker and deploying to Kubernetes / Azure AKS",
+        "Understanding of CI/CD pipelines, automated testing, and secure coding practices"
+      ],
+      "skills": [
+        "React",
+        "TypeScript",
+        "Java",
+        "Spring Boot",
+        "MySQL",
+        "Azure",
+        "Docker",
+        "REST API"
+      ],
+      "benefits": [
+        "Competitive salary + equity package",
+        "Comprehensive medical, dental, and vision health coverage",
+        "$3,000 annual learning & conference budget",
+        "Flexible hybrid schedule (2 days in Seattle office, 3 days remote)",
+        "401(k) with 5% employer match"
+      ],
+      "status": "active",
+      "isFeatured": true,
+      "applicantsCount": 6,
+      "viewsCount": 248,
+      "expiresAt": "2026-12-31T23:59:59Z",
+      "createdAt": "2026-02-01T10:00:00Z",
+      "updatedAt": "2026-02-01T10:00:00Z"
+    },
+    {
+      "id": "job-2",
+      "title": "Azure Cloud Platform & DevOps Engineer",
+      "companyId": "comp-1",
+      "companyName": "CloudScale Technologies",
+      "companyLogo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
+      "recruiterId": "user-recruiter-1",
+      "recruiterName": "Sarah Jenkins",
+      "categoryId": "cat-2",
+      "categoryName": "Cloud Architecture & DevOps",
+      "location": "Remote (US)",
+      "workplaceType": "Remote",
+      "jobType": "Full-time",
+      "experienceLevel": "Senior",
+      "salaryMin": 155000,
+      "salaryMax": 195000,
+      "salaryCurrency": "USD",
+      "description": "We are seeking a seasoned DevOps / Cloud Engineer to manage immutable VMSS deployments using Packer, Ansible, and Terraform. You will spearhead our zero-downtime rolling upgrades and manage Jenkins CI/CD automation.",
+      "requirements": [
+        "Strong expertise with Microsoft Azure IaaS (VM Scale Sets, App Gateway WAF, Virtual Networks)",
+        "Extensive experience writing Terraform IaC and Packer golden image baking templates",
+        "Familiarity with Ansible playbook roles and CIS hardening standards",
+        "Hands-on experience configuring Jenkins with Configuration as Code (JCasC)",
+        "Knowledge of Azure Monitor, Log Analytics, and Prometheus/Grafana dashboards"
+      ],
+      "skills": [
+        "Terraform",
+        "Azure",
+        "Packer",
+        "Ansible",
+        "Kubernetes",
+        "CI/CD",
+        "Linux",
+        "Docker"
+      ],
+      "benefits": [
+        "100% remote flexibility across the US",
+        "Home office setup stipend ($1,500)",
+        "Unlimited Paid Time Off (PTO)",
+        "Top-tier health and wellness benefits"
+      ],
+      "status": "active",
+      "isFeatured": true,
+      "applicantsCount": 4,
+      "viewsCount": 190,
+      "expiresAt": "2026-12-15T23:59:59Z",
+      "createdAt": "2026-02-05T11:30:00Z",
+      "updatedAt": "2026-02-05T11:30:00Z"
+    },
+    {
+      "id": "job-3",
+      "title": "AI Applied Scientist / ML Engineer",
+      "companyId": "comp-2",
+      "companyName": "Nexus AI Labs",
+      "companyLogo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
+      "recruiterId": "user-recruiter-2",
+      "recruiterName": "Michael Chang",
+      "categoryId": "cat-3",
+      "categoryName": "AI & Data Science",
+      "location": "Austin, TX",
+      "workplaceType": "Hybrid",
+      "jobType": "Full-time",
+      "experienceLevel": "Mid-level",
+      "salaryMin": 135000,
+      "salaryMax": 170000,
+      "salaryCurrency": "USD",
+      "description": "Work with our AI Research team building document cognitive extraction pipelines using Azure AI Document Intelligence, embeddings, and customized LLM models for automated resume and unstructured text parsing.",
+      "requirements": [
+        "B.S. or M.S. in Computer Science, Data Science, or related field",
+        "Proficiency in Python, PyTorch, Hugging Face, and FastAPI",
+        "Experience with Azure AI services (Cognitive Services / Document Intelligence)",
+        "Solid foundation in NLP, vector databases, and similarity ranking algorithms"
+      ],
+      "skills": [
+        "Python",
+        "Machine Learning",
+        "Azure",
+        "NLP",
+        "FastAPI",
+        "PyTorch",
+        "Docker"
+      ],
+      "benefits": [
+        "Generous stock options in rapid-growth AI company",
+        "Onsite chef and gym membership in downtown Austin office",
+        "Annual equipment refresh (M3 Max MacBook Pro)"
+      ],
+      "status": "active",
+      "isFeatured": false,
+      "applicantsCount": 3,
+      "viewsCount": 165,
+      "expiresAt": "2026-11-30T23:59:59Z",
+      "createdAt": "2026-02-10T14:00:00Z",
+      "updatedAt": "2026-02-10T14:00:00Z"
+    },
+    {
+      "id": "job-4",
+      "title": "Frontend Engineer (React + TypeScript)",
+      "companyId": "comp-3",
+      "companyName": "FinTech Velocity",
+      "companyLogo": "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=120",
+      "recruiterId": "user-recruiter-1",
+      "recruiterName": "Sarah Jenkins",
+      "categoryId": "cat-1",
+      "categoryName": "Full Stack & Web Engineering",
+      "location": "New York, NY",
+      "workplaceType": "On-site",
+      "jobType": "Full-time",
+      "experienceLevel": "Mid-level",
+      "salaryMin": 120000,
+      "salaryMax": 150000,
+      "salaryCurrency": "USD",
+      "description": "Create lightning-fast financial trading and analytics dashboards with React 19, TypeScript, and modern component systems. Prior experience with financial charts and real-time websockets is a huge plus.",
+      "requirements": [
+        "3+ years professional experience building enterprise web UIs with React and TypeScript",
+        "Expertise with modern CSS frameworks (Tailwind CSS) and responsive layout design",
+        "Understanding of RESTful APIs, token-based authentication (JWT), and state patterns"
+      ],
+      "skills": [
+        "React",
+        "TypeScript",
+        "Tailwind CSS",
+        "REST API",
+        "JavaScript",
+        "HTML5",
+        "CSS3"
+      ],
+      "benefits": [
+        "High-performance bonus pool",
+        "Commuter transit subsidy in NYC",
+        "Comprehensive medical/dental coverage"
+      ],
+      "status": "active",
+      "isFeatured": false,
+      "applicantsCount": 5,
+      "viewsCount": 210,
+      "expiresAt": "2026-11-20T23:59:59Z",
+      "createdAt": "2026-02-12T09:00:00Z",
+      "updatedAt": "2026-02-12T09:00:00Z"
+    },
+    {
+      "id": "job-5",
+      "title": "Lead Information Security Engineer",
+      "companyId": "comp-4",
+      "companyName": "SecureNet Cyber",
+      "companyLogo": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=120",
+      "recruiterId": "user-recruiter-2",
+      "recruiterName": "Michael Chang",
+      "categoryId": "cat-4",
+      "categoryName": "Cyber Security & Compliance",
+      "location": "Washington, DC",
+      "workplaceType": "Hybrid",
+      "jobType": "Full-time",
+      "experienceLevel": "Lead / Principal",
+      "salaryMin": 165000,
+      "salaryMax": 210000,
+      "salaryCurrency": "USD",
+      "description": "Lead enterprise security hardening across multi-region Azure infrastructure. Oversee CIS benchmarks, OpenSCAP image scans, Application Gateway WAF rules, and Defender for Cloud configurations.",
+      "requirements": [
+        "7+ years experience in cybersecurity operations and cloud security architecture",
+        "Certifications such as CISSP, Azure Security Engineer (AZ-500) highly regarded",
+        "Hands-on experience with WAF tuning, OWASP Top 10 mitigation, and identity governance"
+      ],
+      "skills": [
+        "Cybersecurity",
+        "Azure",
+        "Linux",
+        "CIS Benchmarks",
+        "WAF",
+        "Network Security"
+      ],
+      "benefits": [
+        "Comprehensive federal security project bonus",
+        "Full healthcare coverage",
+        "Pension and 401(k) matching"
+      ],
+      "status": "active",
+      "isFeatured": false,
+      "applicantsCount": 2,
+      "viewsCount": 115,
+      "expiresAt": "2026-12-01T23:59:59Z",
+      "createdAt": "2026-02-15T15:00:00Z",
+      "updatedAt": "2026-02-15T15:00:00Z"
+    }
+  ],
+  "applications": [
+    {
+      "id": "app-1",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-candidate-1",
+      "candidateName": "Alex Morgan",
+      "candidateEmail": "candidate@talenthub.com",
+      "candidatePhone": "+1 (555) 432-8765",
+      "candidateAvatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+      "candidateTitle": "Senior Full-Stack Cloud Engineer",
+      "resumeUrl": "/uploads/resumes/sample-alex-morgan-resume.pdf",
+      "coverLetter": "I have spent the last 6 years building enterprise Spring Boot microservices and React web portals. My background with Azure AKS and MySQL makes me an ideal fit for this role.",
+      "stage": "Interview",
+      "matchScore": 94,
+      "matchDetails": {
+        "score": 94,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "Java",
+          "Spring Boot",
+          "MySQL",
+          "Azure",
+          "Docker",
+          "REST API"
+        ],
+        "missingSkills": [],
+        "skillScore": 98,
+        "experienceScore": 90,
+        "analysisNotes": "Exceptional match. Candidate possesses all 8 core required technical skills and 6 years of proven production experience."
+      },
+      "recruiterNotes": "Alex performed very well in the initial screening. Strong grasp of reactive components and Spring Security. Technical interview scheduled.",
+      "interviewDate": "2026-02-28T15:00:00Z",
+      "interviewType": "Technical Round",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-candidate-1",
+          "changedByName": "Alex Morgan",
+          "changedAt": "2026-02-02T11:00:00Z",
+          "comment": "Application submitted through TalentHub candidate portal with parsed resume."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-04T09:30:00Z",
+          "comment": "Resume verified. AI Match Score 94%. Candidate contacted for phone screening."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-08T14:00:00Z",
+          "comment": "Passed initial screening with flying colors. Scheduled 60-min Technical Architecture round."
+        }
+      ],
+      "createdAt": "2026-02-02T11:00:00Z",
+      "updatedAt": "2026-02-08T14:00:00Z"
+    },
+    {
+      "id": "app-2",
+      "jobId": "job-2",
+      "jobTitle": "Azure Cloud Platform & DevOps Engineer",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-candidate-2",
+      "candidateName": "David Chen",
+      "candidateEmail": "david.chen@example.com",
+      "candidatePhone": "+1 (555) 654-9871",
+      "candidateAvatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+      "candidateTitle": "DevOps & Site Reliability Engineer",
+      "resumeUrl": "/uploads/resumes/sample-david-chen.pdf",
+      "coverLetter": "Passionate about immutable infrastructure, Packer, and Ansible on Azure VMSS.",
+      "stage": "Offer",
+      "matchScore": 91,
+      "matchDetails": {
+        "score": 91,
+        "matchedSkills": [
+          "Terraform",
+          "Azure",
+          "Packer",
+          "Ansible",
+          "Kubernetes",
+          "CI/CD",
+          "Linux",
+          "Docker"
+        ],
+        "missingSkills": [],
+        "skillScore": 95,
+        "experienceScore": 87,
+        "analysisNotes": "Strong hands-on experience in immutable golden image pipelines and Terraform modules on Azure."
+      },
+      "recruiterNotes": "Passed all technical and cultural rounds. Formal offer extended at $175,000 base + equity.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-candidate-2",
+          "changedByName": "David Chen",
+          "changedAt": "2026-02-06T10:00:00Z",
+          "comment": "Application submitted."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-07T11:00:00Z",
+          "comment": "DevOps credentials and Terraform repository reviewed."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-12T15:30:00Z",
+          "comment": "Completed system design interview with Principal Architect."
+        },
+        {
+          "stage": "Offer",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-18T16:00:00Z",
+          "comment": "Written offer letter delivered via email. Pending signature."
+        }
+      ],
+      "createdAt": "2026-02-06T10:00:00Z",
+      "updatedAt": "2026-02-18T16:00:00Z"
+    },
+    {
+      "id": "app-3",
+      "jobId": "job-4",
+      "jobTitle": "Frontend Engineer (React + TypeScript)",
+      "companyName": "FinTech Velocity",
+      "candidateId": "user-candidate-3",
+      "candidateName": "Priya Patel",
+      "candidateEmail": "priya.patel@example.com",
+      "candidatePhone": "+1 (555) 321-9870",
+      "candidateAvatar": "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150",
+      "candidateTitle": "Lead Frontend Architect",
+      "resumeUrl": "/uploads/resumes/sample-priya-patel.pdf",
+      "coverLetter": "Excited about building high-frequency UI for fintech products using React, TypeScript, and modern design systems.",
+      "stage": "Screening",
+      "matchScore": 88,
+      "matchDetails": {
+        "score": 88,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "Tailwind CSS",
+          "REST API",
+          "JavaScript",
+          "HTML5",
+          "CSS3"
+        ],
+        "missingSkills": [],
+        "skillScore": 92,
+        "experienceScore": 84,
+        "analysisNotes": "Strong frontend portfolio. Demonstrated expertise in component architecture and performance."
+      },
+      "recruiterNotes": "Scheduled preliminary phone screen for Monday morning.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-candidate-3",
+          "changedByName": "Priya Patel",
+          "changedAt": "2026-02-14T09:15:00Z",
+          "comment": "Submitted application."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-02-16T10:00:00Z",
+          "comment": "Portfolio reviewed. Initiating phone screen."
+        }
+      ],
+      "createdAt": "2026-02-14T09:15:00Z",
+      "updatedAt": "2026-02-16T10:00:00Z"
+    },
+    {
+      "id": "app-4",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-candidate-2",
+      "candidateName": "David Chen",
+      "candidateEmail": "david.chen@example.com",
+      "candidatePhone": "+1 (555) 654-9871",
+      "candidateAvatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+      "candidateTitle": "DevOps & Site Reliability Engineer",
+      "resumeUrl": "/uploads/resumes/sample-david-chen.pdf",
+      "coverLetter": "Applying for full stack position as secondary choice.",
+      "stage": "Applied",
+      "matchScore": 62,
+      "matchDetails": {
+        "score": 62,
+        "matchedSkills": [
+          "Azure",
+          "Docker",
+          "MySQL"
+        ],
+        "missingSkills": [
+          "React",
+          "Spring Boot",
+          "TypeScript"
+        ],
+        "skillScore": 50,
+        "experienceScore": 74,
+        "analysisNotes": "Candidate is strong in infrastructure and DevOps but lacks primary frontend React experience required for this senior developer role."
+      },
+      "recruiterNotes": "Re-routing candidate towards the dedicated Cloud Platform & DevOps opening instead.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-candidate-2",
+          "changedByName": "David Chen",
+          "changedAt": "2026-02-05T12:00:00Z",
+          "comment": "Application received."
+        }
+      ],
+      "createdAt": "2026-02-05T12:00:00Z",
+      "updatedAt": "2026-02-05T12:00:00Z"
+    }
+  ],
+  "reportedJobs": [
+    {
+      "id": "rep-1",
+      "jobId": "job-5",
+      "jobTitle": "Lead Information Security Engineer",
+      "companyName": "SecureNet Cyber",
+      "reportedByUserId": "user-candidate-1",
+      "reportedByName": "Alex Morgan",
+      "reason": "Suspicious compensation information",
+      "details": "The listed salary band fluctuates significantly compared to the job description text.",
+      "status": "pending",
+      "createdAt": "2026-02-16T11:00:00Z"
+    }
+  ],
+  "jobAlerts": [
+    {
+      "id": "alert-1",
+      "userId": "user-candidate-1",
+      "title": "Senior React & Cloud Roles",
+      "keywords": "React, TypeScript, Spring Boot, Azure",
+      "category": "Full Stack & Web Engineering",
+      "location": "Seattle, WA or Remote",
+      "jobType": "Full-time",
+      "frequency": "daily",
+      "isActive": true,
+      "createdAt": "2026-01-23T10:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # --- Tier 3: Data Tier (Azure Database for MySQL Simulation) ---
+  database:
+    image: mysql:8.0
+    container_name: talenthub-mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: talenthub
+      MYSQL_USER: talenthub_user
+      MYSQL_PASSWORD: talenthub_pass
+      MYSQL_ROOT_PASSWORD: root_secure_password_2026
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Tier 2: Application Tier (Java 21 + Spring Boot 3 REST API) ---
+  backend-spring:
+    build:
+      context: ./backend-spring
+      dockerfile: Dockerfile
+    container_name: talenthub-spring-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://database:3306/talenthub?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=talenthub_user
+      - SPRING_DATASOURCE_PASSWORD=talenthub_pass
+      - TALENTHUB_JWT_SECRET=talenthub-super-secret-azure-enterprise-key-2026-very-secure-hmac-sha256
+    depends_on:
+      database:
+        condition: service_healthy
+
+  # --- Tier 1: Presentation Tier (React + TypeScript on NGINX) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: talenthub-frontend-ui
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend-spring
+
+volumes:
+  mysql_data:
