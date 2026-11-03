@@ -36,3 +36,4 @@ logs/
 backend/uploads/resumes/*
 !backend/uploads/resumes/sample-alex-morgan-resume.pdf
 backend/data/*.tmp
+

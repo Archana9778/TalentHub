@@ -81,6 +81,10 @@ start-talenthub.bat
 ```
 *(Or run `npm run dev:backend` and `npm run dev:frontend`)*
 
+To stop or restart services:
+* **Restart**: run [`restart-talenthub.bat`](file:///e:/Downloads/Talenthub/restart-talenthub.bat) (or `npm run restart`)
+* **Stop**: run [`stop-talenthub.bat`](file:///e:/Downloads/Talenthub/stop-talenthub.bat) (or `npm run stop`)
+
 * **Frontend UI**: [http://localhost:5173](http://localhost:5173)
 * **Backend API**: [http://localhost:5000](http://localhost:5000)
 * **Health Probe**: [http://localhost:5000/health](http://localhost:5000/health)

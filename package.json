@@ -5,8 +5,10 @@
   "scripts": {
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
+    "stop": "cmd /c stop-talenthub.bat",
+    "restart": "cmd /c restart-talenthub.bat",
     "build": "cd backend && npm run build && cd ../frontend && npm run build",
-    "start": "cd backend && npm run start"
+    "start": "cmd /c start-talenthub.bat"
   },
   "keywords": [
     "talenthub",
