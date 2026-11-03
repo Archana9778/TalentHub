@@ -1,23 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Briefcase, Lock, Mail, ArrowRight, Sparkles, AlertCircle,
-  Eye, EyeOff, Users, BarChart3, Shield, CheckCircle2
+  Briefcase,
+  Lock,
+  Mail,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  CheckCircle2,
+  ShieldCheck,
+  Sparkles,
+  UserCheck,
+  Building,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-
-const FEATURES = [
-  { icon: Users, label: 'Applicant Tracking', desc: 'End-to-end candidate pipeline management' },
-  { icon: BarChart3, label: 'AI Match Scoring', desc: 'Instant skill match & ranking for every applicant' },
-  { icon: Shield, label: 'Role-Based Access', desc: 'Separate portals for Candidates, Recruiters & Admins' },
-  { icon: CheckCircle2, label: 'Real-Time Updates', desc: 'Live stage transitions across the entire ATS board' },
-];
-
-const DEMO_ROLES = [
-  { role: 'candidate' as const, label: '👤 Candidate', color: 'blue' },
-  { role: 'recruiter' as const, label: '🏢 Recruiter', color: 'purple' },
-  { role: 'admin' as const, label: '🛡️ Admin', color: 'rose' },
-];
 
 export const Login: React.FC = () => {
   const { login, switchDemoRole } = useAuth();
@@ -31,6 +28,11 @@ export const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) {
+      setError('Please provide both your email address and password.');
+      return;
+    }
+
     setError(null);
     setLoading(true);
     try {
@@ -39,13 +41,13 @@ export const Login: React.FC = () => {
       else if (loggedUser.role === 'recruiter') navigate('/recruiter/dashboard');
       else navigate('/candidate/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to authenticate. Please check your credentials.');
+      setError(err.message || 'Authentication failed. Please verify your email and password.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDemoFill = async (role: 'candidate' | 'recruiter' | 'admin') => {
+  const handleDemoSignIn = async (role: 'candidate' | 'recruiter' | 'admin') => {
     setError(null);
     setLoading(true);
     try {
@@ -54,131 +56,127 @@ export const Login: React.FC = () => {
       else if (role === 'recruiter') navigate('/recruiter/dashboard');
       else navigate('/candidate/dashboard');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Demo sign-in failed.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* ── LEFT PANEL – Branding ── */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 overflow-hidden">
-        {/* Decorative blobs */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-indigo-600/30 blur-3xl pointer-events-none" />
-
-        {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur text-white shadow-lg">
-            <Briefcase className="w-5 h-5" />
-          </div>
-          <span className="text-white font-extrabold text-xl tracking-tight">TalentHub</span>
+    <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans">
+      {/* Left Branding Panel (Desktop) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-slate-900 text-white flex-col justify-between p-12 border-r border-slate-800 relative overflow-hidden">
+        <div>
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+              <Briefcase className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-extrabold text-xl tracking-tight text-white">
+              Talent<span className="text-blue-400">Hub</span>
+            </span>
+          </Link>
         </div>
 
-        {/* Hero Text */}
-        <div className="relative z-10 space-y-8">
-          <div>
-            <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight tracking-tight">
-              Hire smarter.<br />
-              <span className="text-blue-300">Track faster.</span>
-            </h1>
-            <p className="mt-4 text-blue-200/80 text-base leading-relaxed max-w-sm">
-              The enterprise ATS built on Azure architecture — connecting top talent with the right opportunities at scale.
-            </p>
+        <div className="max-w-md my-auto">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs font-medium text-slate-300 mb-6">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            <span>Azure IaaS Architecture &amp; AKS Compatible</span>
           </div>
 
-          {/* Feature list */}
-          <ul className="space-y-4">
-            {FEATURES.map(({ icon: Icon, label, desc }) => (
-              <li key={label} className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <Icon className="w-4 h-4 text-blue-200" />
-                </div>
-                <div>
-                  <p className="text-white text-sm font-semibold">{label}</p>
-                  <p className="text-blue-300/70 text-xs">{desc}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+            High-velocity applicant tracking for modern teams.
+          </h2>
+
+          <p className="mt-4 text-slate-400 text-sm leading-relaxed">
+            Consolidate engineering candidates, track screening and interview pipelines, and surface high-match technical talent with explainable scoring.
+          </p>
+
+          <div className="mt-8 pt-8 border-t border-slate-800 space-y-3">
+            <div className="flex items-center gap-2.5 text-xs text-slate-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Full-Stack Spring Boot 3 + Java 21 REST API</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs text-slate-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Azure AI Document Intelligence Resume Extraction</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs text-slate-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Immutable Relational Stage Audit Trails</span>
+            </div>
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="relative z-10 text-blue-400/60 text-xs">
-          © 2026 TalentHub · Enterprise ATS · Azure IaaS Architecture
+        <div className="text-xs text-slate-500">
+          © {new Date().getFullYear()} TalentHub Inc. Enterprise Recruitment System.
         </div>
       </div>
 
-      {/* ── RIGHT PANEL – Login Form ── */}
-      <div className="flex-1 flex flex-col justify-center items-center bg-slate-950 px-6 py-12 sm:px-10 lg:px-16">
-        {/* Mobile logo */}
-        <div className="lg:hidden flex items-center gap-3 mb-10">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white shadow-lg">
-            <Briefcase className="w-5 h-5" />
-          </div>
-          <span className="text-white font-extrabold text-xl tracking-tight">TalentHub</span>
-        </div>
+      {/* Right Form Panel */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
+        <div className="w-full max-w-md space-y-8">
+          <div>
+            <div className="lg:hidden flex items-center gap-2 mb-6">
+              <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+                <Briefcase className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <span className="font-extrabold text-lg text-slate-900">TalentHub</span>
+            </div>
 
-        <div className="w-full max-w-sm">
-          {/* Heading */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-extrabold text-white tracking-tight">Welcome back</h2>
-            <p className="mt-1 text-sm text-slate-400">Sign in to your TalentHub account to continue.</p>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+              Sign in to your account
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Welcome back. Enter your credentials or use a pre-seeded demo role below.
+            </p>
           </div>
 
-          {/* Error Alert */}
           {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-sm">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+            <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Form */}
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            {/* Email */}
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Email address
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Email Address
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Mail className="w-4 h-4" />
-                </div>
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="email"
-                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@company.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all"
+                  required
+                  className="saas-input pl-9 text-xs"
                 />
               </div>
             </div>
 
-            {/* Password */}
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Password
+                </label>
+              </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Lock className="w-4 h-4" />
-                </div>
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-11 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all"
+                  placeholder="••••••••••••"
+                  required
+                  className="saas-input pl-9 pr-9 text-xs"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
-                  tabIndex={-1}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -186,67 +184,60 @@ export const Login: React.FC = () => {
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-700/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-950 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              className="w-full saas-btn-primary justify-center text-xs py-2.5 mt-2"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  <span>Signing in…</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
 
-          {/* Demo Logins */}
-          <div className="mt-8">
-            <div className="relative flex items-center gap-3 mb-4">
-              <div className="flex-1 h-px bg-slate-800" />
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                One-click demo
-              </span>
-              <div className="flex-1 h-px bg-slate-800" />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {DEMO_ROLES.map(({ role, label, color }) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => handleDemoFill(role)}
-                  disabled={loading}
-                  className={`py-2.5 text-xs font-semibold rounded-xl border transition-all disabled:opacity-40 ${
-                    color === 'blue'
-                      ? 'bg-blue-600/10 border-blue-500/30 text-blue-300 hover:bg-blue-600/25 hover:border-blue-400/60'
-                      : color === 'purple'
-                      ? 'bg-purple-600/10 border-purple-500/30 text-purple-300 hover:bg-purple-600/25 hover:border-purple-400/60'
-                      : 'bg-rose-600/10 border-rose-500/30 text-rose-300 hover:bg-rose-600/25 hover:border-rose-400/60'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Quick Demo Logins Section */}
+          <div className="pt-4 border-t border-slate-200">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-2.5">
+              Instant Demo Access
+            </span>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handleDemoSignIn('candidate')}
+                disabled={loading}
+                className="p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium flex flex-col items-center gap-1 transition-colors"
+              >
+                <UserCheck className="w-4 h-4 text-blue-600" />
+                <span>Candidate</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoSignIn('recruiter')}
+                disabled={loading}
+                className="p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium flex flex-col items-center gap-1 transition-colors"
+              >
+                <Building className="w-4 h-4 text-indigo-600" />
+                <span>Recruiter</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoSignIn('admin')}
+                disabled={loading}
+                className="p-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium flex flex-col items-center gap-1 transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4 text-rose-600" />
+                <span>Admin</span>
+              </button>
             </div>
           </div>
 
-          {/* Register link */}
-          <p className="mt-8 text-center text-xs text-slate-500">
-            No account yet?{' '}
-            <Link to="/register" className="font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-              Register as Candidate or Recruiter
+          <div className="text-center text-xs text-slate-500">
+            Don't have an account yet?{' '}
+            <Link to="/register" className="font-semibold text-blue-600 hover:underline">
+              Create an account
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>

@@ -96,7 +96,7 @@ export const JobAlerts: React.FC = () => {
   if (loading) return <Loading message="Loading your configured job alerts..." />;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
@@ -293,4 +293,5 @@ export const JobAlerts: React.FC = () => {
     </div>
   );
 };
+
 

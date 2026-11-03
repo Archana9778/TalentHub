@@ -1,3 +1,4 @@
+import axios, { AxiosError } from 'axios';
 import {
   User,
   Job,
@@ -10,7 +11,7 @@ import {
   ApplicationStage,
 } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
 
 export const getToken = (): string | null => {
   return localStorage.getItem('talenthub_token');
@@ -24,44 +25,57 @@ export const clearToken = (): void => {
   localStorage.removeItem('talenthub_token');
 };
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
-  };
+// Create Centralized Axios Instance
+export const apiClient = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Accept': 'application/json',
+  },
+  timeout: 30000,
+});
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+// Request Interceptor: Attach JWT Bearer Token
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: Standardize API responses & errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<{ message?: string }>) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      // Do not clear token during login attempts
+      if (!error.config?.url?.includes('/auth/login')) {
+        clearToken();
+      }
+    }
+    const message =
+      error.response?.data?.message ||
+      error.message ||
+      'An unexpected network error occurred';
+    return Promise.reject(new Error(message));
   }
-
-  // If body is NOT FormData, set JSON content type
-  if (options.body && !(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.message || `Request failed with status ${response.status}`);
-  }
-
-  return data as T;
-}
+);
 
 export const api = {
   // --- Auth & Profile ---
-  login: (credentials: { email: string; password: string }) =>
-    request<{ token: string; user: User; message: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
-    }),
+  login: async (credentials: { email: string; password: string }) => {
+    const res = await apiClient.post<{ token: string; user: User; message: string }>(
+      '/auth/login',
+      credentials
+    );
+    return res.data;
+  },
 
-  register: (payload: {
+  register: async (payload: {
     email: string;
     password: string;
     name: string;
@@ -69,92 +83,135 @@ export const api = {
     companyName?: string;
     title?: string;
     location?: string;
-  }) =>
-    request<{ token: string; user: User; message: string }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  }) => {
+    const res = await apiClient.post<{ token: string; user: User; message: string }>(
+      '/auth/register',
+      payload
+    );
+    return res.data;
+  },
 
-  getMe: () => request<{ user: User }>('/auth/me'),
+  getMe: async () => {
+    const res = await apiClient.get<{ user: User }>('/auth/me');
+    return res.data;
+  },
 
-  updateProfile: (updates: Partial<User>) =>
-    request<{ message: string; user: User }>('/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
+  updateProfile: async (updates: Partial<User>) => {
+    const res = await apiClient.put<{ message: string; user: User }>(
+      '/auth/profile',
+      updates
+    );
+    return res.data;
+  },
 
-  uploadResume: (file: File) => {
+  uploadResume: async (file: File) => {
     const formData = new FormData();
     formData.append('resume', file);
-    return request<{ message: string; resumeUrl: string; user: User; parsedData: any }>('/auth/resume', {
-      method: 'POST',
-      body: formData,
+    const res = await apiClient.post<{
+      message: string;
+      resumeUrl: string;
+      user: User;
+      parsedData: any;
+    }>('/resume/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+
+  parseResume: async (file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append('resume', file);
+      const res = await apiClient.post('/resume/parse', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
+    }
+    const res = await apiClient.post('/resume/parse', {});
+    return res.data;
+  },
+
+  // --- Analytics ---
+  getDashboardAnalytics: async () => {
+    const res = await apiClient.get<{ analytics: any }>('/analytics/dashboard');
+    return res.data;
   },
 
   // --- Jobs ---
-  getJobs: (params?: Record<string, string>) => {
-    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
-    return request<{ total: number; jobs: Job[] }>(`/jobs${query}`);
+  getJobs: async (params?: Record<string, string>) => {
+    const res = await apiClient.get<{ total: number; jobs: Job[] }>('/jobs', {
+      params,
+    });
+    return res.data;
   },
 
-  getJobById: (id: string) =>
-    request<{ job: Job; company?: Company }>(`/jobs/${id}`),
+  getJobById: async (id: string) => {
+    const res = await apiClient.get<{ job: Job; company?: Company }>(`/jobs/${id}`);
+    return res.data;
+  },
 
-  createJob: (payload: Partial<Job>) =>
-    request<{ message: string; job: Job }>('/jobs', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  createJob: async (payload: Partial<Job>) => {
+    const res = await apiClient.post<{ message: string; job: Job }>('/jobs', payload);
+    return res.data;
+  },
 
-  updateJob: (id: string, updates: Partial<Job>) =>
-    request<{ message: string; job: Job }>(`/jobs/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
+  updateJob: async (id: string, updates: Partial<Job>) => {
+    const res = await apiClient.put<{ message: string; job: Job }>(`/jobs/${id}`, updates);
+    return res.data;
+  },
 
-  deleteJob: (id: string) =>
-    request<{ message: string }>(`/jobs/${id}`, {
-      method: 'DELETE',
-    }),
+  deleteJob: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/jobs/${id}`);
+    return res.data;
+  },
 
-  getRecruiterJobs: () =>
-    request<{ total: number; jobs: Job[] }>('/jobs/recruiter/my-jobs'),
+  getRecruiterJobs: async () => {
+    const res = await apiClient.get<{ total: number; jobs: Job[] }>('/jobs/recruiter/my-jobs');
+    return res.data;
+  },
 
-  reportJob: (payload: { jobId: string; reason: string; details: string }) =>
-    request<{ message: string; report: ReportedJob }>('/jobs/report', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  reportJob: async (payload: { jobId: string; reason: string; details: string }) => {
+    const res = await apiClient.post<{ message: string; report: ReportedJob }>('/jobs/report', payload);
+    return res.data;
+  },
 
   // --- Applications ---
-  applyForJob: (jobId: string, coverLetter?: string, resumeFile?: File) => {
+  applyForJob: async (jobId: string, coverLetter?: string, resumeFile?: File) => {
     const formData = new FormData();
     formData.append('jobId', jobId);
     if (coverLetter) formData.append('coverLetter', coverLetter);
     if (resumeFile) formData.append('resume', resumeFile);
 
-    return request<{ message: string; application: Application }>('/applications/apply', {
-      method: 'POST',
-      body: formData,
+    const res = await apiClient.post<{ message: string; application: Application }>(
+      '/applications/apply',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+    return res.data;
+  },
+
+  getMyApplications: async () => {
+    const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications/my-applications');
+    return res.data;
+  },
+
+  getJobApplicants: async (jobId?: string, stage?: string) => {
+    const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications/applicants', {
+      params: { jobId: jobId !== 'all' ? jobId : undefined, stage: stage !== 'all' ? stage : undefined },
     });
+    return res.data;
   },
 
-  getMyApplications: () =>
-    request<{ total: number; applications: Application[] }>('/applications/my-applications'),
-
-  getJobApplicants: (jobId?: string, stage?: string) => {
-    const params = new URLSearchParams();
-    if (jobId) params.append('jobId', jobId);
-    if (stage) params.append('stage', stage);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return request<{ total: number; applications: Application[] }>(`/applications/applicants${query}`);
+  getApplicationById: async (id: string) => {
+    const res = await apiClient.get<{ application: Application; candidate: User | null; job: Job | null }>(
+      `/applications/${id}`
+    );
+    return res.data;
   },
 
-  getApplicationById: (id: string) =>
-    request<{ application: Application; candidate: User | null; job: Job | null }>(`/applications/${id}`),
-
-  updateApplicationStage: (
+  updateApplicationStage: async (
     id: string,
     payload: {
       stage: ApplicationStage;
@@ -163,105 +220,123 @@ export const api = {
       interviewType?: string;
       recruiterNotes?: string;
     }
-  ) =>
-    request<{ message: string; application: Application }>(`/applications/${id}/stage`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-
-  // --- Companies ---
-  getCompanies: () =>
-    request<{ total: number; companies: Company[] }>('/companies'),
-
-  getCompanyById: (id: string) =>
-    request<{ company: Company; jobs: Job[] }>(`/companies/${id}`),
-
-  createCompany: (payload: Partial<Company>) =>
-    request<{ message: string; company: Company }>('/companies', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  updateCompany: (id: string, updates: Partial<Company>) =>
-    request<{ message: string; company: Company }>(`/companies/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-
-  deleteCompany: (id: string) =>
-    request<{ message: string }>(`/companies/${id}`, {
-      method: 'DELETE',
-    }),
-
-  // --- Categories ---
-  getCategories: () =>
-    request<{ total: number; categories: JobCategory[] }>('/categories'),
-
-  createCategory: (payload: Partial<JobCategory>) =>
-    request<{ message: string; category: JobCategory }>('/categories', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  updateCategory: (id: string, updates: Partial<JobCategory>) =>
-    request<{ message: string; category: JobCategory }>(`/categories/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-
-  deleteCategory: (id: string) =>
-    request<{ message: string }>(`/categories/${id}`, {
-      method: 'DELETE',
-    }),
-
-  // --- Job Alerts ---
-  getMyAlerts: () =>
-    request<{ total: number; alerts: JobAlert[] }>('/job-alerts'),
-
-  createAlert: (payload: Partial<JobAlert>) =>
-    request<{ message: string; alert: JobAlert }>('/job-alerts', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-
-  toggleAlert: (id: string, isActive: boolean) =>
-    request<{ message: string; alert: JobAlert }>(`/job-alerts/${id}/toggle`, {
-      method: 'PATCH',
-      body: JSON.stringify({ isActive }),
-    }),
-
-  deleteAlert: (id: string) =>
-    request<{ message: string }>(`/job-alerts/${id}`, {
-      method: 'DELETE',
-    }),
-
-  // --- Admin ---
-  getSystemStats: () =>
-    request<{ stats: SystemStats }>('/admin/statistics'),
-
-  getAdminUsers: (params?: Record<string, string>) => {
-    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
-    return request<{ total: number; users: User[] }>(`/admin/users${query}`);
+  ) => {
+    const res = await apiClient.patch<{ message: string; application: Application }>(
+      `/applications/${id}/stage`,
+      payload
+    );
+    return res.data;
   },
 
-  updateUserStatus: (id: string, payload: { status?: string; role?: string }) =>
-    request<{ message: string; user: User }>(`/admin/users/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
+  getApplicationAuditTimeline: async (id: string) => {
+    const res = await apiClient.get<{ total: number; timeline: any[] }>(`/applications/${id}/audit`);
+    return res.data;
+  },
 
-  deleteUser: (id: string) =>
-    request<{ message: string }>(`/admin/users/${id}`, {
-      method: 'DELETE',
-    }),
+  // --- Companies ---
+  getCompanies: async () => {
+    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies');
+    return res.data;
+  },
 
-  getReportedJobs: () =>
-    request<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs'),
+  getCompanyById: async (id: string) => {
+    const res = await apiClient.get<{ company: Company; jobs: Job[] }>(`/companies/${id}`);
+    return res.data;
+  },
 
-  updateReportStatus: (id: string, payload: { status: 'pending' | 'resolved' | 'dismissed'; removeJob?: boolean }) =>
-    request<{ message: string; report: ReportedJob }>(`/admin/reported-jobs/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
+  createCompany: async (payload: Partial<Company>) => {
+    const res = await apiClient.post<{ message: string; company: Company }>('/companies', payload);
+    return res.data;
+  },
+
+  updateCompany: async (id: string, updates: Partial<Company>) => {
+    const res = await apiClient.put<{ message: string; company: Company }>(`/companies/${id}`, updates);
+    return res.data;
+  },
+
+  deleteCompany: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/companies/${id}`);
+    return res.data;
+  },
+
+  // --- Categories ---
+  getCategories: async () => {
+    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories');
+    return res.data;
+  },
+
+  createCategory: async (payload: Partial<JobCategory>) => {
+    const res = await apiClient.post<{ message: string; category: JobCategory }>('/categories', payload);
+    return res.data;
+  },
+
+  updateCategory: async (id: string, updates: Partial<JobCategory>) => {
+    const res = await apiClient.put<{ message: string; category: JobCategory }>(`/categories/${id}`, updates);
+    return res.data;
+  },
+
+  deleteCategory: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/categories/${id}`);
+    return res.data;
+  },
+
+  // --- Job Alerts ---
+  getMyAlerts: async () => {
+    const res = await apiClient.get<{ total: number; alerts: JobAlert[] }>('/job-alerts');
+    return res.data;
+  },
+
+  createAlert: async (payload: Partial<JobAlert>) => {
+    const res = await apiClient.post<{ message: string; alert: JobAlert }>('/job-alerts', payload);
+    return res.data;
+  },
+
+  toggleAlert: async (id: string, isActive: boolean) => {
+    const res = await apiClient.patch<{ message: string; alert: JobAlert }>(`/job-alerts/${id}/toggle`, {
+      isActive,
+    });
+    return res.data;
+  },
+
+  deleteAlert: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/job-alerts/${id}`);
+    return res.data;
+  },
+
+  // --- Admin ---
+  getSystemStats: async () => {
+    const res = await apiClient.get<{ stats: SystemStats }>('/admin/statistics');
+    return res.data;
+  },
+
+  getAdminUsers: async (params?: Record<string, string>) => {
+    const res = await apiClient.get<{ total: number; users: User[] }>('/admin/users', { params });
+    return res.data;
+  },
+
+  updateUserStatus: async (id: string, payload: { status?: string; role?: string }) => {
+    const res = await apiClient.patch<{ message: string; user: User }>(`/admin/users/${id}`, payload);
+    return res.data;
+  },
+
+  deleteUser: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/admin/users/${id}`);
+    return res.data;
+  },
+
+  getReportedJobs: async () => {
+    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs');
+    return res.data;
+  },
+
+  updateReportStatus: async (
+    id: string,
+    payload: { status: 'pending' | 'resolved' | 'dismissed'; removeJob?: boolean }
+  ) => {
+    const res = await apiClient.patch<{ message: string; report: ReportedJob }>(
+      `/admin/reported-jobs/${id}`,
+      payload
+    );
+    return res.data;
+  },
 };
-

@@ -94,7 +94,7 @@ export const CreateJob: React.FC = () => {
   if (loading) return <Loading message="Loading requisition templates..." />;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-5xl">
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
@@ -315,4 +315,5 @@ export const CreateJob: React.FC = () => {
     </div>
   );
 };
+
 

@@ -95,7 +95,14 @@ export const getCandidateApplications = (req: AuthRequest, res: Response): void 
     return;
   }
 
-  const applications = db.getApplicationsByCandidateId(req.user.id);
+  const rawCandidateId = req.params.candidateId;
+  const candidateId = (typeof rawCandidateId === 'string' ? rawCandidateId : undefined) || req.user.id;
+  if (req.user.role !== 'admin' && req.user.id !== candidateId) {
+    res.status(403).json({ message: 'Forbidden' });
+    return;
+  }
+
+  const applications = db.getApplicationsByCandidateId(candidateId);
   res.json({ total: applications.length, applications });
 };
 
@@ -105,11 +112,13 @@ export const getJobApplicants = (req: AuthRequest, res: Response): void => {
     return;
   }
 
-  const { jobId, stage } = req.query;
+  const rawJobId = req.params.jobId || req.query.jobId;
+  const jobId = Array.isArray(rawJobId) ? rawJobId[0] : (rawJobId as string | undefined);
+  const stage = req.query.stage;
   let applications = db.getApplications();
 
   // If specific job is requested
-  if (jobId && typeof jobId === 'string') {
+  if (jobId && typeof jobId === 'string' && jobId !== 'all') {
     applications = applications.filter((a) => a.jobId === jobId);
   } else if (req.user.role === 'recruiter') {
     // Only return applications for jobs belonging to this recruiter
@@ -216,5 +225,25 @@ export const updateApplicationStage = (req: AuthRequest, res: Response): void =>
   res.json({
     message: `Candidate application moved to stage: ${stage}`,
     application: updated,
+  });
+};
+
+export const getApplicationAuditTimeline = (req: AuthRequest, res: Response): void => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
+  const id = req.params.id as string;
+  const application = db.getApplicationById(id);
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found.' });
+    return;
+  }
+
+  res.json({
+    total: application.timeline.length,
+    timeline: application.timeline,
   });
 };

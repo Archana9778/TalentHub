@@ -65,7 +65,8 @@ public class AuthController {
 
         userRepository.save(newUser);
         String token = tokenProvider.generateToken(newUser.getId(), newUser.getEmail(), newUser.getRole());
-        return ResponseEntity.status(201).ok(Map.of("token", token, "user", newUser, "message", "Registered successfully"));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(Map.of("token", token, "user", newUser, "message", "Registered successfully"));
     }
 
     @GetMapping("/me")

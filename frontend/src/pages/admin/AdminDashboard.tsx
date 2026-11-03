@@ -38,7 +38,7 @@ export const AdminDashboard: React.FC = () => {
   if (!stats) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="dashboard-container space-y-8 w-full">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-rose-900 via-slate-900 to-indigo-950 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
@@ -228,4 +228,5 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
+
 

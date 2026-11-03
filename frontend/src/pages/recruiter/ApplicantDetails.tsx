@@ -25,6 +25,7 @@ export const ApplicantDetails: React.FC = () => {
   const [application, setApplication] = useState<Application | null>(null);
   const [candidate, setCandidate] = useState<UserType | null>(null);
   const [job, setJob] = useState<Job | null>(null);
+  const [auditRecords, setAuditRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Recruiter notes
@@ -49,6 +50,8 @@ export const ApplicantDetails: React.FC = () => {
         setJob(data.job);
         setRecruiterNotes(data.application.recruiterNotes || '');
         setSelectedStage(data.application.stage);
+        const auditRes = await api.getApplicationAuditTimeline(id).catch(() => null);
+        setAuditRecords(auditRes?.timeline && auditRes.timeline.length > 0 ? auditRes.timeline : data.application.timeline);
       } catch (err) {
         console.error(err);
       } finally {
@@ -87,6 +90,7 @@ export const ApplicantDetails: React.FC = () => {
       });
       setApplication(res.application);
       setSelectedStage(newStage);
+      api.getApplicationAuditTimeline(application.id).then((ar) => ar?.timeline && setAuditRecords(ar.timeline)).catch(() => {});
       setStageSuccess(`Candidate moved to ${newStage}!`);
       setTimeout(() => setStageSuccess(null), 3000);
     } catch (err) {
@@ -111,7 +115,7 @@ export const ApplicantDetails: React.FC = () => {
   const stages: ApplicationStage[] = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired', 'Rejected'];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full">
       <Link
         to="/recruiter/applicants"
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
@@ -285,7 +289,7 @@ export const ApplicantDetails: React.FC = () => {
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-3">
             <h2 className="text-base font-bold text-slate-900">Application Audit Trail</h2>
             <div className="space-y-2.5">
-              {application.timeline.map((item, idx) => (
+              {(auditRecords && auditRecords.length > 0 ? auditRecords : application.timeline).map((item, idx) => (
                 <div
                   key={idx}
                   className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs flex items-start justify-between gap-3"
@@ -346,4 +350,5 @@ export const ApplicantDetails: React.FC = () => {
     </div>
   );
 };
+
 

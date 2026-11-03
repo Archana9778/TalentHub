@@ -97,7 +97,7 @@ export const Profile: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="space-y-8 w-full max-w-5xl">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
           Candidate Profile & Resume Management
@@ -313,4 +313,5 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
+
 

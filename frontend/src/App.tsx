@@ -8,7 +8,8 @@ import { CandidateLayout } from './layouts/CandidateLayout';
 import { RecruiterLayout } from './layouts/RecruiterLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 
-// Auth Pages
+// Public & Auth Pages
+import { LandingPage } from './pages/public/LandingPage';
 import { Login } from './pages/auth/Login';
 import { Register } from './pages/auth/Register';
 
@@ -34,24 +35,15 @@ import { Companies } from './pages/admin/Companies';
 import { Categories } from './pages/admin/Categories';
 import { ReportedJobs } from './pages/admin/ReportedJobs';
 
-// Landing Redirect based on role or to Login
-const HomeRedirect: React.FC = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return null;
-  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-
-  if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
-  if (user.role === 'recruiter') return <Navigate to="/recruiter/dashboard" replace />;
-  return <Navigate to="/candidate/dashboard" replace />;
-};
-
 export const App: React.FC = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public / Auth routes */}
-          <Route path="/" element={<HomeRedirect />} />
+          {/* Public Landing Page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
@@ -101,4 +93,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

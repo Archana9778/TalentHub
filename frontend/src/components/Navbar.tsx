@@ -6,7 +6,6 @@ import {
   UserCheck,
   Shield,
   Layers,
-  Sparkles,
   Menu,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -28,16 +27,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
   };
 
   const roleColors: Record<UserRole, { badge: string; text: string; icon: any }> = {
-    candidate: { badge: 'bg-blue-100 text-blue-800 border-blue-200', text: 'Job Seeker', icon: UserCheck },
-    recruiter: { badge: 'bg-purple-100 text-purple-800 border-purple-200', text: 'Recruiter', icon: Layers },
-    admin: { badge: 'bg-rose-100 text-rose-800 border-rose-200', text: 'Admin', icon: Shield },
+    candidate: { badge: 'bg-blue-50 text-blue-700 border-blue-200', text: 'Candidate', icon: UserCheck },
+    recruiter: { badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', text: 'Recruiter', icon: Layers },
+    admin: { badge: 'bg-slate-100 text-slate-800 border-slate-300', text: 'Administrator', icon: Shield },
   };
 
   const currentRoleInfo = user ? roleColors[user.role] : null;
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 w-full bg-white border-b border-slate-200 shadow-xs">
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Left: Mobile Toggle & Brand */}
         <div className="flex items-center gap-3">
           {onMobileMenuToggle && (
@@ -50,32 +49,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
             </button>
           )}
 
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
-              <Briefcase className="w-5 h-5" />
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+              <Briefcase className="w-4 h-4 text-blue-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                  Talent<span className="text-blue-600">Hub</span>
-                </span>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">
-                  Azure ATS
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-lg tracking-tight text-slate-900">
+                Talent<span className="text-blue-600">Hub</span>
+              </span>
+              <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                Enterprise ATS
+              </span>
             </div>
           </Link>
         </div>
 
-        {/* Center: Quick Demo Role Switcher */}
-        <div className="hidden md:flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 text-xs">
-          <span className="px-2 font-medium text-slate-400 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-500" />
-            <span>Switch Role:</span>
-          </span>
+        {/* Center: Demo Role Switcher */}
+        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+          <span className="px-2 font-medium text-slate-500 text-[11px]">Role Switcher:</span>
           <button
             onClick={() => handleRoleSwitch('candidate')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
               user?.role === 'candidate'
                 ? 'bg-white text-blue-700 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
@@ -85,9 +79,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
           </button>
           <button
             onClick={() => handleRoleSwitch('recruiter')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
               user?.role === 'recruiter'
-                ? 'bg-white text-purple-700 shadow-xs font-semibold'
+                ? 'bg-white text-indigo-700 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -95,9 +89,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
           </button>
           <button
             onClick={() => handleRoleSwitch('admin')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
               user?.role === 'admin'
-                ? 'bg-white text-rose-700 shadow-xs font-semibold'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -116,7 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
 
               {currentRoleInfo && (
                 <span
-                  className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${currentRoleInfo.badge}`}
+                  className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${currentRoleInfo.badge}`}
                 >
                   <currentRoleInfo.icon className="w-3 h-3" />
                   <span>{currentRoleInfo.text}</span>
@@ -144,15 +138,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
             <div className="flex items-center gap-2">
               <Link
                 to="/login"
-                className="text-xs font-semibold text-slate-700 hover:text-blue-600 px-3 py-2 rounded-lg"
+                className="text-xs font-semibold text-slate-700 hover:text-blue-600 px-3 py-1.5 rounded-md"
               >
                 Sign In
               </Link>
               <Link
                 to="/register"
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg shadow-xs transition-colors"
+                className="saas-btn-primary text-xs py-1.5 px-3"
               >
-                Register
+                Get Started
               </Link>
             </div>
           )}
@@ -161,4 +155,3 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
     </header>
   );
 };
-

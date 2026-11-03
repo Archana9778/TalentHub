@@ -11,6 +11,8 @@ import companyRoutes from './routes/companyRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import jobAlertRoutes from './routes/jobAlertRoutes';
 import adminRoutes from './routes/adminRoutes';
+import resumeRoutes from './routes/resumeRoutes';
+import analyticsRoutes from './routes/analyticsRoutes';
 
 const app = express();
 
@@ -48,6 +50,8 @@ app.use('/api/companies', companyRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/job-alerts', jobAlertRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/resume', resumeRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Root greeting
 app.get('/api', (req: Request, res: Response) => {
@@ -63,6 +67,8 @@ app.get('/api', (req: Request, res: Response) => {
       '/api/categories',
       '/api/job-alerts',
       '/api/admin',
+      '/api/resume',
+      '/api/analytics',
     ],
   });
 });
@@ -88,4 +94,3 @@ app.listen(PORT, () => {
   console.log(`📡 Health probe available at http://localhost:${PORT}/health`);
   console.log(`====================================================`);
 });
-

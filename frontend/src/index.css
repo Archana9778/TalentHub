@@ -1,31 +1,191 @@
+@import 'bootstrap-icons/font/bootstrap-icons.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --color-primary: #0F172A;
+  --color-brand: #2563EB;
+  --color-brand-hover: #1D4ED8;
+  --color-indigo: #4F46E5;
+  --color-teal: #0D9488;
+  --color-bg: #F8FAFC;
+  --color-card: #FFFFFF;
+  --color-text: #0F172A;
+  --color-text-muted: #64748B;
+  --color-border: #E2E8F0;
+
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom scrollbars */
+body {
+  background-color: #F8FAFC;
+  color: #0F172A;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #94A3B8;
 }
 
-/* Glassmorphism helpers */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+/* Full-Width Application Shell Utilities */
+.app-layout {
+  display: flex;
+  width: 100%;
+  min-height: calc(100vh - 4rem);
 }
 
+.main-content {
+  flex: 1 1 0%;
+  min-width: 0;
+  width: 100%;
+  padding: 1.25rem 1.5rem 2.5rem;
+}
+
+@media (min-width: 640px) {
+  .main-content {
+    padding: 1.5rem 1.75rem 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main-content {
+    padding: 1.75rem 2rem 3rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .main-content {
+    padding: 2rem 2.5rem 3.5rem;
+  }
+}
+
+.dashboard-container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* Enterprise SaaS Component Utilities (Linear / Stripe inspired) */
+.saas-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.saas-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 12px 0 rgba(15, 23, 42, 0.05);
+}
+
+.saas-btn-primary {
+  background-color: #0F172A;
+  color: #FFFFFF;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  border: 1px solid #0F172A;
+}
+.saas-btn-primary:hover {
+  background-color: #1E293B;
+  border-color: #1E293B;
+  color: #FFFFFF;
+}
+
+.saas-btn-secondary {
+  background-color: #FFFFFF;
+  color: #334155;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  border: 1px solid #CBD5E1;
+}
+.saas-btn-secondary:hover {
+  background-color: #F8FAFC;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.saas-input {
+  width: 100%;
+  background-color: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: #0F172A;
+  transition: all 0.15s ease;
+}
+.saas-input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.badge-saas {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.badge-applied {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #DBEAFE;
+}
+.badge-screening {
+  background-color: #F5F3FF;
+  color: #6D28D9;
+  border: 1px solid #EDE9FE;
+}
+.badge-interview {
+  background-color: #ECFDF5;
+  color: #047857;
+  border: 1px solid #D1FAE5;
+}
+.badge-offer {
+  background-color: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+.badge-hired {
+  background-color: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+.badge-rejected {
+  background-color: #F1F5F9;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+}
