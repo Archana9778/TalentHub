@@ -24,7 +24,9 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
   if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Only .pdf, .doc, and .docx resume files are allowed!'));
+    const error = new Error('Only .pdf, .doc, and .docx resume files are allowed.') as Error & { status?: number };
+    error.status = 400;
+    cb(error);
   }
 };
 

@@ -236,7 +236,7 @@ export const ApplicantDetails: React.FC = () => {
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Azure AI Document Intelligence Match Breakdown</span>
+              <span>Candidate Match Breakdown</span>
             </h2>
 
             <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 italic">

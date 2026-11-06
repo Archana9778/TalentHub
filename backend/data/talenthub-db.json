@@ -218,6 +218,50 @@
       "experience": [],
       "education": [],
       "createdAt": "2026-11-02T08:26:53.888Z"
+    },
+    {
+      "id": "user-973cc7ba",
+      "email": "candidate.test3143@talenthub.com",
+      "password": "$2a$10$4KGIsR9HaImJb/k4cGuyT.XWKdmwJoaTurfpTerBwBOGZMOHXLNBa",
+      "name": "Jordan Lee 3143",
+      "role": "candidate",
+      "status": "active",
+      "title": "Full-Stack Node/React Engineer",
+      "location": "Austin, TX",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
+      "skills": [
+        "TypeScript",
+        "Node.js",
+        "React",
+        "MySQL",
+        "Docker"
+      ],
+      "experience": [],
+      "education": [],
+      "createdAt": "2026-11-04T07:13:47.966Z",
+      "bio": "Experienced developer passionate about modern cloud architectures."
+    },
+    {
+      "id": "user-bb15e8ef",
+      "email": "candidate.test4875@talenthub.com",
+      "password": "$2a$10$2TCj8RFq8LAdsjvCyFQz1.xgMQdcv2f56iLUxJ3HL7lZ5dKjsV4M.",
+      "name": "Jordan Lee 4875",
+      "role": "candidate",
+      "status": "active",
+      "title": "Full-Stack Node/React Engineer",
+      "location": "Austin, TX",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
+      "skills": [
+        "TypeScript",
+        "Node.js",
+        "React",
+        "MySQL",
+        "Docker"
+      ],
+      "experience": [],
+      "education": [],
+      "createdAt": "2026-11-04T07:17:39.087Z",
+      "bio": "Experienced developer passionate about modern cloud architectures."
     }
   ],
   "companies": [
@@ -359,7 +403,7 @@
       ],
       "status": "active",
       "isFeatured": true,
-      "applicantsCount": 6,
+      "applicantsCount": 8,
       "viewsCount": 248,
       "expiresAt": "2026-12-31T23:59:59Z",
       "createdAt": "2026-02-01T10:00:00Z",
@@ -551,6 +595,128 @@
     }
   ],
   "applications": [
+    {
+      "id": "app-d2836239",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-bb15e8ef",
+      "candidateName": "Jordan Lee 4875",
+      "candidateEmail": "candidate.test4875@talenthub.com",
+      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
+      "candidateTitle": "Full-Stack Node/React Engineer",
+      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
+      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
+      "stage": "Interview",
+      "matchScore": 53,
+      "matchDetails": {
+        "score": 53,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "MySQL",
+          "Docker"
+        ],
+        "missingSkills": [
+          "Java",
+          "Spring Boot",
+          "Azure",
+          "REST API"
+        ],
+        "skillScore": 50,
+        "experienceScore": 60,
+        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
+      },
+      "recruiterNotes": "Reviewed candidate GitHub and profile.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-bb15e8ef",
+          "changedByName": "Jordan Lee 4875",
+          "changedAt": "2026-11-04T07:17:39.191Z",
+          "comment": "Candidate submitted online application via TalentHub portal."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:17:39.280Z",
+          "comment": "Strong background in Node.js and TypeScript. Moving forward."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:17:39.292Z",
+          "comment": "Scheduled technical discussion with team lead."
+        }
+      ],
+      "createdAt": "2026-11-04T07:17:39.191Z",
+      "updatedAt": "2026-11-04T07:17:39.292Z",
+      "interviewDate": "2026-11-07T12:47:39Z",
+      "interviewType": "Technical Round"
+    },
+    {
+      "id": "app-5dbc732a",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-973cc7ba",
+      "candidateName": "Jordan Lee 3143",
+      "candidateEmail": "candidate.test3143@talenthub.com",
+      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
+      "candidateTitle": "Full-Stack Node/React Engineer",
+      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
+      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
+      "stage": "Interview",
+      "matchScore": 53,
+      "matchDetails": {
+        "score": 53,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "MySQL",
+          "Docker"
+        ],
+        "missingSkills": [
+          "Java",
+          "Spring Boot",
+          "Azure",
+          "REST API"
+        ],
+        "skillScore": 50,
+        "experienceScore": 60,
+        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
+      },
+      "recruiterNotes": "Reviewed candidate GitHub and profile.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-973cc7ba",
+          "changedByName": "Jordan Lee 3143",
+          "changedAt": "2026-11-04T07:13:47.995Z",
+          "comment": "Candidate submitted online application via TalentHub portal."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:13:48.115Z",
+          "comment": "Strong background in Node.js and TypeScript. Moving forward."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:13:48.139Z",
+          "comment": "Scheduled technical discussion with team lead."
+        }
+      ],
+      "createdAt": "2026-11-04T07:13:47.995Z",
+      "updatedAt": "2026-11-04T07:13:48.139Z",
+      "interviewDate": "2026-11-07T12:43:48Z",
+      "interviewType": "Technical Round"
+    },
     {
       "id": "app-1",
       "jobId": "job-1",

@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
+RUN mkdir -p dist/database/migrations && cp src/database/migrations/*.sql dist/database/migrations/
 
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -16,4 +17,3 @@ RUN mkdir -p data uploads/resumes
 
 EXPOSE 5000
 CMD ["node", "dist/server.js"]
-
