@@ -87,7 +87,7 @@ export const Profile: React.FC = () => {
       updateCurrentUser(res.user);
       if (res.user.skills) setSkills(res.user.skills);
       setResumeSuccess(
-        `Resume analyzed with Azure AI Document Intelligence! ${res.parsedData.extractedSkills.length} skills extracted.`
+        `Resume processed with the local heuristic parser. ${res.parsedData.extractedSkills.length} skills found.`
       );
     } catch (err: any) {
       setResumeError(err.message || 'Resume upload failed');
@@ -103,7 +103,7 @@ export const Profile: React.FC = () => {
           Candidate Profile & Resume Management
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Keep your skills and resume current so Azure Document Intelligence can rank you higher on relevant job postings.
+          Keep your skills and resume current to improve local job match estimates.
         </p>
       </div>
 
@@ -114,20 +114,20 @@ export const Profile: React.FC = () => {
         </div>
       )}
 
-      {/* Resume Upload & Azure AI Parsing Card */}
+      {/* Resume Upload & Parsing Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-blue-600" />
-            <span>Azure AI Resume Extraction</span>
+            <span>Resume Parsing</span>
           </h2>
           <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
-            Prebuilt Document Model
+            Local Heuristic Parser
           </span>
         </div>
 
         <p className="text-xs text-slate-500 leading-relaxed">
-          Upload a PDF or Word resume. TalentHub passes your document to Azure AI Document Intelligence to automatically extract your skills, years of experience, and summary.
+          Upload a PDF or Word resume. TalentHub uses local heuristics to suggest skills, experience, and a summary; results may be approximate.
         </p>
 
         {resumeSuccess && (
@@ -158,7 +158,7 @@ export const Profile: React.FC = () => {
           </p>
 
           <label className="mt-4 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors">
-            <span>{uploadingResume ? 'Processing Document with Azure AI...' : 'Upload New Resume'}</span>
+            <span>{uploadingResume ? 'Processing Resume...' : 'Upload New Resume'}</span>
             <input
               type="file"
               accept=".pdf,.doc,.docx"
@@ -172,7 +172,7 @@ export const Profile: React.FC = () => {
         {user?.parsedResumeData && (
           <div className="mt-4 p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2 text-xs">
             <div className="font-semibold text-slate-700 flex items-center justify-between">
-              <span>Azure Document Intelligence Summary:</span>
+              <span>Parser Summary:</span>
               <span className="text-[10px] text-slate-400">
                 Parsed: {new Date(user.parsedResumeData.extractedAt).toLocaleString()}
               </span>

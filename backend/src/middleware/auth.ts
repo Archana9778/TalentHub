@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
   user?: User;
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
@@ -19,7 +19,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as { id: string; email: string; role: UserRole };
-    const user = db.getUserById(decoded.id);
+    const user = await db.getUserById(decoded.id);
 
     if (!user) {
       res.status(401).json({ message: 'User associated with token no longer exists.' });
@@ -56,4 +56,3 @@ export const requireRoles = (...roles: UserRole[]) => {
     next();
   };
 };
-

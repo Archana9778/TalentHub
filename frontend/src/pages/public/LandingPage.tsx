@@ -415,7 +415,7 @@ export const LandingPage: React.FC = () => {
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold mb-4 border border-blue-500/30">
                 <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                <span>Simulated Azure AI Document Intelligence</span>
+                <span>Transparent Local Resume Matching</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                 Semantic Match Scoring Without Black-Box Mystery
@@ -460,14 +460,14 @@ export const LandingPage: React.FC = () => {
               <Link to="/login" className="hover:text-slate-900 transition-colors">Sign In</Link>
               <Link to="/register" className="hover:text-slate-900 transition-colors">Register</Link>
               <span className="text-slate-300">|</span>
-              <span className="text-slate-400">Azure AKS Architecture</span>
+              <span className="text-slate-400">Node.js + MySQL Architecture</span>
             </div>
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px]">
             <p>© {new Date().getFullYear()} TalentHub Inc. Production ATS MVP. All rights reserved.</p>
             <div className="flex items-center gap-4 text-slate-400">
-              <span>Java 21 • Spring Boot 3 • React 18 • MySQL Flexible</span>
+              <span>React • TypeScript • Node.js • Express • MySQL</span>
             </div>
           </div>
         </div>

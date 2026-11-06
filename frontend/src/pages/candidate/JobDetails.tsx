@@ -227,7 +227,7 @@ export const JobDetails: React.FC = () => {
               Submit Your Application
             </h2>
             <p className="text-xs text-slate-500 mb-5">
-              Your profile resume and skills will be scored against the job requirements using Azure Document Intelligence.
+              Your profile skills and experience will be used for a local match estimate.
             </p>
 
             {appliedSuccess ? (

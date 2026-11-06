@@ -8,16 +8,22 @@ import { AuthRequest } from '../middleware/auth';
 import { User, UserRole } from '../types';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
 
+const validEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 export const register = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { email, password, name, role, companyName, title, location } = req.body;
 
-    if (!email || !password || !name) {
+    if (typeof email !== 'string' || typeof password !== 'string' || typeof name !== 'string' || !email.trim() || !password || !name.trim()) {
       res.status(400).json({ message: 'Email, password, and name are required.' });
       return;
     }
+    if (!validEmail(email.trim()) || password.length < 8 || password.length > 128 || name.trim().length > 150) {
+      res.status(400).json({ message: 'Provide a valid email, a password of 8–128 characters, and a name up to 150 characters.' });
+      return;
+    }
 
-    const existingUser = db.getUserByEmail(email);
+    const existingUser = await db.getUserByEmail(email);
     if (existingUser) {
       res.status(409).json({ message: 'An account with this email address already exists.' });
       return;
@@ -43,12 +49,12 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       createdAt: new Date().toISOString(),
     };
 
-    db.createUser(newUser);
+    await db.createUser(newUser);
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role },
       config.jwtSecret,
-      { expiresIn: '7d' }
+      { expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'] }
     );
 
     const { password: _, ...userSafe } = newUser;
@@ -70,8 +76,12 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       res.status(400).json({ message: 'Please provide both email and password.' });
       return;
     }
+    if (typeof email !== 'string' || typeof password !== 'string' || !validEmail(email.trim()) || password.length > 128) {
+      res.status(400).json({ message: 'Provide a valid email and password.' });
+      return;
+    }
 
-    const user = db.getUserByEmail(email);
+    const user = await db.getUserByEmail(email);
     if (!user || !user.password) {
       res.status(401).json({ message: 'Invalid email or password.' });
       return;
@@ -91,7 +101,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       config.jwtSecret,
-      { expiresIn: '7d' }
+      { expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'] }
     );
 
     const { password: _, ...userSafe } = user;
@@ -114,23 +124,30 @@ export const getMe = (req: AuthRequest, res: Response): void => {
   res.json({ user: userSafe });
 };
 
-export const updateProfile = (req: AuthRequest, res: Response): void => {
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
   }
 
   const { name, title, location, phone, bio, skills, experience, education, avatarUrl, companyName } = req.body;
+  if ((name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 150)) ||
+      (skills !== undefined && (!Array.isArray(skills) || skills.some((skill: unknown) => typeof skill !== 'string'))) ||
+      (experience !== undefined && !Array.isArray(experience)) ||
+      (education !== undefined && !Array.isArray(education))) {
+    res.status(400).json({ message: 'Profile fields have invalid types or exceed supported limits.' });
+    return;
+  }
 
-  const updated = db.updateUser(req.user.id, {
-    ...(name && { name }),
-    ...(title && { title }),
-    ...(location && { location }),
-    ...(phone && { phone }),
+  const updated = await db.updateUser(req.user.id, {
+    ...(name !== undefined && { name: name.trim() }),
+    ...(title !== undefined && { title }),
+    ...(location !== undefined && { location }),
+    ...(phone !== undefined && { phone }),
     ...(bio !== undefined && { bio }),
-    ...(skills && { skills }),
-    ...(experience && { experience }),
-    ...(education && { education }),
+    ...(skills !== undefined && { skills }),
+    ...(experience !== undefined && { experience }),
+    ...(education !== undefined && { education }),
     ...(avatarUrl && { avatarUrl }),
     ...(companyName && { companyName }),
   });
@@ -147,7 +164,7 @@ export const updateProfile = (req: AuthRequest, res: Response): void => {
   });
 };
 
-export const uploadCandidateResume = (req: AuthRequest, res: Response): void => {
+export const uploadCandidateResume = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -169,7 +186,7 @@ export const uploadCandidateResume = (req: AuthRequest, res: Response): void => 
   const currentSkills = new Set(req.user.skills || []);
   parsedData.extractedSkills.forEach((s) => currentSkills.add(s));
 
-  const updated = db.updateUser(req.user.id, {
+  const updated = await db.updateUser(req.user.id, {
     resumeUrl: relativeUrl,
     resumeOriginalName: req.file.originalname,
     parsedResumeData: parsedData,
@@ -184,4 +201,3 @@ export const uploadCandidateResume = (req: AuthRequest, res: Response): void => 
     user: userSafe,
   });
 };
-

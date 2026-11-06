@@ -87,7 +87,7 @@ export const RecruiterDashboard: React.FC = () => {
               Recruiter Dashboard
             </h1>
             <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Real-time candidate pipelines, automated Azure AI match ratings, and full ATS stage governance for your engineering requisitions.
+              Candidate pipelines, skill and experience match estimates, and ATS stage tracking for your requisitions.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
@@ -237,7 +237,7 @@ export const RecruiterDashboard: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900 tracking-tight">
                 Top Candidate Matches
               </h2>
-              <p className="text-xs text-slate-500">Ranked by Azure AI Document Intelligence match score</p>
+              <p className="text-xs text-slate-500">Ranked by local candidate match score</p>
             </div>
             <Link
               to="/recruiter/applicants"

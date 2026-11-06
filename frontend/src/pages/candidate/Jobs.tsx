@@ -99,7 +99,7 @@ export const Jobs: React.FC = () => {
           Explore Job Openings
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Discover positions matching your skills, powered by Azure AI Document Intelligence match scoring.
+          Discover positions using transparent local match scoring based on skills and experience.
         </p>
       </div>
 

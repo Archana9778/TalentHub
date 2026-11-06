@@ -15,5 +15,5 @@ CREATE TABLE IF NOT EXISTS application_stage_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_stage_hist_app (application_id),
     CONSTRAINT fk_stage_hist_app FOREIGN KEY (application_id) REFERENCES applications (id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
