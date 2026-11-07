@@ -1,18 +1,15 @@
-version: '3.8'
-
 services:
-  # --- Tier 3: Data Tier (Azure Database for MySQL Simulation) ---
   database:
     image: mysql:8.0
     container_name: talenthub-mysql
     restart: always
     environment:
-      MYSQL_DATABASE: talenthub
-      MYSQL_USER: talenthub_user
-      MYSQL_PASSWORD: talenthub_pass
-      MYSQL_ROOT_PASSWORD: root_secure_password_2026
+      MYSQL_DATABASE: "${MYSQL_DATABASE:?Missing MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER:?Missing MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Missing MYSQL_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Missing MYSQL_ROOT_PASSWORD}"
     ports:
-      - "3306:3306"
+      - "3308:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -21,7 +18,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- Tier 2: Application Tier (Java 21 + Spring Boot 3 REST API) ---
   backend-spring:
     build:
       context: ./backend-spring
@@ -31,15 +27,14 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://database:3306/talenthub?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      - SPRING_DATASOURCE_USERNAME=talenthub_user
-      - SPRING_DATASOURCE_PASSWORD=talenthub_pass
-      - TALENTHUB_JWT_SECRET=talenthub-super-secret-azure-enterprise-key-2026-very-secure-hmac-sha256
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:?Missing datasource URL}"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:?Missing datasource username}"
+      SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:?Missing datasource password}"
+      TALENTHUB_JWT_SECRET: "${TALENTHUB_JWT_SECRET:?Missing JWT secret}"
     depends_on:
       database:
         condition: service_healthy
 
-  # --- Tier 1: Presentation Tier (React + TypeScript on NGINX) ---
   frontend:
     build:
       context: ./frontend

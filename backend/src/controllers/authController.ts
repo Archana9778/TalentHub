@@ -17,7 +17,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const existingUser = db.getUserByEmail(email);
+    const existingUser = await db.getUserByEmail(email);
     if (existingUser) {
       res.status(409).json({ message: 'An account with this email address already exists.' });
       return;
@@ -43,7 +43,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       createdAt: new Date().toISOString(),
     };
 
-    db.createUser(newUser);
+    await db.createUser(newUser);
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role },
@@ -71,7 +71,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const user = db.getUserByEmail(email);
+    const user = await db.getUserByEmail(email);
     if (!user || !user.password) {
       res.status(401).json({ message: 'Invalid email or password.' });
       return;
@@ -114,7 +114,7 @@ export const getMe = (req: AuthRequest, res: Response): void => {
   res.json({ user: userSafe });
 };
 
-export const updateProfile = (req: AuthRequest, res: Response): void => {
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -122,7 +122,7 @@ export const updateProfile = (req: AuthRequest, res: Response): void => {
 
   const { name, title, location, phone, bio, skills, experience, education, avatarUrl, companyName } = req.body;
 
-  const updated = db.updateUser(req.user.id, {
+  const updated = await db.updateUser(req.user.id, {
     ...(name && { name }),
     ...(title && { title }),
     ...(location && { location }),
@@ -147,7 +147,7 @@ export const updateProfile = (req: AuthRequest, res: Response): void => {
   });
 };
 
-export const uploadCandidateResume = (req: AuthRequest, res: Response): void => {
+export const uploadCandidateResume = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -169,7 +169,7 @@ export const uploadCandidateResume = (req: AuthRequest, res: Response): void => 
   const currentSkills = new Set(req.user.skills || []);
   parsedData.extractedSkills.forEach((s) => currentSkills.add(s));
 
-  const updated = db.updateUser(req.user.id, {
+  const updated = await db.updateUser(req.user.id, {
     resumeUrl: relativeUrl,
     resumeOriginalName: req.file.originalname,
     parsedResumeData: parsedData,
@@ -184,4 +184,3 @@ export const uploadCandidateResume = (req: AuthRequest, res: Response): void => 
     user: userSafe,
   });
 };
-

@@ -6,7 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "db:test": "tsx src/database/test-connection.ts",
+    "db:verify": "tsx src/database/verify-schema.ts",
+    "db:import": "tsx src/database/import-json-data.ts",
+    "migrate": "tsx src/database/migrator.ts up",
+    "migrate:latest": "tsx src/database/migrator.ts up",
+    "migrate:rollback": "tsx src/database/migrator.ts down",
+    "migrate:status": "tsx src/database/migrator.ts status",
+    "migrate:unlock": "tsx src/database/migrator.ts unlock"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -14,7 +22,9 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.3.0",
     "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.24.6",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
