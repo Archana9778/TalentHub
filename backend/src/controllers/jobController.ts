@@ -19,6 +19,7 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       maxSalary,
       status,
       featuredOnly,
+      skills,
     } = req.query;
 
     // Status filter (defaults to active unless specified)
@@ -79,6 +80,22 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
 
     if (featuredOnly === 'true') {
       jobs = jobs.filter((j) => j.isFeatured);
+    }
+
+    // Skills filter — comma-separated list; job matches when it contains ANY selected skill (OR logic)
+    if (skills && typeof skills === 'string') {
+      const skillList = skills
+        .split(',')
+        .map((s) => s.toLowerCase().trim())
+        .filter(Boolean);
+      if (skillList.length > 0) {
+        jobs = jobs.filter((j) => {
+          const jobSkills = Array.isArray(j.skills) ? j.skills : [];
+          return skillList.some((sk) =>
+            jobSkills.some((js) => js.toLowerCase().includes(sk))
+          );
+        });
+      }
     }
 
     res.json({
