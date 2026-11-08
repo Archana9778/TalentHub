@@ -171,15 +171,27 @@ export const Jobs: React.FC = () => {
         onSubmit={handleSearchSubmit}
         className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center gap-3"
       >
+        {/* Keyword search input with inline clear button */}
         <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by job title, skill (e.g. React, Spring Boot, Azure)..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50/60 border border-slate-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 placeholder-slate-400"
+            placeholder="Search by job title, keyword, or skill (e.g. Cloud Engineer, Docker, AWS)…"
+            className="w-full pl-10 pr-9 py-2.5 bg-slate-50/60 border border-slate-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 placeholder-slate-400"
+            aria-label="Search jobs by title or keyword"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="relative w-full md:w-64">
@@ -369,25 +381,51 @@ export const Jobs: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Showing <span className="text-slate-900 font-bold">{jobs.length}</span> Opportunities
+            {search
+              ? <>Results for <span className="text-blue-700 font-bold not-italic">"{search}"</span> — <span className="text-slate-900 font-bold">{jobs.length}</span> {jobs.length === 1 ? 'job' : 'jobs'} found</>
+              : <>Showing <span className="text-slate-900 font-bold">{jobs.length}</span> Opportunities</>
+            }
           </p>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear search
+            </button>
+          )}
         </div>
 
         {loading ? (
-          <Loading message="Filtering open postings..." />
+          <Loading message={search ? `Searching for "${search}"…` : 'Filtering open postings...'} />
         ) : jobs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-500">
             <Briefcase className="w-12 h-12 mx-auto text-slate-400 mb-3" />
-            <h3 className="font-bold text-slate-800 text-base">No jobs matched your criteria</h3>
+            <h3 className="font-bold text-slate-800 text-base">
+              {search ? `No jobs found for "${search}"` : 'No jobs matched your criteria'}
+            </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Try adjusting your keyword search, removing workplace filters, or resetting category selections.
+              No jobs found. Try different keywords or adjust your search.
             </p>
-            <button
-              onClick={clearFilters}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700"
-            >
-              Clear All Filters
-            </button>
+            <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700"
+                >
+                  Clear Search
+                </button>
+              )}
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200"
+              >
+                Reset All Filters
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">

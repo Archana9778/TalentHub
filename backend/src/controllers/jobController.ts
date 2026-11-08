@@ -29,17 +29,50 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       jobs = jobs.filter((j) => j.status === 'active');
     }
 
-    // Keyword search over title, description, skills, company name
+    // ── Reusable safe-match helpers (used only inside this filter pipeline) ──
+    //
+    // matchStr: returns true when `val` is a non-empty string that contains `q`.
+    //   Guards against null / undefined / non-string values without throwing.
+    const matchStr = (val: unknown, q: string): boolean =>
+      typeof val === 'string' && val.toLowerCase().includes(q);
+
+    // matchArr: returns true when at least one element of `arr` is a string
+    //   that contains `q`.  Safe against null, undefined, non-array, and
+    //   array elements that are not strings (numbers, objects, etc.).
+    const matchArr = (arr: unknown, q: string): boolean =>
+      Array.isArray(arr) &&
+      (arr as unknown[]).some((el) => matchStr(el, q));
+
+    // Keyword search — case-insensitive partial match.
+    // Fields searched (all that exist on the Job model as text):
+    //   • title          (string, required)
+    //   • companyName    (string, required)
+    //   • description    (string, required)
+    //   • categoryName   (string, required)
+    //   • location       (string, required) ← added; also used by the
+    //                       dedicated location filter below for exact scoping
+    //   • skills[]       (string[], required)
+    //   • requirements[] (string[], required)
+    //   • benefits[]     (string[], required)
+    //
+    // Note: 'responsibilities' is not a field in the Job data model and is
+    // therefore not included. Add it here if the model is extended later.
+    //
+    // Empty or whitespace-only queries are ignored — no jobs are filtered out.
     if (search && typeof search === 'string') {
       const q = search.toLowerCase().trim();
-      jobs = jobs.filter(
-        (j) =>
-          j.title.toLowerCase().includes(q) ||
-          j.companyName.toLowerCase().includes(q) ||
-          j.description.toLowerCase().includes(q) ||
-          j.skills.some((s) => s.toLowerCase().includes(q)) ||
-          j.location.toLowerCase().includes(q)
-      );
+      if (q.length > 0) {
+        jobs = jobs.filter((j) =>
+          matchStr(j.title,        q) ||
+          matchStr(j.companyName,  q) ||
+          matchStr(j.description,  q) ||
+          matchStr(j.categoryName, q) ||
+          matchStr(j.location,     q) ||
+          matchArr(j.skills,       q) ||
+          matchArr(j.requirements, q) ||
+          matchArr(j.benefits,     q)
+        );
+      }
     }
 
     // Category
@@ -83,18 +116,16 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Skills filter — comma-separated list; job matches when it contains ANY selected skill (OR logic)
+    // Uses the same matchArr helper defined in the search block above for safe element-level checking.
     if (skills && typeof skills === 'string') {
       const skillList = skills
         .split(',')
         .map((s) => s.toLowerCase().trim())
         .filter(Boolean);
       if (skillList.length > 0) {
-        jobs = jobs.filter((j) => {
-          const jobSkills = Array.isArray(j.skills) ? j.skills : [];
-          return skillList.some((sk) =>
-            jobSkills.some((js) => js.toLowerCase().includes(sk))
-          );
-        });
+        jobs = jobs.filter((j) =>
+          skillList.some((sk) => matchArr(j.skills, sk))
+        );
       }
     }
 
