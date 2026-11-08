@@ -8,6 +8,7 @@ import {
   Application,
   ReportedJob,
   JobAlert,
+  ApplicationStatusHistory,
 } from '../types';
 import {
   initialUsers,
@@ -17,6 +18,7 @@ import {
   initialApplications,
   initialReportedJobs,
   initialJobAlerts,
+  initialApplicationStageHistory,
 } from './seedData';
 import { config } from '../config';
 
@@ -28,6 +30,7 @@ interface DatabaseSchema {
   applications: Application[];
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
+  applicationStageHistory: ApplicationStatusHistory[];
 }
 
 class DatabaseManager {
@@ -44,6 +47,7 @@ class DatabaseManager {
       applications: [],
       reportedJobs: [],
       jobAlerts: [],
+      applicationStageHistory: [],
     };
     this.init();
   }
@@ -61,6 +65,7 @@ class DatabaseManager {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         this.data = JSON.parse(raw);
         console.log(`[TalentHub DB] Loaded existing database from ${this.filePath}`);
+        this.upgradeSchemaIfNeeded();
       } catch (err) {
         console.error('[TalentHub DB] Error reading existing database. Re-seeding...', err);
         this.seed();
@@ -68,6 +73,80 @@ class DatabaseManager {
     } else {
       console.log('[TalentHub DB] Initializing fresh database with seed data...');
       this.seed();
+    }
+  }
+
+  private upgradeSchemaIfNeeded() {
+    let modified = false;
+
+    if (!Array.isArray(this.data.applicationStageHistory) || this.data.applicationStageHistory.length === 0) {
+      this.data.applicationStageHistory = [...initialApplicationStageHistory];
+      modified = true;
+    }
+
+    // Ensure all seed companies exist or have missing fields
+    for (const initComp of initialCompanies) {
+      const existing = this.data.companies.find((c) => c.id === initComp.id);
+      if (!existing) {
+        this.data.companies.push(initComp);
+        modified = true;
+      } else {
+        if (!existing.email && initComp.email) {
+          existing.email = initComp.email;
+          modified = true;
+        }
+        if (!existing.contactNumber && initComp.contactNumber) {
+          existing.contactNumber = initComp.contactNumber;
+          existing.phone = initComp.contactNumber;
+          modified = true;
+        }
+        if (!existing.address && initComp.address) {
+          existing.address = initComp.address;
+          modified = true;
+        }
+      }
+    }
+
+    // Ensure seed recruiters exist
+    for (const initUser of initialUsers) {
+      const existing = this.data.users.find((u) => u.id === initUser.id);
+      if (!existing) {
+        this.data.users.push(initUser);
+        modified = true;
+      } else {
+        if (initUser.role === 'recruiter') {
+          if (!existing.companyRole) {
+            existing.companyRole = initUser.companyRole || 'admin';
+            modified = true;
+          }
+          if (!existing.contactNumber) {
+            existing.contactNumber = initUser.contactNumber || existing.phone;
+            modified = true;
+          }
+          if (!existing.designation) {
+            existing.designation = initUser.designation || existing.title;
+            modified = true;
+          }
+        }
+      }
+    }
+
+    // Ensure applications have companyId and assignedRecruiter
+    for (const app of this.data.applications) {
+      if (!app.companyId) {
+        const job = this.data.jobs.find((j) => j.id === app.jobId);
+        if (job) {
+          app.companyId = job.companyId;
+          app.companyName = job.companyName;
+          app.assignedRecruiterId = job.recruiterId;
+          app.assignedRecruiterName = job.recruiterName;
+          modified = true;
+        }
+      }
+    }
+
+    if (modified) {
+      this.persist();
     }
   }
 
@@ -80,6 +159,7 @@ class DatabaseManager {
       applications: [...initialApplications],
       reportedJobs: [...initialReportedJobs],
       jobAlerts: [...initialJobAlerts],
+      applicationStageHistory: [...initialApplicationStageHistory],
     };
     this.persist();
   }
@@ -116,7 +196,11 @@ class DatabaseManager {
   updateUser(id: string, updates: Partial<User>): User | undefined {
     const idx = this.data.users.findIndex((u) => u.id === id);
     if (idx === -1) return undefined;
-    this.data.users[idx] = { ...this.data.users[idx], ...updates };
+    this.data.users[idx] = {
+      ...this.data.users[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
     this.persist();
     return this.data.users[idx];
   }
@@ -129,6 +213,14 @@ class DatabaseManager {
       return true;
     }
     return false;
+  }
+
+  getRecruiters(companyId?: string): User[] {
+    let recruiters = this.data.users.filter((u) => u.role === 'recruiter');
+    if (companyId) {
+      recruiters = recruiters.filter((u) => u.companyId === companyId);
+    }
+    return recruiters;
   }
 
   // --- Companies ---
@@ -149,7 +241,11 @@ class DatabaseManager {
   updateCompany(id: string, updates: Partial<Company>): Company | undefined {
     const idx = this.data.companies.findIndex((c) => c.id === id);
     if (idx === -1) return undefined;
-    this.data.companies[idx] = { ...this.data.companies[idx], ...updates };
+    this.data.companies[idx] = {
+      ...this.data.companies[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
     this.persist();
     return this.data.companies[idx];
   }
@@ -206,6 +302,14 @@ class DatabaseManager {
     return this.data.jobs.find((j) => j.id === id);
   }
 
+  getJobsByCompanyId(companyId: string): Job[] {
+    return this.data.jobs.filter((j) => j.companyId === companyId);
+  }
+
+  getJobsByRecruiterId(recruiterId: string): Job[] {
+    return this.data.jobs.filter((j) => j.recruiterId === recruiterId);
+  }
+
   createJob(job: Job): Job {
     this.data.jobs.unshift(job);
     const cat = this.data.categories.find((c) => c.id === job.categoryId);
@@ -257,6 +361,10 @@ class DatabaseManager {
     return this.data.applications.filter((a) => a.jobId === jobId);
   }
 
+  getApplicationsByCompanyId(companyId: string): Application[] {
+    return this.data.applications.filter((a) => a.companyId === companyId);
+  }
+
   createApplication(app: Application): Application {
     this.data.applications.unshift(app);
     const job = this.getJobById(app.jobId);
@@ -277,6 +385,23 @@ class DatabaseManager {
     };
     this.persist();
     return this.data.applications[idx];
+  }
+
+  // --- Application Status History / Audit Trail ---
+  getApplicationHistory(applicationId: string): ApplicationStatusHistory[] {
+    if (!this.data.applicationStageHistory) {
+      this.data.applicationStageHistory = [];
+    }
+    return this.data.applicationStageHistory.filter((h) => h.applicationId === applicationId);
+  }
+
+  createApplicationHistory(entry: ApplicationStatusHistory): ApplicationStatusHistory {
+    if (!this.data.applicationStageHistory) {
+      this.data.applicationStageHistory = [];
+    }
+    this.data.applicationStageHistory.push(entry);
+    this.persist();
+    return entry;
   }
 
   // --- Reported Jobs ---
@@ -337,4 +462,3 @@ class DatabaseManager {
 }
 
 export const db = new DatabaseManager();
-

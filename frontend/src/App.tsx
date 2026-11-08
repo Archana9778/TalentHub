@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Layouts
@@ -23,6 +23,8 @@ import { JobAlerts } from './pages/candidate/JobAlerts';
 
 // Recruiter Pages
 import { RecruiterDashboard } from './pages/recruiter/RecruiterDashboard';
+import { CompanyProfile } from './pages/recruiter/CompanyProfile';
+import { RecruiterManagement } from './pages/recruiter/RecruiterManagement';
 import { ManageJobs } from './pages/recruiter/ManageJobs';
 import { CreateJob } from './pages/recruiter/CreateJob';
 import { Applicants } from './pages/recruiter/Applicants';
@@ -65,10 +67,15 @@ export const App: React.FC = () => {
             <Route path="/recruiter" element={<RecruiterLayout />}>
               <Route index element={<Navigate to="/recruiter/dashboard" replace />} />
               <Route path="dashboard" element={<RecruiterDashboard />} />
+              <Route path="company" element={<CompanyProfile />} />
+              <Route path="team" element={<RecruiterManagement />} />
+              <Route path="recruiters" element={<Navigate to="/recruiter/team" replace />} />
               <Route path="jobs" element={<ManageJobs />} />
               <Route path="jobs/create" element={<CreateJob />} />
               <Route path="applicants" element={<Applicants />} />
               <Route path="applicants/:id" element={<ApplicantDetails />} />
+              <Route path="applications" element={<Navigate to="/recruiter/applicants" replace />} />
+              <Route path="applications/:id" element={<ApplicantDetails />} />
             </Route>
           </Route>
 

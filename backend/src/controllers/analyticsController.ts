@@ -39,9 +39,18 @@ export const getDashboardAnalytics = (req: AuthRequest, res: Response): void => 
   }
 
   if (user.role === 'recruiter') {
-    const recruiterJobs = allJobs.filter((j) => j.recruiterId === user.id);
-    const recruiterJobIds = new Set(recruiterJobs.map((j) => j.id));
-    const recruiterApps = allApps.filter((a) => recruiterJobIds.has(a.jobId));
+    const company = user.companyId ? db.getCompanyById(user.companyId) : undefined;
+    const companyRecruiters = user.companyId ? db.getRecruiters(user.companyId) : [];
+    const activeRecruiters = companyRecruiters.filter((r) => r.status === 'active');
+
+    const companyJobs = user.companyId ? db.getJobsByCompanyId(user.companyId) : allJobs.filter((j) => j.recruiterId === user.id);
+    const myJobs = allJobs.filter((j) => j.recruiterId === user.id);
+
+    const recruiterJobIds = new Set(myJobs.map((j) => j.id));
+    const companyJobIds = new Set(companyJobs.map((j) => j.id));
+
+    const companyApps = allApps.filter((a) => companyJobIds.has(a.jobId) || (user.companyId && a.companyId === user.companyId));
+    const myApps = allApps.filter((a) => recruiterJobIds.has(a.jobId) || a.assignedRecruiterId === user.id);
 
     const pipelineFunnel: Record<ApplicationStage, number> = {
       Applied: 0,
@@ -53,21 +62,28 @@ export const getDashboardAnalytics = (req: AuthRequest, res: Response): void => 
     };
 
     let totalMatchScore = 0;
-    recruiterApps.forEach((a) => {
+    companyApps.forEach((a) => {
       if (pipelineFunnel[a.stage] !== undefined) {
         pipelineFunnel[a.stage] += 1;
       }
       totalMatchScore += a.matchScore;
     });
 
-    const averageMatchScore = recruiterApps.length > 0 ? Math.round(totalMatchScore / recruiterApps.length) : 0;
+    const averageMatchScore = companyApps.length > 0 ? Math.round(totalMatchScore / companyApps.length) : 0;
 
     res.json({
       analytics: {
         role: 'recruiter',
-        activeJobs: recruiterJobs.filter((j) => j.status === 'active').length,
-        totalJobs: recruiterJobs.length,
-        totalApplicants: recruiterApps.length,
+        company,
+        totalRecruiters: companyRecruiters.length,
+        activeRecruiters: activeRecruiters.length,
+        totalCompanyJobs: companyJobs.length,
+        assignedJobsCount: myJobs.length,
+        myActiveJobs: myJobs.filter((j) => j.status === 'active').length,
+        activeJobs: companyJobs.filter((j) => j.status === 'active').length,
+        totalJobs: myJobs.length,
+        totalApplicants: companyApps.length,
+        myApplicantsCount: myApps.length,
         candidatesUnderScreening: pipelineFunnel['Screening'],
         interviewsInProgress: pipelineFunnel['Interview'],
         offersExtended: pipelineFunnel['Offer'],
@@ -102,8 +118,7 @@ export const getDashboardAnalytics = (req: AuthRequest, res: Response): void => 
       totalJobs: allJobs.length,
       activeJobs: allJobs.filter((j) => j.status === 'active').length,
       totalApplications: allApps.length,
-      pipelineFunnel: stageCounts,
+      stageCounts,
     },
   });
 };
-
