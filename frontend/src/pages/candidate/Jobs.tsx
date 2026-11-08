@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal, DollarSign, Tag, Plus } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, JobCategory } from '../../types';
 import { JobCard } from '../../components/JobCard';
@@ -21,6 +21,15 @@ export const Jobs: React.FC = () => {
   const [location, setLocation] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
+  // Salary filter state
+  const [minSalary, setMinSalary] = useState('');
+  const [maxSalary, setMaxSalary] = useState('');
+  const [salaryError, setSalaryError] = useState<string | null>(null);
+
+  // Skills filter state
+  const [skillInput, setSkillInput] = useState('');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+
   // Quick Apply Modal state
   const [applyModalJob, setApplyModalJob] = useState<Job | null>(null);
   const [coverLetter, setCoverLetter] = useState('');
@@ -28,7 +37,25 @@ export const Jobs: React.FC = () => {
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
+    // --- Salary validation: block API call when values are invalid ---
+    const minNum = minSalary !== '' ? Number(minSalary) : null;
+    const maxNum = maxSalary !== '' ? Number(maxSalary) : null;
+
+    if (minNum !== null && minNum < 0) {
+      setSalaryError('Minimum salary cannot be negative.');
+      return;
+    }
+    if (maxNum !== null && maxNum < 0) {
+      setSalaryError('Maximum salary cannot be negative.');
+      return;
+    }
+    if (minNum !== null && maxNum !== null && minNum > maxNum) {
+      setSalaryError('Minimum salary cannot exceed maximum salary.');
+      return;
+    }
+    setSalaryError(null);
+
     setLoading(true);
     try {
       const params: Record<string, string> = {};
@@ -38,6 +65,11 @@ export const Jobs: React.FC = () => {
       if (jobType !== 'all') params.jobType = jobType;
       if (experienceLevel !== 'all') params.experienceLevel = experienceLevel;
       if (location) params.location = location;
+      // Salary: UI shows values in $k units, API expects full dollar amounts
+      if (minNum !== null) params.minSalary = String(minNum * 1000);
+      if (maxNum !== null) params.maxSalary = String(maxNum * 1000);
+      // Skills: comma-separated list of skills (OR logic on backend)
+      if (selectedSkills.length > 0) params.skills = selectedSkills.join(',');
 
       const [jobsRes, catsRes] = await Promise.all([
         api.getJobs(params),
@@ -50,11 +82,12 @@ export const Jobs: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, selectedCategory, workplaceType, jobType, experienceLevel, location, minSalary, maxSalary, selectedSkills]);
 
+  // useEffect depends only on the stable fetchJobs callback — avoids duplicated dep list
   useEffect(() => {
     fetchJobs();
-  }, [selectedCategory, workplaceType, jobType, experienceLevel]);
+  }, [fetchJobs]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +122,36 @@ export const Jobs: React.FC = () => {
     setJobType('all');
     setExperienceLevel('all');
     setLocation('');
+    setMinSalary('');
+    setMaxSalary('');
+    setSalaryError(null);
+    setSelectedSkills([]);
+    setSkillInput('');
+  };
+
+  const addSkill = () => {
+    const trimmed = skillInput.trim();
+    if (
+      trimmed &&
+      // Case-insensitive duplicate prevention: 'Python' and 'python' are the same
+      !selectedSkills.some((s) => s.toLowerCase() === trimmed.toLowerCase())
+    ) {
+      setSelectedSkills((prev) => [...prev, trimmed]);
+    }
+    setSkillInput('');
+  };
+
+  const removeSkill = (skill: string) => {
+    setSelectedSkills((prev) => prev.filter((s) => s !== skill));
+  };
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSkill();
+    } else if (e.key === 'Backspace' && skillInput === '' && selectedSkills.length > 0) {
+      setSelectedSkills((prev) => prev.slice(0, -1));
+    }
   };
 
   return (
@@ -213,6 +276,92 @@ export const Jobs: React.FC = () => {
           >
             Reset Filters
           </button>
+        </div>
+
+        {/* Salary + Skills row */}
+        <div className="flex flex-wrap items-start gap-3 text-xs pt-3 border-t border-slate-100">
+
+          {/* Min Salary */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  value={minSalary}
+                  onChange={(e) => setMinSalary(e.target.value)}
+                  placeholder="Min $k"
+                  className={`w-24 bg-slate-50 border rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none focus:ring-1 placeholder-slate-400 ${
+                    salaryError ? 'border-rose-400 focus:ring-rose-400' : 'border-slate-200 focus:ring-blue-500'
+                  }`}
+                />
+                <span className="text-slate-400">–</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={maxSalary}
+                  onChange={(e) => setMaxSalary(e.target.value)}
+                  placeholder="Max $k"
+                  className={`w-24 bg-slate-50 border rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none focus:ring-1 placeholder-slate-400 ${
+                    salaryError ? 'border-rose-400 focus:ring-rose-400' : 'border-slate-200 focus:ring-blue-500'
+                  }`}
+                />
+                <span className="text-slate-500 font-medium whitespace-nowrap">/ yr ($k)</span>
+              </div>
+            </div>
+            {salaryError && (
+              <p className="text-rose-600 text-[11px] pl-5 font-medium">{salaryError}</p>
+            )}
+          </div>
+
+          {/* Skills multi-tag input */}
+          <div className="flex flex-col gap-1.5 flex-1 min-w-56">
+            <div className="flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div className="flex items-center gap-1 flex-1 flex-wrap bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 min-h-[32px] focus-within:ring-1 focus-within:ring-blue-500">
+                {selectedSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+                  >
+                    {skill}
+                    <button
+                      type="button"
+                      onClick={() => removeSkill(skill)}
+                      className="hover:text-blue-600 ml-0.5"
+                      aria-label={`Remove skill ${skill}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  value={skillInput}
+                  onChange={(e) => setSkillInput(e.target.value)}
+                  onKeyDown={handleSkillKeyDown}
+                  placeholder={selectedSkills.length === 0 ? 'Filter by skill (e.g. React, Python)…' : 'Add another…'}
+                  className="flex-1 min-w-28 bg-transparent text-slate-700 outline-none placeholder-slate-400 text-[12px] py-0.5"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={addSkill}
+                disabled={!skillInput.trim()}
+                className="flex items-center gap-0.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg font-semibold transition-colors shrink-0"
+                aria-label="Add skill filter"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add
+              </button>
+            </div>
+            {selectedSkills.length > 0 && (
+              <p className="text-slate-400 text-[11px] pl-5">
+                Showing jobs matching <strong>any</strong> selected skill.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
