@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal, DollarSign, Tag, Plus } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal, DollarSign, Tag, Plus, ArrowUpDown } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, JobCategory } from '../../types';
 import { JobCard } from '../../components/JobCard';
@@ -20,6 +20,10 @@ export const Jobs: React.FC = () => {
   const [experienceLevel, setExperienceLevel] = useState('all');
   const [location, setLocation] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+
+  // Sort state — applied client-side after fetching
+  type SortOrder = 'newest' | 'oldest';
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
 
   // Salary filter state
   const [minSalary, setMinSalary] = useState('');
@@ -127,6 +131,7 @@ export const Jobs: React.FC = () => {
     setSalaryError(null);
     setSelectedSkills([]);
     setSkillInput('');
+    setSortOrder('newest');
   };
 
   const addSkill = () => {
@@ -153,6 +158,19 @@ export const Jobs: React.FC = () => {
       setSelectedSkills((prev) => prev.slice(0, -1));
     }
   };
+
+  // Derive sorted list from fetched jobs — purely client-side, no extra API call.
+  // Jobs with invalid/missing createdAt dates are treated as epoch 0 (sorted last for newest).
+  const sortedJobs = useMemo(() => {
+    return [...jobs].sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      // If either timestamp is NaN (unparseable), treat as 0
+      const safeA = isNaN(tA) ? 0 : tA;
+      const safeB = isNaN(tB) ? 0 : tB;
+      return sortOrder === 'newest' ? safeB - safeA : safeA - safeB;
+    });
+  }, [jobs, sortOrder]);
 
   return (
     <div className="space-y-6">
@@ -386,17 +404,32 @@ export const Jobs: React.FC = () => {
               : <>Showing <span className="text-slate-900 font-bold">{jobs.length}</span> Opportunities</>
             }
           </p>
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium"
-              aria-label="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-              Clear search
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Sort dropdown */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                aria-label="Sort jobs by posting date"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+            </div>
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium"
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear search
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -429,7 +462,7 @@ export const Jobs: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-            {jobs.map((job) => (
+            {sortedJobs.map((job) => (
               <JobCard
                 key={job.id}
                 job={job}
