@@ -10,6 +10,7 @@ import {
   JobAlert,
   PasswordResetToken,
   RevokedToken,
+  ResumeDocument,
 } from '../types';
 import {
   initialUsers,
@@ -415,19 +416,25 @@ class DatabaseManager {
     return alert;
   }
 
-  async updateJobAlert(id: string, userId: string, updates: Partial<JobAlert>): Promise<JobAlert | undefined> {
-    if (this.isMysql) return mysqlRepository.updateJobAlert(id, userId, updates);
-    const idx = this.data.jobAlerts.findIndex((a) => a.id === id && a.userId === userId);
+  async updateJobAlert(id: string, updatesOrUserId: string | Partial<JobAlert>, maybeUpdates?: Partial<JobAlert>): Promise<JobAlert | undefined> {
+    const userId = typeof updatesOrUserId === 'string' ? updatesOrUserId : undefined;
+    const updates = typeof updatesOrUserId === 'string' ? maybeUpdates || {} : updatesOrUserId;
+
+    if (this.isMysql) {
+      if (userId) return mysqlRepository.updateJobAlert(id, userId, updates);
+      return mysqlRepository.updateJobAlert(id, updates as any, updates);
+    }
+    const idx = this.data.jobAlerts.findIndex((a) => a.id === id && (!userId || a.userId === userId));
     if (idx === -1) return undefined;
     this.data.jobAlerts[idx] = { ...this.data.jobAlerts[idx], ...updates };
     this.persistJson();
     return this.data.jobAlerts[idx];
   }
 
-  async deleteJobAlert(id: string, userId: string): Promise<boolean> {
-    if (this.isMysql) return mysqlRepository.deleteJobAlert(id, userId);
+  async deleteJobAlert(id: string, userId?: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobAlert(id, userId || '');
     const initLen = this.data.jobAlerts.length;
-    this.data.jobAlerts = this.data.jobAlerts.filter((a) => !(a.id === id && a.userId === userId));
+    this.data.jobAlerts = this.data.jobAlerts.filter((a) => !(a.id === id && (!userId || a.userId === userId)));
     if (this.data.jobAlerts.length !== initLen) {
       this.persistJson();
       return true;
@@ -500,6 +507,30 @@ class DatabaseManager {
   resetToSeed(): void {
     this.seedJson();
   }
+
+  // ==========================================
+  // RESUME DOCUMENTS (Blob Storage support)
+  // ==========================================
+  async getCurrentResume(_candidateId: string): Promise<ResumeDocument | undefined> {
+    return undefined;
+  }
+
+  async getResumeHistory(_candidateId: string): Promise<ResumeDocument[]> {
+    return [];
+  }
+
+  async getResumeDocById(_id: string): Promise<ResumeDocument | undefined> {
+    return undefined;
+  }
+
+  async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
+    return doc;
+  }
+
+  async markResumeDeleted(_id: string): Promise<void> {
+    // no-op
+  }
 }
 
 export const db = new DatabaseManager();
+export default db;

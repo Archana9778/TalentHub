@@ -4,7 +4,8 @@ import path from 'path';
 dotenv.config();
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-const dbMode = (process.env.DB_MODE || 'mysql').toLowerCase();
+// DB_MODE defaults to 'mysql'. Can be overridden with 'json' for development or testing.
+const dbMode = (process.env.DB_MODE || (process.env.DB_DRIVER === 'json' ? 'json' : 'mysql')).toLowerCase();
 if (!['mysql', 'json'].includes(dbMode)) {
   throw new Error(`Invalid DB_MODE "${dbMode}". Use "mysql" or "json".`);
 }
@@ -33,6 +34,15 @@ const safeCorsOrigin = parsedCorsOrigin.includes('*')
       : false) // Block or restrict in dev
   : parsedCorsOrigin;
 
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbPort = parseInt(process.env.DB_PORT || '3306', 10);
+const dbName = process.env.DB_NAME || 'talenthub';
+const dbUser = process.env.DB_USER || 'talenthub_user';
+const dbPassword = process.env.DB_PASSWORD || '';
+const dbSsl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined;
+const dbPoolMin = parseInt(process.env.DB_POOL_MIN || '2', 10);
+const dbPoolMax = parseInt(process.env.DB_POOL_MAX || '10', 10);
+
 export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv,
@@ -56,14 +66,45 @@ export const config = {
     secure: process.env.SMTP_SECURE === 'true',
   },
 
-  // MySQL 8.0 & Azure Database for MySQL Flexible Server Configuration
+  // MySQL configuration block (Knex / migrations compatible)
+  database: {
+    driver: process.env.DB_DRIVER || (dbMode === 'json' ? 'json' : 'mysql2'),
+    host: dbHost,
+    port: dbPort,
+    name: dbName,
+    user: dbUser,
+    password: dbPassword,
+    ssl: dbSsl,
+    pool: {
+      min: dbPoolMin,
+      max: dbPoolMax,
+    },
+  },
+
+  // MySQL 8.0 connection pool configuration
   db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    user: process.env.DB_USER || '',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || '',
-    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    host: dbHost,
+    port: dbPort,
+    user: dbUser,
+    password: dbPassword,
+    database: dbName,
+    connectionLimit: dbPoolMax,
+    ssl: dbSsl,
+  },
+
+  // Azure Blob Storage / Azurite configuration
+  storage: {
+    /** 'azurite' (local emulator) or 'azure' (production DefaultAzureCredential) */
+    provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',
+    /** Azurite / local dev connection string */
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    /** Azure production account name (used with DefaultAzureCredential) */
+    accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
+    /** Private container name */
+    containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
+    /** Maximum resume file size in bytes (default 5 MB) */
+    maxResumeSizeBytes: parseInt(process.env.MAX_RESUME_SIZE_MB || '5', 10) * 1024 * 1024,
+    /** Short-lived SAS URL expiry in minutes (default 5 min) */
+    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || '5', 10),
   },
 };
