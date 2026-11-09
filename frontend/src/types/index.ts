@@ -44,6 +44,7 @@ export interface User {
   resumeUrl?: string;
   resumeOriginalName?: string;
   parsedResumeData?: ParsedResumeData;
+  lastLoginAt?: string;
   createdAt: string;
 }
 

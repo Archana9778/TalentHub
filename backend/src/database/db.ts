@@ -8,6 +8,8 @@ import {
   Application,
   ReportedJob,
   JobAlert,
+  PasswordResetToken,
+  RevokedToken,
 } from '../types';
 import {
   initialUsers,
@@ -30,6 +32,8 @@ interface DatabaseSchema {
   applications: Application[];
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
+  passwordResetTokens: PasswordResetToken[];
+  revokedTokens: RevokedToken[];
 }
 
 class DatabaseManager {
@@ -46,6 +50,8 @@ class DatabaseManager {
       applications: [],
       reportedJobs: [],
       jobAlerts: [],
+      passwordResetTokens: [],
+      revokedTokens: [],
     };
     if (config.dbMode === 'json') this.initJson();
   }
@@ -81,6 +87,8 @@ class DatabaseManager {
       try {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         this.data = JSON.parse(raw);
+        if (!this.data.passwordResetTokens) this.data.passwordResetTokens = [];
+        if (!this.data.revokedTokens) this.data.revokedTokens = [];
       } catch (err) {
         console.error('[TalentHub DB] Error reading local database. Re-seeding...', err);
         this.seedJson();
@@ -99,15 +107,23 @@ class DatabaseManager {
       applications: [...initialApplications],
       reportedJobs: [...initialReportedJobs],
       jobAlerts: [...initialJobAlerts],
+      passwordResetTokens: [],
+      revokedTokens: [],
     };
     this.persistJson();
   }
 
   private persistJson() {
     try {
+      const payload = JSON.stringify(this.data, null, 2);
       const tempPath = `${this.filePath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(this.data, null, 2), 'utf-8');
-      fs.renameSync(tempPath, this.filePath);
+      try {
+        fs.writeFileSync(tempPath, payload, 'utf-8');
+        fs.copyFileSync(tempPath, this.filePath);
+        try { fs.unlinkSync(tempPath); } catch {}
+      } catch {
+        fs.writeFileSync(this.filePath, payload, 'utf-8');
+      }
     } catch (err) {
       console.error('[TalentHub DB] Failed to persist data to disk:', err);
     }
@@ -417,6 +433,68 @@ class DatabaseManager {
       return true;
     }
     return false;
+  }
+
+  // ==========================================
+  // PASSWORD RESET TOKENS
+  // ==========================================
+  async createPasswordResetToken(token: PasswordResetToken): Promise<PasswordResetToken> {
+    if (this.isMysql) return mysqlRepository.createPasswordResetToken(token);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    this.data.passwordResetTokens.push(token);
+    this.persistJson();
+    return token;
+  }
+
+  async getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    if (this.isMysql) return mysqlRepository.getPasswordResetTokenByHash(tokenHash);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    return this.data.passwordResetTokens
+      .filter((t) => t.tokenHash === tokenHash)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    if (this.isMysql) return mysqlRepository.markPasswordResetTokenUsed(id);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    const target = this.data.passwordResetTokens.find((t) => t.id === id);
+    if (target) {
+      target.usedAt = new Date().toISOString();
+      this.persistJson();
+    }
+  }
+
+  async invalidateUserResetTokens(userId: string): Promise<void> {
+    if (this.isMysql) return mysqlRepository.invalidateUserResetTokens(userId);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    let changed = false;
+    this.data.passwordResetTokens.forEach((t) => {
+      if (t.userId === userId && !t.usedAt) {
+        t.usedAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) this.persistJson();
+  }
+
+  // ==========================================
+  // REVOKED TOKENS (LOGOUT INVALIDATION)
+  // ==========================================
+  async revokeToken(token: RevokedToken): Promise<RevokedToken> {
+    if (this.isMysql) return mysqlRepository.revokeToken(token);
+    this.data.revokedTokens = this.data.revokedTokens || [];
+    this.data.revokedTokens.push(token);
+    this.persistJson();
+    return token;
+  }
+
+  async isTokenRevoked(tokenJti: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.isTokenRevoked(tokenJti);
+    this.data.revokedTokens = this.data.revokedTokens || [];
+    const now = Date.now();
+    return this.data.revokedTokens.some(
+      (t) => t.tokenJti === tokenJti && new Date(t.expiresAt).getTime() > now
+    );
   }
 
   resetToSeed(): void {

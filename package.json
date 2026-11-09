@@ -10,6 +10,7 @@
     "build": "cd backend && npm run build && cd ../frontend && npm run build",
     "start": "cmd /c start-talenthub.bat",
     "test": "powershell -ExecutionPolicy Bypass -File scripts/test-e2e.ps1",
+    "test:auth": "node scripts/test-advanced-auth.js",
     "test:comprehensive": "powershell -ExecutionPolicy Bypass -File scripts/test-comprehensive.ps1"
   },
   "keywords": [

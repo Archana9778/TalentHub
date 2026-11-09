@@ -158,7 +158,7 @@ export const Users: React.FC = () => {
                 <th className="px-6 py-4">Current Role</th>
                 <th className="px-6 py-4">Company / Title</th>
                 <th className="px-6 py-4">Account Status</th>
-                <th className="px-6 py-4">Registered Date</th>
+                <th className="px-6 py-4">Registered / Last Login</th>
                 <th className="px-6 py-4 text-right">Administrative Actions</th>
               </tr>
             </thead>
@@ -224,7 +224,10 @@ export const Users: React.FC = () => {
                     </td>
 
                     <td className="px-6 py-4 text-slate-500">
-                      {new Date(u.createdAt).toLocaleDateString()}
+                      <div>{new Date(u.createdAt).toLocaleDateString()}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {u.lastLoginAt ? `Login: ${new Date(u.lastLoginAt).toLocaleDateString()}` : 'Never logged in'}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4 text-right">

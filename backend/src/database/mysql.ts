@@ -139,6 +139,8 @@ class MySqlDatabase {
       }
       migrationStep = 'V4__user_profile_fields.sql';
       await this.ensureProfileColumns();
+      migrationStep = 'V5__auth_hardening.sql';
+      await this.ensureAuthHardening();
     } catch (migrationErr: any) {
       const code = typeof migrationErr?.code === 'string' ? ` (${migrationErr.code})` : '';
       throw new Error(`MySQL migration step ${migrationStep} failed${code}. Check database permissions, existing schema compatibility, and migration files; existing data was not intentionally deleted.`);
@@ -173,6 +175,54 @@ class MySqlDatabase {
     for (const [column, definition] of missing) {
       await this.pool.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
     }
+  }
+
+  private async ensureAuthHardening(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    // 1. Ensure user columns
+    const userColumns: Array<[string, string]> = [
+      ['token_version', 'INT NOT NULL DEFAULT 1'],
+      ['last_login_at', 'TIMESTAMP NULL'],
+      ['password_changed_at', 'TIMESTAMP NULL'],
+    ];
+
+    for (const [column, definition] of userColumns) {
+      const [rows] = await this.pool.query<any[]>(
+        'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+        [config.db.database, 'users', column]
+      );
+      if (Number(rows?.[0]?.count || 0) === 0) {
+        await this.pool.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+      }
+    }
+
+    // 2. Ensure password_reset_tokens table
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        token_hash VARCHAR(128) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_reset_token_hash (token_hash),
+        INDEX idx_reset_user (user_id),
+        CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 3. Ensure revoked_tokens table
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS revoked_tokens (
+        id VARCHAR(64) PRIMARY KEY,
+        token_jti VARCHAR(128) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_revoked_jti (token_jti),
+        INDEX idx_revoked_expires (expires_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
   }
 
   async close(): Promise<void> {

@@ -20,6 +20,19 @@ if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error('JWT_SECRET must be set to a random value of at least 32 characters.');
 }
 
+const rawCorsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const parsedCorsOrigin = rawCorsOrigin
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+// Reject dangerous wildcard CORS when credentials/cookies are in use
+const safeCorsOrigin = parsedCorsOrigin.includes('*')
+  ? (nodeEnv === 'production'
+      ? ['http://localhost:5173'] // Never allow wildcard in production
+      : false) // Block or restrict in dev
+  : parsedCorsOrigin;
+
 export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv,
@@ -27,8 +40,21 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
   uploadDir: path.resolve(__dirname, '../../uploads/resumes'),
-  corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
+  corsOrigin: safeCorsOrigin,
+  frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  authCookieName: 'talenthub_token',
+  passwordResetExpiresMinutes: parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES || '15', 10),
   dbMode,
+
+  // SMTP Email Configuration for password reset and notifications
+  email: {
+    host: process.env.SMTP_HOST || '',
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    user: process.env.SMTP_USER || '',
+    password: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'TalentHub Security <no-reply@talenthub.com>',
+    secure: process.env.SMTP_SECURE === 'true',
+  },
 
   // MySQL 8.0 & Azure Database for MySQL Flexible Server Configuration
   db: {
