@@ -43,7 +43,7 @@ app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => 
       diskSpace: { status: 'UP' },
       database: {
         status: databaseHealthy ? 'UP' : 'DOWN',
-        engine: config.dbMode === 'mysql' ? 'MySQL 8.0' : 'Embedded JSON persistence (development/test opt-in)',
+        engine: db.isMysql ? 'MySQL 8.0' : 'Embedded JSON persistence (development/test opt-in)',
       },
       resumeParsing: { status: 'READY', mode: 'local-heuristic' },
     },
@@ -102,7 +102,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 const PORT = config.port;
 
 const startServer = async () => {
-  // Initialize Database (attempts MySQL 8.0 connection & migrations, falls back gracefully if offline)
+  // Initialize Database (attempts connection & verifies readiness)
   await db.initialize();
 
   const server = app.listen(PORT, () => {

@@ -1,6 +1,6 @@
 import { Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
-import { getDb } from './knex';
+import { getDb, testDatabaseConnection, closeDatabaseConnection } from './knex';
 import {
   User,
   Company,
@@ -26,9 +26,34 @@ function safeJsonParse<T>(val: any, fallback: T): T {
 
 export class MySqlDatabase {
   private db: Knex;
+  readonly isMysql = true;
 
   constructor(knexInstance?: Knex) {
     this.db = knexInstance || getDb();
+  }
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      const res = await testDatabaseConnection();
+      return res.connected;
+    } catch {
+      return false;
+    }
+  }
+
+  async initialize(): Promise<void> {
+    try {
+      const res = await testDatabaseConnection();
+      if (!res.connected) {
+        console.warn(`[TalentHub MySQL] Connection test warning: ${res.error || 'Server not reachable'}`);
+      }
+    } catch (err: any) {
+      console.warn(`[TalentHub MySQL] Connection initialization failed: ${err.message}`);
+    }
+  }
+
+  async close(): Promise<void> {
+    await closeDatabaseConnection();
   }
 
   // ==========================================
