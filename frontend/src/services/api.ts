@@ -9,6 +9,8 @@ import {
   ReportedJob,
   SystemStats,
   ApplicationStage,
+  MatchDetails,
+  CandidateJobMatch,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -197,10 +199,39 @@ export const api = {
     return res.data;
   },
 
-  getJobApplicants: async (jobId?: string, stage?: string) => {
-    const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications/applicants', {
-      params: { jobId: jobId !== 'all' ? jobId : undefined, stage: stage !== 'all' ? stage : undefined },
+  getJobApplicants: async (jobId?: string, stage?: string, sort?: 'highest' | 'lowest' | 'recent') => {
+    const res = await apiClient.get<{ total: number; sort?: string; applications: Application[] }>('/applications/applicants', {
+      params: {
+        jobId: jobId !== 'all' ? jobId : undefined,
+        stage: stage !== 'all' ? stage : undefined,
+        sort: sort || 'highest',
+      },
     });
+    return res.data;
+  },
+
+  getJobMatches: async (jobId: string, sort: 'highest' | 'lowest' | 'recent' = 'highest', stage: string = 'all') => {
+    const res = await apiClient.get<{
+      total: number;
+      jobId: string;
+      jobTitle: string;
+      companyName: string;
+      sort: string;
+      stage: string;
+      matches: CandidateJobMatch[];
+    }>(`/jobs/${jobId}/matches`, {
+      params: { sort, stage: stage !== 'all' ? stage : undefined },
+    });
+    return res.data;
+  },
+
+  getJobCandidateMatch: async (jobId: string, candidateId: string) => {
+    const res = await apiClient.get<{
+      job: Job;
+      candidate: User;
+      matchDetails: MatchDetails;
+      rank?: number;
+    }>(`/jobs/${jobId}/matches/${candidateId}`);
     return res.data;
   },
 
