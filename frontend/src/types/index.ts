@@ -39,6 +39,7 @@ export interface User {
   location?: string;
   bio?: string;
   skills?: string[];
+  certifications?: string[];
   experience?: UserExperience[];
   education?: UserEducation[];
   resumeUrl?: string;
@@ -113,13 +114,42 @@ export interface StageTimelineItem {
   comment?: string;
 }
 
+export type MatchCategory = 'Excellent Match' | 'Good Match' | 'Moderate Match' | 'Low Match';
+
 export interface MatchDetails {
   score: number;
+  category?: MatchCategory;
   matchedSkills: string[];
   missingSkills: string[];
-  skillScore: number;
-  experienceScore: number;
+  skillScore: number; // 0-100 (40% weight)
+  experienceScore: number; // 0-100 (25% weight)
+  educationScore?: number; // 0-100 (15% weight)
+  certificationsScore?: number; // 0-100 (10% weight)
+  additionalScore?: number; // 0-100 (10% weight)
+  relevantExperience?: string[];
+  matchingCertifications?: string[];
+  missingQualifications?: string[];
   analysisNotes: string;
+}
+
+export interface CandidateJobMatch {
+  rank: number;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidateTitle?: string;
+  candidateAvatar?: string;
+  candidateLocation?: string;
+  candidatePhone?: string;
+  jobId: string;
+  jobTitle: string;
+  companyName: string;
+  applicationId?: string;
+  applicationStage?: ApplicationStage;
+  appliedDate?: string;
+  matchScore: number;
+  matchCategory: MatchCategory;
+  matchDetails: MatchDetails;
 }
 
 export interface Application {

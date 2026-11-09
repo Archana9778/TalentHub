@@ -14,10 +14,17 @@ import {
   Mail,
   MapPin,
   Save,
+  Code,
+  Award,
+  GraduationCap,
+  Briefcase,
+  ShieldCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Application, User as UserType, Job, ApplicationStage } from '../../types';
 import { Loading } from '../../components/Loading';
+import { MatchDetailsModal } from '../../components/MatchDetailsModal';
 
 export const ApplicantDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +46,9 @@ export const ApplicantDetails: React.FC = () => {
   const [interviewDate, setInterviewDate] = useState('');
   const [updatingStage, setUpdatingStage] = useState(false);
   const [stageSuccess, setStageSuccess] = useState<string | null>(null);
+
+  // Match details modal
+  const [matchModalOpen, setMatchModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,6 +124,15 @@ export const ApplicantDetails: React.FC = () => {
 
   const stages: ApplicationStage[] = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired', 'Rejected'];
 
+  const getCategoryStyle = (score: number) => {
+    if (score >= 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', bar: 'bg-emerald-500', label: 'Excellent Match' };
+    if (score >= 60) return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', bar: 'bg-blue-500', label: 'Good Match' };
+    if (score >= 40) return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', bar: 'bg-amber-500', label: 'Moderate Match' };
+    return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', bar: 'bg-rose-500', label: 'Low Match' };
+  };
+
+  const catStyle = getCategoryStyle(application.matchScore);
+
   return (
     <div className="space-y-6 w-full">
       <Link
@@ -170,15 +189,28 @@ export const ApplicantDetails: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center shrink-0">
-              <div className="flex items-center gap-1 text-emerald-800 font-extrabold text-lg justify-center">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                <span>{application.matchScore}%</span>
+            <button
+              onClick={() => setMatchModalOpen(true)}
+              className={`p-3.5 ${catStyle.bg} border ${catStyle.border} rounded-2xl text-center shrink-0 hover:shadow-md transition-all group cursor-pointer text-left`}
+              title="Click to view detailed scoring breakdown"
+            >
+              <div className="flex items-center gap-2">
+                <span className={`text-2xl font-black ${catStyle.text}`}>{application.matchScore}%</span>
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${catStyle.bg} ${catStyle.text} border ${catStyle.border}`}>
+                  {application.matchDetails.category || catStyle.label}
+                </span>
               </div>
-              <div className="text-[10px] text-emerald-600 font-semibold uppercase">
-                AI Match Score
+              <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1.5">
+                <div
+                  className={`h-full ${catStyle.bar} rounded-full transition-all`}
+                  style={{ width: `${application.matchScore}%` }}
+                />
               </div>
-            </div>
+              <div className="text-[10px] text-slate-500 font-medium mt-1 flex items-center justify-between">
+                <span>Matching Score</span>
+                <span className="text-purple-600 font-bold group-hover:underline">Details →</span>
+              </div>
+            </button>
 
             <a
               href={application.resumeUrl}
@@ -233,11 +265,125 @@ export const ApplicantDetails: React.FC = () => {
         {/* Left 2 Columns */}
         <div className="lg:col-span-2 space-y-6">
           {/* Match Score Details */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Candidate Match Breakdown</span>
-            </h2>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+                <h2 className="text-base font-bold text-slate-900">Candidate Match Breakdown</h2>
+                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${catStyle.bg} ${catStyle.text} border ${catStyle.border}`}>
+                  {application.matchDetails.category || catStyle.label}
+                </span>
+              </div>
+              <button
+                onClick={() => setMatchModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors self-start sm:self-auto"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span>View Full Match Analysis</span>
+              </button>
+            </div>
+
+            {/* Overall Score Meter */}
+            <div className="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-slate-600">Overall Match Score</span>
+                <span className={`text-sm font-extrabold ${catStyle.text}`}>{application.matchScore}%</span>
+              </div>
+              <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${catStyle.bar} rounded-full transition-all`}
+                  style={{ width: `${application.matchScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 5 Component Factors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Code className="w-3.5 h-3.5 text-purple-600" />
+                    Skills Match
+                  </span>
+                  <span className="font-bold text-slate-800">{application.matchDetails.skillScore}%</span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-purple-600 rounded-full"
+                    style={{ width: `${application.matchDetails.skillScore}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">Weight: 40%</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-600" />
+                    Experience Match
+                  </span>
+                  <span className="font-bold text-slate-800">{application.matchDetails.experienceScore}%</span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full"
+                    style={{ width: `${application.matchDetails.experienceScore}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">Weight: 25%</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+                    Education Match
+                  </span>
+                  <span className="font-bold text-slate-800">{application.matchDetails.educationScore ?? 0}%</span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600 rounded-full"
+                    style={{ width: `${application.matchDetails.educationScore ?? 0}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">Weight: 15%</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Award className="w-3.5 h-3.5 text-amber-600" />
+                    Certifications
+                  </span>
+                  <span className="font-bold text-slate-800">{application.matchDetails.certificationsScore ?? 0}%</span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-600 rounded-full"
+                    style={{ width: `${application.matchDetails.certificationsScore ?? 0}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">Weight: 10%</span>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl space-y-1.5 sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    Additional Quals
+                  </span>
+                  <span className="font-bold text-slate-800">{application.matchDetails.additionalScore ?? 0}%</span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full"
+                    style={{ width: `${application.matchDetails.additionalScore ?? 0}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-medium">Weight: 10%</span>
+              </div>
+            </div>
 
             <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 italic">
               "{application.matchDetails.analysisNotes}"
@@ -255,6 +401,9 @@ export const ApplicantDetails: React.FC = () => {
                       ✓ {s}
                     </span>
                   ))}
+                  {application.matchDetails.matchedSkills.length === 0 && (
+                    <span className="text-slate-400 italic">No direct required skills matched</span>
+                  )}
                 </div>
               </div>
 
@@ -275,6 +424,17 @@ export const ApplicantDetails: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {application.matchDetails.relevantExperience && application.matchDetails.relevantExperience.length > 0 && (
+              <div className="pt-2 text-xs">
+                <span className="font-bold text-slate-700">Relevant Experience:</span>
+                <ul className="mt-1.5 space-y-1 text-slate-600 list-disc list-inside">
+                  {application.matchDetails.relevantExperience.map((exp, i) => (
+                    <li key={i}>{exp}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Candidate Cover Letter */}
@@ -347,6 +507,18 @@ export const ApplicantDetails: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Match Details Modal */}
+      <MatchDetailsModal
+        isOpen={matchModalOpen}
+        onClose={() => setMatchModalOpen(false)}
+        candidateName={application.candidateName}
+        candidateTitle={application.candidateTitle}
+        jobTitle={application.jobTitle}
+        matchScore={application.matchScore}
+        matchCategory={application.matchDetails.category}
+        matchDetails={application.matchDetails}
+      />
     </div>
   );
 };

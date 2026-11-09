@@ -4,6 +4,7 @@ import { db } from '../database/db';
 import { AuthRequest } from '../middleware/auth';
 import { Application, ApplicationStage } from '../types';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
+import { MatchingService } from '../services/matchingService';
 
 export const applyForJob = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -39,17 +40,8 @@ export const applyForJob = async (req: AuthRequest, res: Response): Promise<void
       resumeUrl = `/uploads/resumes/${req.file.filename}`;
     }
 
-    // Candidate skills and experience calculation
-    const candidateSkills = req.user.skills && req.user.skills.length > 0
-      ? req.user.skills
-      : ['React', 'TypeScript', 'Node.js', 'Java'];
-    const candidateYears = req.user.experience ? Math.max(req.user.experience.length * 2, 3) : 4;
-
-    const matchDetails = AzureDocumentIntelligenceService.computeMatchScore(
-      candidateSkills,
-      candidateYears,
-      job
-    );
+    // Candidate matching calculation across skills, experience, education, certs, and qualifications
+    const matchDetails = MatchingService.computeCandidateJobMatch(req.user, job);
 
     const newApplication: Application = {
       id: `app-${uuidv4().substring(0, 8)}`,
@@ -123,6 +115,8 @@ export const getJobApplicants = async (req: AuthRequest, res: Response): Promise
     const rawJobId = req.params.jobId || req.query.jobId;
     const jobId = Array.isArray(rawJobId) ? rawJobId[0] : (rawJobId as string | undefined);
     const stage = req.query.stage;
+    const sortParam = (req.query.sort as string) || 'highest';
+    const sort = sortParam === 'lowest' || sortParam === 'recent' ? sortParam : 'highest';
     let applications = await db.getApplications();
 
     // If specific job is requested
@@ -140,10 +134,42 @@ export const getJobApplicants = async (req: AuthRequest, res: Response): Promise
       applications = applications.filter((a) => a.stage === stage);
     }
 
-    // Sort descending by matchScore
-    applications.sort((a, b) => b.matchScore - a.matchScore);
+    // Enrich applications with fresh dynamic matching score
+    const enrichedApplications = await Promise.all(
+      applications.map(async (app) => {
+        try {
+          const candidateUser = await db.getUserById(app.candidateId);
+          const targetJob = await db.getJobById(app.jobId);
+          if (candidateUser && targetJob) {
+            const freshMatch = MatchingService.computeCandidateJobMatch(candidateUser, targetJob);
+            return {
+              ...app,
+              matchScore: freshMatch.score,
+              matchDetails: freshMatch,
+            };
+          }
+        } catch {
+          // fallback to stored application match score
+        }
+        return app;
+      })
+    );
 
-    res.json({ total: applications.length, applications });
+    // Apply sorting
+    if (sort === 'lowest') {
+      enrichedApplications.sort((a, b) => a.matchScore - b.matchScore);
+    } else if (sort === 'recent') {
+      enrichedApplications.sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+    } else {
+      // Default: highest match first
+      enrichedApplications.sort((a, b) => b.matchScore - a.matchScore);
+    }
+
+    res.json({ total: enrichedApplications.length, sort, applications: enrichedApplications });
   } catch (err: any) {
     res.status(500).json({ message: 'Error retrieving applicants', error: err.message });
   }
@@ -176,8 +202,23 @@ export const getApplicationById = async (req: AuthRequest, res: Response): Promi
     const candidateProfile = await db.getUserById(application.candidateId);
     const targetJob = await db.getJobById(application.jobId);
 
+    // Compute fresh match details if profile and job exist
+    let freshApp = application;
+    if (candidateProfile && targetJob) {
+      try {
+        const freshMatch = MatchingService.computeCandidateJobMatch(candidateProfile, targetJob);
+        freshApp = {
+          ...application,
+          matchScore: freshMatch.score,
+          matchDetails: freshMatch,
+        };
+      } catch {
+        // preserve existing matchDetails on error
+      }
+    }
+
     res.json({
-      application,
+      application: freshApp,
       candidate: candidateProfile ? {
         id: candidateProfile.id,
         name: candidateProfile.name,
