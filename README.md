@@ -1,19 +1,21 @@
 # TalentHub — Enterprise Job Portal & Applicant Tracking System (ATS)
 
-An enterprise 3-tier recruitment platform and Applicant Tracking System designed according to modern cloud SaaS patterns and the **Azure IaaS / AKS Architecture Blueprint**.
+An enterprise 3-tier recruitment platform and Applicant Tracking System built with React, Node.js, Express, TypeScript, and MySQL.
 
 TalentHub features a high-density, professional UI inspired by **Linear**, **Stripe**, and **Notion** (deep navy `#0F172A`, indigo `#4F46E5`, and subtle teal `#0D9488`), complete candidate and recruiter portals, AI match scoring, an interactive ATS pipeline, and an immutable stage audit trail.
 
+> **Architecture Decision**: React + TypeScript → Node.js + Express.js + TypeScript → MySQL 8.0. Azure Database for MySQL Flexible Server is the planned cloud database target; the repository has not been migrated to Azure.
+
 ---
 
-## 📑 MVP Documentation Deliverables
+## 📑 Project Documentation Deliverables
 
 Detailed engineering documentation is available directly in the repository:
 
 - 📊 **[MVP Implementation Audit](MVP_IMPLEMENTATION_AUDIT.md)**: Full component-by-component audit matrix against product requirements.
-- 🔌 **[REST API Documentation](API_DOCUMENTATION.md)**: Exhaustive endpoint contract for Auth, Jobs, ATS Applications, Azure AI Resume Extraction, and Analytics.
+- 🔌 **[REST API Documentation](API_DOCUMENTATION.md)**: Endpoint contract for auth, jobs, ATS applications, resume upload/parsing, and analytics.
 - ✅ **[Completed Features Matrix](COMPLETED_FEATURES.md)**: Verification checklist of all delivered candidate, recruiter, and admin capabilities.
-- ⚠️ **[Technical Constraints & Limitations](REMAINING_LIMITATIONS.md)**: Cloud service credentials, local JDK requirements, and production deployment notes.
+- ⚠️ **[Technical Constraints & Limitations](REMAINING_LIMITATIONS.md)**: Cloud service credentials, local database configuration, and production deployment notes.
 
 ---
 
@@ -30,19 +32,21 @@ Detailed engineering documentation is available directly in the repository:
                                                 │ REST API / JWT
                                                 ▼
                      ┌─────────────────────────────────────────────────────────┐
-                     │          Tier 2: Application Tier (Dual Implementation)  │
-                     │          • Option A: Node.js/TypeScript (Port 5000)     │
-                     │          • Option B: Java 21 / Spring Boot 3 (Port 5000)│
-                     │          • Spring Security + OAuth2 / JWT Auth          │
-                     │          • Azure AI Resume Parsing & Match Scoring      │
-                     │          • Actuator Health Probes (/health)             │
+                     │          Tier 2: Application Tier (Node.js REST API)    │
+                     │          • Node.js 20+ / Express.js / TypeScript        │
+                     │          • JWT Authentication & Role-Based Guarding     │
+                     │          • Resume Parsing & Match Scoring               │
+                     │          • Health Probes (/health, /actuator/health)    │
+                     │          • Connection Pooling & Database Migrations     │
                      └──────────────────────────┬──────────────────────────────┘
-                                                │ JPA / Hibernate / Flyway
+                                                │ MySQL Protocol / SSL
                                                 ▼
                      ┌─────────────────────────────────────────────────────────┐
-                     │          Tier 3: Data Tier (MySQL Flexible / H2)        │
-                     │          • Flyway V1 Schema, V2 Seed, V3 Audit Migrations│
-                     │          • Port 3306 (or In-Memory H2 for Local Dev)    │
+                     │          Tier 3: Data Tier (MySQL 8.0 Flexible Server)  │
+                     │          • Relational Schema (V1–V4 migrations)          │
+                     │          • Stage Audit Trail (application_stage_history)│
+                     │          • MySQL local/container; Azure target planned   │
+                     │          • Port 3306 (Docker Container or Local Server) │
                      └─────────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +61,7 @@ Detailed engineering documentation is available directly in the repository:
 - **Search & Filter Jobs**: Full-text search with multi-select filters by category, workplace (`Remote` / `Hybrid` / `On-site`), employment type, and experience level.
 - **Job Details & AI Match**: Real-time match score breakdown comparing candidate skills with job requirements.
 - **Job Application**: Apply with cover letter, profile resume, or new document upload with duplicate application prevention.
-- **Azure AI Resume Extraction**: Upload PDF/DOCX resumes to extract skills, experience years, and career summary via Azure Document Intelligence.
+- **Resume Parsing**: Upload PDF/DOC/DOCX resumes; the current parser uses local heuristics and is not connected to Azure Document Intelligence.
 - **Application Pipeline Tracker**: Interactive progress stepper:
   $$\text{Applied} \longrightarrow \text{Screening} \longrightarrow \text{Interview} \longrightarrow \text{Offer} \longrightarrow \text{Hired / Rejected}$$
 - **Profile Management**: Maintain professional headline, bio, contact information, and technical skill chips.
@@ -94,7 +98,13 @@ Detailed engineering documentation is available directly in the repository:
 
 ---
 
-### Option A: Local Dev Execution (Zero Dependencies Required)
+### Option A: Local Development (MySQL required by default)
+
+Start a local MySQL 8.0 server and create `backend/.env` from the example before launching the batch file. Set a private JWT secret and your MySQL credentials.
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
 
 Both backend and frontend can be started with a single double-click:
 
@@ -104,13 +114,13 @@ start-talenthub.bat
 
 Or start them individually from command line:
 
-```bash
-# 1. Start Backend (Node.js/TypeScript REST API on port 5000)
+```powershell
+# Start MySQL 8.0 locally, then start the Node.js/TypeScript REST API on port 5000.
 cd backend
 npm install
 npm run dev
 
-# 2. Start Frontend (React 18 + Vite on port 5173)
+# Start Frontend (React 18 + Vite on port 5173)
 cd frontend
 npm install
 npm run dev
@@ -122,44 +132,56 @@ npm run dev
 
 ---
 
-### Option B: Docker Compose (Java 21 Spring Boot 3 + MySQL + React NGINX)
+### Option B: Docker Compose (Node.js REST API + MySQL 8.0 + React NGINX)
 
-To launch the containerized Java 21 / Spring Boot 3 enterprise stack:
+To launch the fully containerized 3-tier production stack:
 
-```bash
+```powershell
+Copy-Item .env.example .env
+# Edit .env before starting. Use unique local passwords and a random JWT_SECRET.
 docker compose up --build
 ```
 
-This spins up:
-1. `talenthub-mysql`: MySQL 8.0 on port 3306 with Flyway schema migrations (`V1`, `V2`, `V3`).
-2. `talenthub-spring-api`: Java 21 Spring Boot 3 multi-stage JRE 21 container on port 5000.
-3. `talenthub-frontend-ui`: React 18 multi-stage NGINX container on port 5173 / 80.
+This starts:
+1. `database`: MySQL 8.0 on port 3306 with a persistent volume and health check.
+2. `backend`: Node.js + Express + TypeScript on port 5000, waiting for healthy MySQL and running migrations before serving.
+3. `frontend`: React 18 behind NGINX on ports 5173 and 80, proxying `/api` and `/uploads` to the backend.
 
 ---
 
-### Option C: Spring Boot with In-Memory H2 Database
+For isolated development or tests only, set `DB_MODE=json` to opt into the legacy JSON store. This is rejected in production and does not synchronize with MySQL.
 
-If you have Java 21 and Maven installed locally and want to test Spring Boot without a running MySQL container:
+## ⚙️ Environment Variables
 
-```bash
-cd backend-spring
-mvn spring-boot:run -Dspring-boot.run.profiles=h2
-```
+The backend uses environment variables for all external dependencies:
 
-This launches the Spring Boot service on port 5000 with the H2 in-memory profile and automatic entity schema generation.
+See [`backend/.env.example`](backend/.env.example) for local development and [`.env.example`](.env.example) for Docker Compose. The backend defaults to `DB_MODE=mysql` and requires `JWT_SECRET` with at least 32 characters. Compose sets `DB_HOST=database` so the API connects over the Docker network.
 
 ---
 
-## 🛠️ Verification & Build Commands
+## 🛠️ Verification & Test Scripts
 
-Both sub-projects build with zero compilation errors:
+TalentHub includes comprehensive automated integration test suites:
+
+```powershell
+# Run basic integration test
+powershell -ExecutionPolicy Bypass -File .\scripts\test-e2e.ps1
+
+# Run comprehensive 10-step full workflow verification (Auth, Profile, Application, Recruiter Kanban, Audit History)
+powershell -ExecutionPolicy Bypass -File .\scripts\test-comprehensive.ps1
+```
+
+Build status is not inferred from earlier documentation; run the commands below to verify the current checkout:
 
 ```bash
-# Build Node.js backend
-npm run build --prefix backend
-# Exit code: 0
-
-# Build React frontend
-npm run build --prefix frontend
-# Exit code: 0
+# Build Node.js backend and React frontend from the repository root
+npm run build
 ```
+
+### Verification run (November 4, 2026)
+
+- `npm run build`: passed for the Node backend and React frontend.
+- `npm test`: passed all 8 integration checks using an isolated JSON test directory.
+- `npm run test:comprehensive`: passed registration, profile, application, candidate role denial, suspended-account denial, recruiter review, interview scheduling, and audit-history checks in an isolated JSON test directory.
+- Docker Compose: backend and frontend images built; MySQL 8.0, the Node API, and NGINX reached healthy/running states on isolated test ports. MySQL-backed HTTP smoke checks passed through the NGINX proxy for profile persistence, alerts, multipart applications, resume upload/parse, and password omission.
+- No standalone unit-test suite is configured. The automated API scripts use JSON mode; a separate isolated Docker/MySQL smoke run covered database integration.

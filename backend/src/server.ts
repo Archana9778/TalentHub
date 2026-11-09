@@ -1,7 +1,10 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import multer from 'multer';
 import path from 'path';
 import { config } from './config';
+import { db } from './database/db';
+import { mysqlDb } from './database/mysql';
 
 // Import route modules
 import authRoutes from './routes/authRoutes';
@@ -18,7 +21,7 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: '*', // Allow development frontend requests
+  origin: config.corsOrigin,
   credentials: true,
 }));
 
@@ -28,16 +31,21 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Serve static uploaded resumes
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
-// Health probes (matches Azure Application Gateway & Spring Actuator health specifications)
-app.get(['/health', '/actuator/health'], (req: Request, res: Response) => {
-  res.json({
-    status: 'UP',
-    platform: 'TalentHub ATS API Tier',
+// Health probes for local and container orchestrator readiness checks.
+app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => {
+  const databaseHealthy = await db.checkHealth();
+  const status = databaseHealthy ? 'UP' : 'DOWN';
+  res.status(databaseHealthy ? 200 : 503).json({
+    status,
+    platform: 'TalentHub ATS API Tier (Node.js + Express + TypeScript)',
     timestamp: new Date().toISOString(),
     details: {
       diskSpace: { status: 'UP' },
-      database: { status: 'UP' },
-      azureDocumentIntelligence: { status: 'READY' },
+      database: {
+        status: databaseHealthy ? 'UP' : 'DOWN',
+        engine: config.dbMode === 'mysql' ? 'MySQL 8.0' : 'Embedded JSON persistence (development/test opt-in)',
+      },
+      resumeParsing: { status: 'READY', mode: 'local-heuristic' },
     },
   });
 });
@@ -58,7 +66,8 @@ app.get('/api', (req: Request, res: Response) => {
   res.json({
     message: 'TalentHub Applicant Tracking System REST API',
     version: '1.0.0',
-    documentation: '/api/docs',
+    backend: 'Node.js + Express + TypeScript',
+    database: db.isMysql ? 'MySQL 8.0' : 'Embedded Engine',
     endpoints: [
       '/api/auth',
       '/api/jobs',
@@ -80,17 +89,44 @@ app.use((req: Request, res: Response) => {
 
 // Global error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('[TalentHub Backend Error]', err);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal Server Error',
-    error: process.env.NODE_ENV === 'development' ? err : undefined,
+  const uploadError = err instanceof multer.MulterError;
+  const status = uploadError && err.code === 'LIMIT_FILE_SIZE' ? 413 : (err.status || (uploadError ? 400 : 500));
+  const message = status >= 500 ? 'Internal Server Error' : (err.message || 'Invalid request.');
+  console.error('[TalentHub Backend Error]', err instanceof Error ? err.name : 'UnknownError', status);
+  res.status(status).json({
+    message,
+    error: config.nodeEnv === 'development' && status >= 500 ? err : undefined,
   });
 });
 
 const PORT = config.port;
-app.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🚀 TalentHub Backend running on http://localhost:${PORT}`);
-  console.log(`📡 Health probe available at http://localhost:${PORT}/health`);
-  console.log(`====================================================`);
+
+const startServer = async () => {
+  // Initialize Database (attempts MySQL 8.0 connection & migrations, falls back gracefully if offline)
+  await db.initialize();
+
+  const server = app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(`🚀 TalentHub Backend running on http://localhost:${PORT}`);
+    console.log(`🗄️  Database engine: ${db.isMysql ? 'MySQL 8.0' : 'Embedded Persistence'}`);
+    console.log(`📡 Health probe available at http://localhost:${PORT}/health`);
+    console.log(`====================================================`);
+  });
+
+  const shutdown = async () => {
+    console.log('\n[TalentHub Backend] Shutting down gracefully...');
+    server.close(async () => {
+      await mysqlDb.close();
+      console.log('[TalentHub Backend] Stopped.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+};
+
+startServer().catch((err) => {
+  console.error('[TalentHub Backend] Failed to start server:', err);
+  process.exit(1);
 });

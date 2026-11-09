@@ -252,7 +252,7 @@ export const Profile: React.FC = () => {
           Candidate Profile &amp; Resume Management
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Keep your skills and resume current so Azure Document Intelligence can rank you higher on relevant job postings.
+          Keep your skills and resume current to improve local job match estimates.
         </p>
       </div>
 

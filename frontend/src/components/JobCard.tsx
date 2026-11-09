@@ -12,8 +12,9 @@ interface JobCardProps {
 export const JobCard: React.FC<JobCardProps> = ({ job, candidateSkills = [], onApplyClick }) => {
   // Quick candidate match indicator if candidateSkills provided
   const candidateSkillsNorm = new Set(candidateSkills.map((s) => s.toLowerCase()));
-  const matchedCount = job.skills.filter((s) => candidateSkillsNorm.has(s.toLowerCase())).length;
-  const matchPct = job.skills.length > 0 ? Math.round((matchedCount / job.skills.length) * 100) : 0;
+  const skillsList = Array.isArray(job.skills) ? job.skills : [];
+  const matchedCount = skillsList.filter((s) => candidateSkillsNorm.has(s.toLowerCase())).length;
+  const matchPct = skillsList.length > 0 ? Math.round((matchedCount / skillsList.length) * 100) : 0;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col justify-between group">
@@ -83,46 +84,54 @@ export const JobCard: React.FC<JobCardProps> = ({ job, candidateSkills = [], onA
             {job.jobType}
           </span>
 
-          <div className="flex items-center gap-1 text-slate-700 font-medium bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-md ml-auto">
-            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-            <span>
-              ${(job.salaryMin / 1000).toFixed(0)}k - ${(job.salaryMax / 1000).toFixed(0)}k
-            </span>
-          </div>
+          {job.salaryMin !== undefined && job.salaryMax !== undefined && (
+            <div className="flex items-center gap-1 text-slate-700 font-medium bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-md ml-auto">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span>
+                ${(job.salaryMin / 1000).toFixed(0)}k - ${(job.salaryMax / 1000).toFixed(0)}k
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Skills tags */}
-        <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
-          {job.skills.slice(0, 4).map((skill) => {
-            const isMatch = candidateSkillsNorm.has(skill.toLowerCase());
-            return (
-              <span
-                key={skill}
-                className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors ${
-                  isMatch
-                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                    : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                {skill} {isMatch && '✓'}
+        {skillsList.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-100">
+            {skillsList.slice(0, 4).map((skill) => {
+              const isMatch = candidateSkillsNorm.has(skill.toLowerCase());
+              return (
+                <span
+                  key={skill}
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors ${
+                    isMatch
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {skill} {isMatch && '✓'}
+                </span>
+              );
+            })}
+            {skillsList.length > 4 && (
+              <span className="text-[11px] text-slate-400 px-1 py-0.5">
+                +{skillsList.length - 4} more
               </span>
-            );
-          })}
-          {job.skills.length > 4 && (
-            <span className="text-[11px] text-slate-400 px-1 py-0.5">
-              +{job.skills.length - 4} more
-            </span>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
-            <span>{new Date(job.createdAt).toLocaleDateString()}</span>
+            <span>
+              {job.createdAt && !isNaN(new Date(job.createdAt).getTime())
+                ? new Date(job.createdAt).toLocaleDateString()
+                : 'Recently'}
+            </span>
           </span>
-          <span>{job.applicantsCount} applicants</span>
+          <span>{job.applicantsCount ?? 0} applicants</span>
         </div>
 
         <div className="flex items-center gap-2">

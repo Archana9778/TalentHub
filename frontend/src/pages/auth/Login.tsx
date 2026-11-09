@@ -94,11 +94,11 @@ export const Login: React.FC = () => {
           <div className="mt-8 pt-8 border-t border-slate-800 space-y-3">
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Full-Stack Spring Boot 3 + Java 21 REST API</span>
+              <span>Node.js + Express + TypeScript REST API</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Azure AI Document Intelligence Resume Extraction</span>
+              <span>Local Heuristic Resume Matching</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />

@@ -243,7 +243,7 @@ export const parseResume = (req: AuthRequest, res: Response): void => {
 
   const parsed = AzureDocumentIntelligenceService.parseResumeFile(filename);
   res.json({
-    parserEngine: 'Azure AI Document Intelligence (Simulated Production Service)',
+    parserEngine: 'Local heuristic parser',
     status: 'PARSED',
     extracted: parsed,
   });

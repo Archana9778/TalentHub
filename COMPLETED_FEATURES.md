@@ -1,6 +1,6 @@
 # TalentHub MVP — Completed Features Matrix
 
-This document provides a comprehensive verification of all features delivered in the TalentHub recruitment and ATS platform according to the product specifications.
+This document inventories features present in the current source. “Implemented” describes code presence, not runtime verification; see the final report for current build and test results.
 
 ---
 
@@ -11,7 +11,7 @@ This document provides a comprehensive verification of all features delivered in
 | **Linear/Stripe-Inspired Design System** | **COMPLETE** | Implemented custom SaaS design tokens in `index.css`: deep navy (`#0F172A`), professional blue (`#2563EB`), indigo (`#4F46E5`), subtle teal (`#0D9488`), off-white background (`#F8FAFC`), card surfaces (`#FFFFFF`), borders (`#E2E8F0`), Inter font hierarchy, `.saas-card`, `.saas-btn-primary`, and stage badge classes. |
 | **No Generic AI Elements** | **COMPLETE** | Clean typography, restrained elevation, high-contrast text, clear affordances, no random decorative gradients or glassmorphism. |
 | **Responsive Layouts** | **COMPLETE** | Unified `CandidateLayout`, `RecruiterLayout`, and `AdminLayout` with desktop drawer and mobile sidebar toggle. |
-| **Public Landing Page** | **COMPLETE** | Located at `/`. Highlights ATS features, AI Document Intelligence match scoring, candidate/recruiter workflows, interactive board preview, and modern SaaS footer. |
+| **Public Landing Page** | **IMPLEMENTED** | Located at `/`. Highlights ATS workflows, local match scoring, candidate/recruiter workflows, interactive board preview, and footer. |
 
 ---
 
@@ -38,7 +38,7 @@ This document provides a comprehensive verification of all features delivered in
 | **Job Application Flow** | **COMPLETE** | One-click apply modal or full-page application with cover letter, profile resume selection, or custom file upload. |
 | **Duplicate Application Guard** | **COMPLETE** | Backend prevents duplicate submissions for the same candidate and job requisition. |
 | **Applications Pipeline Board** | **COMPLETE** | Interactive progress tracker: `Applied` → `Screening` → `Interview` → `Offer` → `Hired` (or `Rejected`). Displays scheduled interview dates, recruiter notes, and stage change history. |
-| **Candidate Profile & Resume Management** | **COMPLETE** | Manage contact details, professional headline, bio, and technical skill chips. Azure Document Intelligence integration automatically parses uploaded resumes and extracts skills directly into candidate profile. |
+| **Candidate Profile & Resume Management** | **IMPLEMENTED** | Profile fields and resume upload are present; profile experience/education now persist in MySQL. Resume parsing is heuristic and not a live Azure integration. |
 
 ---
 
@@ -62,21 +62,31 @@ This document provides a comprehensive verification of all features delivered in
 |---|---|---|
 | **Admin Dashboard** | **COMPLETE** | System-wide statistics: total users (candidates vs recruiters), total companies, active jobs, pending reported jobs, in-demand technical skills bar charts, average time-to-hire. |
 | **User Directory** | **COMPLETE** | Search and filter platform users, toggle active/suspended status, modify user role, delete user accounts. |
-| **Company Verification** | **COMPLETE** | Directory of hiring organizations, toggle verified partner badge. |
+| **Company Verification** | **IMPLEMENTED** | Admin company management supports verification via the company update API. |
 | **Job Taxonomy & Categories** | **COMPLETE** | View and add job categories with real-time posting count. |
 | **Reported Postings Moderation** | **COMPLETE** | Triage candidate reports regarding fraudulent or expired postings with actions to resolve, dismiss, or immediately remove the job. |
 
 ---
 
-## 6. Backend Architectures (Dual Implementation)
+## 6. Backend Architecture (Standardized on Node.js + MySQL 8.0)
 
-| Feature | Node.js Backend (`backend/`) | Spring Boot 3 Backend (`backend-spring/`) |
-|---|---|---|
-| **Language & Framework** | TypeScript, Express 4 | Java 21, Spring Boot 3.3 |
-| **Security & Auth** | JWT, bcrypt, role middleware | Spring Security 6, JWT filter, `ROLE_` authorities |
-| **Database** | Persistent JSON store with seed data | MySQL 8.0 & H2 in-memory via Flyway (`V1`, `V2`, `V3`) |
-| **Application Audit Trail** | Timeline array in application model | `ApplicationStageHistory` JPA entity + `V3__audit_trail.sql` |
-| **Azure AI Resume Parsing** | `AzureDocumentIntelligenceService` | Multi-part resume upload & extraction controller |
-| **Analytics API** | Role-scoped `GET /api/analytics/dashboard` | Role-scoped `GET /api/analytics/dashboard` |
-| **Build Status** | Exits 0 (`npm run build`) | Ready for multi-stage Docker / Maven builds |
+| Architectural Component | Implementation Specification |
+|---|---|
+| **Language & Framework** | TypeScript 5, Node.js 20+, Express.js 4 |
+| **Security & Auth** | JWT (`jsonwebtoken`), bcrypt password hashing, role-based middleware (`candidate`, `recruiter`, `admin`) |
+| **Database** | MySQL 8.0 via `mysql2/promise`; JSON persistence is opt-in for development/test only |
+| **Database Migrations** | Additive migration runner (V1–V4); existing MySQL records are retained |
+| **Application Audit Trail** | Application stage history in `application_stage_history` plus JSON timeline |
+| **Resume Parsing** | Local heuristic parser; Azure Document Intelligence is not connected |
+| **Analytics API** | Role-scoped `GET /api/analytics/dashboard` for Candidates, Recruiters, and Admins |
+| **Docker Container** | Multi-stage Node.js alpine build (`talenthub-backend-api`) orchestrating with MySQL 8.0 and NGINX |
+| **Build & Test Status** | See the final report for current run results; earlier status claims were not reliable |
+
+### Verification run (November 4, 2026)
+
+- Backend and frontend production builds passed.
+- Both integration scripts passed against isolated temporary JSON stores.
+- An isolated Docker Compose/MySQL run passed health checks and MySQL-backed smoke tests through NGINX, including profile/resume persistence and multipart upload.
+- No separate unit-test suite is configured. Not every company/category/admin CRUD endpoint received a live HTTP test in this run.
+
 
