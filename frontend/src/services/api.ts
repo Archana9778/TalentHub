@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+﻿import axios, { AxiosError } from 'axios';
 import {
   User,
   Job,
@@ -104,17 +104,43 @@ export const api = {
     return res.data;
   },
 
-  uploadResume: async (file: File) => {
+  uploadResume: async (file: File, onProgress?: (pct: number) => void) => {
     const formData = new FormData();
     formData.append('resume', file);
     const res = await apiClient.post<{
       message: string;
-      resumeUrl: string;
+      resume: any;
       user: User;
       parsedData: any;
     }>('/resume/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress
+        ? (evt: any) => {
+            const pct = evt.total ? Math.round((evt.loaded * 100) / evt.total) : 0;
+            onProgress(pct);
+          }
+        : undefined,
     });
+    return res.data;
+  },
+
+  getMyResume: async () => {
+    const res = await apiClient.get<{ resume: any | null; message?: string }>('/resume/my');
+    return res.data;
+  },
+
+  getResumeHistory: async () => {
+    const res = await apiClient.get<{ total: number; history: any[] }>('/resume/history');
+    return res.data;
+  },
+
+  getResumeDownloadUrl: async (resumeDocId: string) => {
+    const res = await apiClient.get<{
+      message: string;
+      downloadUrl: string;
+      expiresInMinutes: number;
+      filename: string;
+    }>('/resume/download/' + resumeDocId);
     return res.data;
   },
 

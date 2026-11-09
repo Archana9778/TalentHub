@@ -8,6 +8,7 @@ import {
   Application,
   ReportedJob,
   JobAlert,
+  ResumeDocument,
 } from '../types';
 import {
   initialUsers,
@@ -337,5 +338,30 @@ export class JsonDatabase {
 
   resetToSeed(): void {
     this.seed();
+  }
+
+  // ==========================================
+  // RESUME DOCUMENTS (stub — JSON driver does not support Blob Storage)
+  // ==========================================
+
+  async getCurrentResume(_candidateId: string): Promise<ResumeDocument | undefined> {
+    return undefined;
+  }
+
+  async getResumeHistory(_candidateId: string): Promise<ResumeDocument[]> {
+    return [];
+  }
+
+  async getResumeDocById(_id: string): Promise<ResumeDocument | undefined> {
+    return undefined;
+  }
+
+  async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
+    console.warn('[JsonDatabase] createResumeDocument is a no-op; switch to mysql2 driver for Blob Storage support.');
+    return doc;
+  }
+
+  async markResumeDeleted(_id: string): Promise<void> {
+    // no-op
   }
 }

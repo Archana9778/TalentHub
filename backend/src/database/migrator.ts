@@ -52,17 +52,27 @@ async function runMigrator() {
       case 'status': {
         console.log('Checking database connectivity...');
         await db.raw('SELECT 1');
-        const status = await db.migrate.status();
-        console.log(`Migration Status Code: ${status}`);
-        if (status === 0) {
-          console.log('All migrations have been applied. Database is up to date.');
-        } else if (status > 0) {
-          console.log(`There are ${status} pending migration(s) waiting to be applied.`);
+
+        // db.migrate.list() is the authoritative source of truth.
+        // db.migrate.status() returns (applied_count - total_local_count), which
+        // is 0 when all migrations are applied, positive when the database has
+        // MORE applied migrations than local files (db is "ahead"), and negative
+        // when there are LOCAL migrations that have not yet been applied (pending).
+        // The negative case was previously mis-labelled "database is ahead".
+        const [completed, pending] = await db.migrate.list();
+        const statusCode = await db.migrate.status();
+
+        console.log(`\nMigration Status Code: ${statusCode}`);
+        if (pending.length === 0 && completed.length > 0) {
+          console.log('✅ All migrations have been applied. Database is up to date.');
+        } else if (pending.length > 0) {
+          console.log(`⚠️  There are ${pending.length} pending migration(s) waiting to be applied.`);
+        } else if (statusCode > 0) {
+          console.log(`⚠️  Database has ${statusCode} migration(s) applied that are NOT present locally (database is ahead of local files).`);
         } else {
-          console.log(`Database is ahead of local migrations by ${Math.abs(status)} version(s).`);
+          console.log('ℹ️  No migrations found.');
         }
 
-        const [completed, pending] = await db.migrate.list();
         console.log('\nApplied Migrations:');
         if (completed.length === 0) console.log('  (none)');
         completed.forEach((m: any) => console.log(`  [x] ${m.name}`));

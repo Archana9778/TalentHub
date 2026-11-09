@@ -47,5 +47,18 @@ services:
     depends_on:
       - backend-spring
 
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: talenthub-azurite
+    restart: unless-stopped
+    ports:
+      - "10000:10000"   # Blob service
+      - "10001:10001"   # Queue service
+      - "10002:10002"   # Table service
+    volumes:
+      - azurite_data:/data
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log
+
 volumes:
   mysql_data:
+  azurite_data:

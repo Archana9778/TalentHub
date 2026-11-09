@@ -24,4 +24,18 @@ export const config = {
       max: parseInt(process.env.DB_POOL_MAX || '10', 10),
     },
   },
+  storage: {
+    /** 'azurite' (local emulator) or 'azure' (production DefaultAzureCredential) */
+    provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',
+    /** Azurite / local dev connection string */
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    /** Azure production account name (used with DefaultAzureCredential) */
+    accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
+    /** Private container name */
+    containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
+    /** Maximum resume file size in bytes (default 5 MB) */
+    maxResumeSizeBytes: parseInt(process.env.MAX_RESUME_SIZE_MB || '5', 10) * 1024 * 1024,
+    /** Short-lived SAS URL expiry in minutes (default 5 min) */
+    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || '5', 10),
+  },
 };

@@ -10,6 +10,8 @@ import {
   ReportedJob,
   JobAlert,
   StageTimelineItem,
+  ResumeDocument,
+  MatchResult,
 } from '../types';
 
 function safeJsonParse<T>(val: any, fallback: T): T {
@@ -758,5 +760,237 @@ export class MySqlDatabase {
   async deleteJobAlert(id: string): Promise<boolean> {
     const count = await this.db('job_alerts').where('id', id).delete();
     return count > 0;
+  }
+
+  // ==========================================
+  // RESUME DOCUMENTS (Blob Storage versions)
+  // ==========================================
+
+  private mapResumeDocRow(r: any): ResumeDocument {
+    return {
+      id: r.id,
+      candidateId: r.candidate_id,
+      originalFilename: r.original_filename,
+      blobName: r.blob_name,
+      containerName: r.container_name,
+      fileExtension: r.file_extension,
+      mimeType: r.mime_type,
+      fileSizeBytes: r.file_size_bytes,
+      checksumSha256: r.checksum_sha256,
+      uploadStatus: r.upload_status,
+      isCurrent: Boolean(r.is_current),
+      uploadedAt: r.uploaded_at ? new Date(r.uploaded_at).toISOString() : new Date().toISOString(),
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
+    const row = await this.db('resume_documents')
+      .where({ candidate_id: candidateId, is_current: true, upload_status: 'uploaded' })
+      .orderBy('uploaded_at', 'desc')
+      .first();
+    return row ? this.mapResumeDocRow(row) : undefined;
+  }
+
+  async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
+    const rows = await this.db('resume_documents')
+      .where({ candidate_id: candidateId })
+      .whereNot({ upload_status: 'failed' })
+      .orderBy('uploaded_at', 'desc');
+    return rows.map((r: any) => this.mapResumeDocRow(r));
+  }
+
+  async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
+    const row = await this.db('resume_documents').where('id', id).first();
+    return row ? this.mapResumeDocRow(row) : undefined;
+  }
+
+  /**
+   * Saves a new resume document record and marks all previous ones for this
+   * candidate as is_current=false. Runs in a transaction.
+   * Also back-fills candidates.resume_url and candidates.resume_original_name
+   * for backward compatibility with application.resume_url references.
+   */
+  async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
+    await this.db.transaction(async (trx) => {
+      // Unset current flag on all previous resumes for this candidate
+      await trx('resume_documents')
+        .where({ candidate_id: doc.candidateId, is_current: true })
+        .update({ is_current: false });
+
+      await trx('resume_documents').insert({
+        id: doc.id,
+        candidate_id: doc.candidateId,
+        original_filename: doc.originalFilename,
+        blob_name: doc.blobName,
+        container_name: doc.containerName,
+        file_extension: doc.fileExtension,
+        mime_type: doc.mimeType,
+        file_size_bytes: doc.fileSizeBytes,
+        checksum_sha256: doc.checksumSha256,
+        upload_status: doc.uploadStatus || 'uploaded',
+        is_current: true,
+        uploaded_at: new Date(),
+        created_at: new Date(),
+      });
+
+      // Back-fill legacy columns for backward-compat
+      await trx('candidates')
+        .where('user_id', doc.candidateId)
+        .update({
+          resume_url: `blob://${doc.containerName}/${doc.blobName}`,
+          resume_original_name: doc.originalFilename,
+        });
+    });
+
+    const created = await this.getResumeDocById(doc.id);
+    return created || doc;
+  }
+
+  async markResumeDeleted(id: string): Promise<void> {
+    await this.db('resume_documents').where('id', id).update({ upload_status: 'deleted', is_current: false });
+  }
+
+  // ==========================================
+  // MATCH RESULTS
+  // ==========================================
+
+  /**
+   * Inserts a new match_result row for the given application, atomically
+   * demoting any previous is_latest=1 row to is_latest=0.
+   *
+   * Concurrency design (MySQL 8, InnoDB):
+   *   1. `SELECT … FOR UPDATE` on the applications row acquires an exclusive
+   *      row lock for the duration of the transaction.  Concurrent calls for
+   *      the same application_id block until the lock is released, so they
+   *      cannot both see is_latest=1 as the "current" row and produce two
+   *      latest rows.
+   *   2. The UPDATE demotes existing latest rows inside the same transaction
+   *      (safe: we are not inside a trigger — this is plain application code).
+   *   3. The INSERT adds the new row with is_latest=1.
+   *   4. The DB-level UNIQUE KEY uq_mr_one_latest_per_app (latest_guard)
+   *      is a final safety net that rejects any out-of-band write that would
+   *      create a second is_latest=1 row for the same application.
+   *
+   * Never call this method from inside a trigger or stored function — MySQL
+   * would raise ER_CANT_UPDATE_USED_TABLE_IN_SF_OR_TRG.  Always call it from
+   * application code.
+   */
+  async createMatchResult(result: MatchResult): Promise<MatchResult> {
+    await this.db.transaction(async (trx) => {
+      // Step 1 — Acquire an exclusive row lock on the applications row.
+      // This serialises concurrent recalculations for the same application.
+      const appRow = await trx.raw(
+        'SELECT id FROM applications WHERE id = ? FOR UPDATE',
+        [result.applicationId]
+      );
+      const rows = appRow[0] as Array<{ id: string }>;
+      if (rows.length === 0) {
+        throw new Error(
+          `[createMatchResult] Application not found: ${result.applicationId}`
+        );
+      }
+
+      // Step 2 — Demote any existing latest row to historical.
+      await trx('match_results')
+        .where({ application_id: result.applicationId, is_latest: 1 })
+        .update({ is_latest: 0 });
+
+      // Step 3 — Insert the new latest result.
+      await trx('match_results').insert({
+        id:                result.id,
+        application_id:    result.applicationId,
+        candidate_id:      result.candidateId,
+        job_id:            result.jobId,
+        is_latest:         1,
+        overall_score:     result.overallScore,
+        skill_score:       result.skillScore,
+        experience_score:  result.experienceScore,
+        education_score:   result.educationScore,
+        matched_skills:    result.matchedSkills   ? JSON.stringify(result.matchedSkills)   : null,
+        missing_skills:    result.missingSkills   ? JSON.stringify(result.missingSkills)   : null,
+        analysis_notes:    result.analysisNotes   ?? null,
+        recruiter_override: result.recruiterOverride ?? null,
+        override_by_id:    result.overrideById    ?? null,
+        override_reason:   result.overrideReason  ?? null,
+        computed_at:       result.computedAt ? new Date(result.computedAt) : new Date(),
+        created_at:        result.createdAt  ? new Date(result.createdAt)  : new Date(),
+      });
+    });
+
+    const row = await this.db('match_results').where('id', result.id).first();
+    if (!row) return result;
+    return {
+      id:               row.id,
+      applicationId:    row.application_id,
+      candidateId:      row.candidate_id,
+      jobId:            row.job_id,
+      isLatest:         Boolean(row.is_latest),
+      overallScore:     row.overall_score,
+      skillScore:       row.skill_score,
+      experienceScore:  row.experience_score,
+      educationScore:   row.education_score,
+      matchedSkills:    row.matched_skills  ? JSON.parse(row.matched_skills)  : undefined,
+      missingSkills:    row.missing_skills  ? JSON.parse(row.missing_skills)  : undefined,
+      analysisNotes:    row.analysis_notes  ?? undefined,
+      recruiterOverride: row.recruiter_override ?? undefined,
+      overrideById:     row.override_by_id  ?? undefined,
+      overrideReason:   row.override_reason ?? undefined,
+      computedAt:       row.computed_at  ? new Date(row.computed_at).toISOString()  : new Date().toISOString(),
+      createdAt:        row.created_at   ? new Date(row.created_at).toISOString()   : new Date().toISOString(),
+    };
+  }
+
+  /** Returns the latest match result for an application, or undefined. */
+  async getLatestMatchResult(applicationId: string): Promise<MatchResult | undefined> {
+    const row = await this.db('match_results')
+      .where({ application_id: applicationId, is_latest: 1 })
+      .first();
+    if (!row) return undefined;
+    return {
+      id:               row.id,
+      applicationId:    row.application_id,
+      candidateId:      row.candidate_id,
+      jobId:            row.job_id,
+      isLatest:         Boolean(row.is_latest),
+      overallScore:     row.overall_score,
+      skillScore:       row.skill_score,
+      experienceScore:  row.experience_score,
+      educationScore:   row.education_score,
+      matchedSkills:    row.matched_skills  ? JSON.parse(row.matched_skills)  : undefined,
+      missingSkills:    row.missing_skills  ? JSON.parse(row.missing_skills)  : undefined,
+      analysisNotes:    row.analysis_notes  ?? undefined,
+      recruiterOverride: row.recruiter_override ?? undefined,
+      overrideById:     row.override_by_id  ?? undefined,
+      overrideReason:   row.override_reason ?? undefined,
+      computedAt:       row.computed_at  ? new Date(row.computed_at).toISOString()  : new Date().toISOString(),
+      createdAt:        row.created_at   ? new Date(row.created_at).toISOString()   : new Date().toISOString(),
+    };
+  }
+
+  /** Returns all match results (history) for an application, newest first. */
+  async getMatchResultHistory(applicationId: string): Promise<MatchResult[]> {
+    const rows = await this.db('match_results')
+      .where({ application_id: applicationId })
+      .orderBy('created_at', 'desc');
+    return rows.map((row: any) => ({
+      id:               row.id,
+      applicationId:    row.application_id,
+      candidateId:      row.candidate_id,
+      jobId:            row.job_id,
+      isLatest:         Boolean(row.is_latest),
+      overallScore:     row.overall_score,
+      skillScore:       row.skill_score,
+      experienceScore:  row.experience_score,
+      educationScore:   row.education_score,
+      matchedSkills:    row.matched_skills  ? JSON.parse(row.matched_skills)  : undefined,
+      missingSkills:    row.missing_skills  ? JSON.parse(row.missing_skills)  : undefined,
+      analysisNotes:    row.analysis_notes  ?? undefined,
+      recruiterOverride: row.recruiter_override ?? undefined,
+      overrideById:     row.override_by_id  ?? undefined,
+      overrideReason:   row.override_reason ?? undefined,
+      computedAt:       row.computed_at  ? new Date(row.computed_at).toISOString()  : new Date().toISOString(),
+      createdAt:        row.created_at   ? new Date(row.created_at).toISOString()   : new Date().toISOString(),
+    }));
   }
 }

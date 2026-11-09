@@ -14,13 +14,20 @@
     "migrate:latest": "tsx src/database/migrator.ts up",
     "migrate:rollback": "tsx src/database/migrator.ts down",
     "migrate:status": "tsx src/database/migrator.ts status",
-    "migrate:unlock": "tsx src/database/migrator.ts unlock"
+    "migrate:unlock": "tsx src/database/migrator.ts unlock",
+    "test:validation": "tsx src/tests/resumeValidation.test.ts",
+    "test:integration": "tsx src/tests/integration.test.ts",
+    "test:unit": "SKIP_INTEGRATION=true tsx src/tests/integration.test.ts",
+    "test:all": "tsx src/tests/resumeValidation.test.ts && tsx src/tests/integration.test.ts"
   },
   "dependencies": {
+    "@azure/identity": "^4.14.1",
+    "@azure/storage-blob": "^12.34.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "file-type": "^22.3.0",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.3.0",
     "multer": "^1.4.5-lts.1",
