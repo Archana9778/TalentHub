@@ -128,10 +128,10 @@ export const getJobApplicants = async (req: AuthRequest, res: Response): Promise
     // If specific job is requested
     if (jobId && typeof jobId === 'string' && jobId !== 'all') {
       applications = applications.filter((a) => a.jobId === jobId);
-    }
-    if (req.user.role === 'recruiter') {
-      // Recruiters may only view applicants for their own jobs, including filtered queries.
-      const recruiterJobs = (await db.getJobs()).filter((j) => j.recruiterId === req.user!.id);
+    } else if (req.user.role === 'recruiter') {
+      // Only return applications for jobs belonging to this recruiter
+      const allJobs = await db.getJobs();
+      const recruiterJobs = allJobs.filter((j) => j.recruiterId === req.user!.id);
       const recruiterJobIds = new Set(recruiterJobs.map((j) => j.id));
       applications = applications.filter((a) => recruiterJobIds.has(a.jobId));
     }
@@ -165,11 +165,10 @@ export const getApplicationById = async (req: AuthRequest, res: Response): Promi
     }
 
     // Check access permissions
-    const applicationJob = await db.getJobById(application.jobId);
-    const canView = req.user.role === 'admin' ||
-      (req.user.role === 'candidate' && application.candidateId === req.user.id) ||
-      (req.user.role === 'recruiter' && applicationJob?.recruiterId === req.user.id);
-    if (!canView) {
+    if (
+      req.user.role === 'candidate' &&
+      application.candidateId !== req.user.id
+    ) {
       res.status(403).json({ message: 'Forbidden: You cannot access another candidate\'s application.' });
       return;
     }
@@ -222,14 +221,6 @@ export const updateApplicationStage = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    if (req.user.role === 'recruiter') {
-      const job = await db.getJobById(application.jobId);
-      if (!job || job.recruiterId !== req.user.id) {
-        res.status(403).json({ message: 'Forbidden: You can only update applications for your own jobs.' });
-        return;
-      }
-    }
-
     const timelineEntry = {
       stage: stage as ApplicationStage,
       changedBy: req.user.id,
@@ -238,27 +229,15 @@ export const updateApplicationStage = async (req: AuthRequest, res: Response): P
       comment: comment || `Status moved to ${stage} by ${req.user.name}`,
     };
 
-    const updatedTimeline = [...(application.timeline || []), timelineEntry];
+    const updatedTimeline = [...application.timeline, timelineEntry];
 
-    const updated = await db.updateApplication(
-      id,
-      {
-        stage: stage as ApplicationStage,
-        timeline: updatedTimeline,
-        ...(interviewDate && { interviewDate }),
-        ...(interviewType && { interviewType }),
-        ...(recruiterNotes !== undefined && { recruiterNotes }),
-      },
-      {
-        fromStage: application.stage,
-        toStage: stage,
-        changedByUserId: req.user.id,
-        changedByName: req.user.name,
-        comment: comment || `Status moved to ${stage} by ${req.user.name}`,
-        interviewType: interviewType || undefined,
-        interviewDate: interviewDate || undefined,
-      }
-    );
+    const updated = await db.updateApplication(id, {
+      stage: stage as ApplicationStage,
+      timeline: updatedTimeline,
+      ...(interviewDate && { interviewDate }),
+      ...(interviewType && { interviewType }),
+      ...(recruiterNotes !== undefined && { recruiterNotes }),
+    });
 
     res.json({
       message: `Candidate application moved to stage: ${stage}`,
@@ -284,22 +263,14 @@ export const getApplicationAuditTimeline = async (req: AuthRequest, res: Respons
       return;
     }
 
-    const job = req.user.role === 'recruiter' ? await db.getJobById(application.jobId) : undefined;
-    const canView = req.user.role === 'admin' ||
-      (req.user.role === 'candidate' && application.candidateId === req.user.id) ||
-      (req.user.role === 'recruiter' && job?.recruiterId === req.user.id);
-    if (!canView) {
-      res.status(403).json({ message: 'Forbidden: You cannot access this application audit history.' });
-      return;
-    }
-
-    // Try relational stage history first, fallback to JSON timeline
     const history = await db.getApplicationStageHistory(id);
-    const timeline = history && history.length > 0 ? history : (application.timeline || []);
 
     res.json({
-      total: timeline.length,
-      timeline,
+      applicationId: application.id,
+      jobTitle: application.jobTitle,
+      candidateName: application.candidateName,
+      currentStage: application.stage,
+      auditTimeline: history && history.length > 0 ? history : application.timeline,
     });
   } catch (err: any) {
     res.status(500).json({ message: 'Error retrieving audit timeline', error: err.message });

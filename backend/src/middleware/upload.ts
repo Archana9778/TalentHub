@@ -1,38 +1,31 @@
+/**
+ * Multer middleware — memory storage only.
+ * Files are held as Buffer in req.file.buffer and are never written to disk.
+ * Content validation and Blob upload happen in the controller after this middleware.
+ */
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { config } from '../config';
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (!fs.existsSync(config.uploadDir)) {
-      fs.mkdirSync(config.uploadDir, { recursive: true });
-    }
-    cb(null, config.uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    cb(null, `${Date.now()}_${safeName}${ext}`);
-  },
-});
+const memoryStorage = multer.memoryStorage();
 
-const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedExtensions = ['.pdf', '.doc', '.docx'];
-  const ext = path.extname(file.originalname).toLowerCase();
-
-  if (allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    const error = new Error('Only .pdf, .doc, and .docx resume files are allowed.') as Error & { status?: number };
-    error.status = 400;
-    cb(error);
-  }
-};
-
+/**
+ * Resume upload middleware.
+ * - Uses memory storage (no disk writes).
+ * - Hard size limit: config.storage.maxResumeSizeBytes (enforced by multer before controller).
+ * - Extension pre-filter: provides an early 415 for clearly wrong file types.
+ *   The controller performs authoritative content-based validation.
+ */
 export const uploadResume = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter,
+  storage: memoryStorage,
+  limits: { fileSize: config.storage.maxResumeSizeBytes },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf' || ext === 'docx') {
+      cb(null, true);
+    } else {
+      const err = new multer.MulterError('LIMIT_UNEXPECTED_FILE');
+      (err as any).message = `Unsupported file type ".${ext ?? '?'}". Only PDF and DOCX resumes are accepted.`;
+      cb(err);
+    }
+  },
 });
-

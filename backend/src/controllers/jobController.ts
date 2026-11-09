@@ -232,7 +232,7 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
       job: newJob,
     });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error creating job', error: err.message });
+    res.status(500).json({ message: 'Error creating job posting', error: err.message });
   }
 };
 
@@ -260,7 +260,7 @@ export const updateJob = async (req: AuthRequest, res: Response): Promise<void> 
     const updated = await db.updateJob(id, req.body);
     res.json({ message: 'Job updated successfully.', job: updated });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error updating job', error: err.message });
+    res.status(500).json({ message: 'Error updating job posting', error: err.message });
   }
 };
 
@@ -287,7 +287,7 @@ export const deleteJob = async (req: AuthRequest, res: Response): Promise<void> 
     await db.deleteJob(id);
     res.json({ message: 'Job posting deleted successfully.' });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error deleting job', error: err.message });
+    res.status(500).json({ message: 'Error deleting job posting', error: err.message });
   }
 };
 

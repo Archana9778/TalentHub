@@ -8,24 +8,28 @@ export const getAllCompanies = async (req: Request, res: Response): Promise<void
   try {
     const companies = await db.getCompanies();
     res.json({ total: companies.length, companies });
-  } catch (err: any) {
-    res.status(500).json({ message: 'Error retrieving companies', error: err.message });
+  } catch (err) {
+    console.error('[companyController] getAllCompanies error:', err);
+    res.status(500).json({ message: 'Failed to retrieve companies.' });
   }
 };
 
 export const getCompanyById = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const company = await db.getCompanyById(id);
+    const [company, jobs] = await Promise.all([
+      db.getCompanyById(id),
+      db.getJobs(),
+    ]);
     if (!company) {
       res.status(404).json({ message: 'Company not found.' });
       return;
     }
-    const allJobs = await db.getJobs();
-    const jobs = allJobs.filter((j) => j.companyId === id);
-    res.json({ company, jobs });
-  } catch (err: any) {
-    res.status(500).json({ message: 'Error retrieving company details', error: err.message });
+    const companyJobs = jobs.filter((j) => j.companyId === id);
+    res.json({ company, jobs: companyJobs });
+  } catch (err) {
+    console.error('[companyController] getCompanyById error:', err);
+    res.status(500).json({ message: 'Failed to retrieve company.' });
   }
 };
 
@@ -52,8 +56,9 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
 
     await db.createCompany(newCompany);
     res.status(201).json({ message: 'Company created successfully.', company: newCompany });
-  } catch (err: any) {
-    res.status(500).json({ message: 'Error creating company', error: err.message });
+  } catch (err) {
+    console.error('[companyController] createCompany error:', err);
+    res.status(500).json({ message: 'Failed to create company.' });
   }
 };
 
@@ -66,8 +71,9 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     res.json({ message: 'Company updated successfully.', company: updated });
-  } catch (err: any) {
-    res.status(500).json({ message: 'Error updating company', error: err.message });
+  } catch (err) {
+    console.error('[companyController] updateCompany error:', err);
+    res.status(500).json({ message: 'Failed to update company.' });
   }
 };
 
@@ -80,7 +86,8 @@ export const deleteCompany = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     res.json({ message: 'Company deleted successfully.' });
-  } catch (err: any) {
-    res.status(500).json({ message: 'Error deleting company', error: err.message });
+  } catch (err) {
+    console.error('[companyController] deleteCompany error:', err);
+    res.status(500).json({ message: 'Failed to delete company.' });
   }
 };

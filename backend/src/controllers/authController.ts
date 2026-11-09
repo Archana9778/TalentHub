@@ -140,10 +140,10 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
   }
 
   const updated = await db.updateUser(req.user.id, {
-    ...(name !== undefined && { name: name.trim() }),
-    ...(title !== undefined && { title }),
-    ...(location !== undefined && { location }),
-    ...(phone !== undefined && { phone }),
+    ...(name && { name }),
+    ...(title && { title }),
+    ...(location && { location }),
+    ...(phone && { phone }),
     ...(bio !== undefined && { bio }),
     ...(skills !== undefined && { skills }),
     ...(experience !== undefined && { experience }),

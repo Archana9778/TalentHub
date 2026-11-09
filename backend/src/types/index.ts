@@ -187,3 +187,46 @@ export interface SystemStats {
   timeToHireDaysAverage: number;
 }
 
+
+// ─── Match Results ────────────────────────────────────────────────────────────
+
+export interface MatchResult {
+  id: string;
+  applicationId: string;
+  candidateId: string;
+  jobId: string;
+  /** true = this is the most recent calculation; false = historical */
+  isLatest: boolean;
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  educationScore: number;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  analysisNotes?: string;
+  recruiterOverride?: number;
+  overrideById?: string;
+  overrideReason?: string;
+  computedAt: string;
+  createdAt: string;
+}
+
+// ─── Resume Documents (Blob Storage versions) ────────────────────────────────
+
+export type ResumeUploadStatus = 'uploaded' | 'failed' | 'deleted';
+
+export interface ResumeDocument {
+  id: string;
+  candidateId: string;
+  originalFilename: string;
+  blobName: string;
+  containerName: string;
+  fileExtension: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  checksumSha256: string;
+  uploadStatus: ResumeUploadStatus;
+  isCurrent: boolean;
+  uploadedAt: string;
+  createdAt: string;
+}
