@@ -1,4 +1,4 @@
-﻿import axios, { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import {
   User,
   Job,
@@ -11,6 +11,7 @@ import {
   ApplicationStage,
   MatchDetails,
   CandidateJobMatch,
+  SkillComparisonResult,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -258,6 +259,13 @@ export const api = {
       matchDetails: MatchDetails;
       rank?: number;
     }>(`/jobs/${jobId}/matches/${candidateId}`);
+    return res.data;
+  },
+
+  getCandidateSkillMatch: async (jobId: string, candidateId: string) => {
+    const res = await apiClient.get<SkillComparisonResult>(
+      `/jobs/${jobId}/candidates/${candidateId}/skill-match`
+    );
     return res.data;
   },
 

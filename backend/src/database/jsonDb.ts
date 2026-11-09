@@ -34,6 +34,7 @@ interface DatabaseSchema {
 export class JsonDatabase {
   private data: DatabaseSchema;
   private filePath: string;
+  readonly isMysql = false;
 
   constructor() {
     this.filePath = path.join(config.dataDir, 'talenthub-db.json');
@@ -47,6 +48,22 @@ export class JsonDatabase {
       jobAlerts: [],
     };
     this.init();
+  }
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      return fs.existsSync(this.filePath);
+    } catch {
+      return false;
+    }
+  }
+
+  async initialize(): Promise<void> {
+    // JsonDatabase is initialized synchronously in constructor
+  }
+
+  async close(): Promise<void> {
+    // no-op for JSON persistence
   }
 
   private init() {

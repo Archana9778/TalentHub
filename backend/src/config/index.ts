@@ -21,6 +21,7 @@ if (!jwtSecret || jwtSecret.length < 32) {
 }
 
 export const config = {
+  dbMode,
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'talenthub-super-secret-azure-enterprise-key-2026',
@@ -28,6 +29,15 @@ export const config = {
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
   uploadDir: path.resolve(__dirname, '../../uploads/resumes'),
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  db: {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    database: process.env.DB_NAME || 'talenthub',
+    user: process.env.DB_USER || 'talenthub_user',
+    password: process.env.DB_PASSWORD || '',
+    connectionLimit: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
+  },
   database: {
     driver: process.env.DB_DRIVER || 'mysql2',
     host: process.env.DB_HOST || 'localhost',

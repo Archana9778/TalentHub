@@ -20,11 +20,13 @@ import {
   Briefcase,
   ShieldCheck,
   TrendingUp,
+  Layers,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Application, User as UserType, Job, ApplicationStage } from '../../types';
 import { Loading } from '../../components/Loading';
 import { MatchDetailsModal } from '../../components/MatchDetailsModal';
+import { SkillMatchModal } from '../../components/SkillMatchModal';
 
 export const ApplicantDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,8 +49,9 @@ export const ApplicantDetails: React.FC = () => {
   const [updatingStage, setUpdatingStage] = useState(false);
   const [stageSuccess, setStageSuccess] = useState<string | null>(null);
 
-  // Match details modal
+  // Modals
   const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [skillModalOpen, setSkillModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -274,13 +277,23 @@ export const ApplicantDetails: React.FC = () => {
                   {application.matchDetails.category || catStyle.label}
                 </span>
               </div>
-              <button
-                onClick={() => setMatchModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors self-start sm:self-auto"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>View Full Match Analysis</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  onClick={() => setSkillModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors shadow-2xs"
+                  title="Compare candidate skills against job requirements"
+                >
+                  <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>View Skill Match</span>
+                </button>
+                <button
+                  onClick={() => setMatchModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors shadow-2xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Full Scoring Analysis</span>
+                </button>
+              </div>
             </div>
 
             {/* Overall Score Meter */}
@@ -518,6 +531,16 @@ export const ApplicantDetails: React.FC = () => {
         matchScore={application.matchScore}
         matchCategory={application.matchDetails.category}
         matchDetails={application.matchDetails}
+      />
+
+      {/* Candidate Skills vs Job Requirements Comparison Modal */}
+      <SkillMatchModal
+        isOpen={skillModalOpen}
+        onClose={() => setSkillModalOpen(false)}
+        jobId={application.jobId}
+        candidateId={application.candidateId}
+        candidateName={application.candidateName}
+        jobTitle={application.jobTitle}
       />
     </div>
   );

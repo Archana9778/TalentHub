@@ -153,6 +153,23 @@ export interface CandidateJobMatch {
   matchDetails: MatchDetails;
 }
 
+export interface SkillComparisonResult {
+  candidateId: string;
+  candidateName: string;
+  jobId: string;
+  jobTitle: string;
+  matchingPercentage: number;
+  totalRequiredSkills: number;
+  matchedCount: number;
+  missingCount: number;
+  additionalCount: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  additionalSkills: string[];
+  applicationId?: string;
+  applicationStage?: ApplicationStage;
+}
+
 export interface Application {
   id: string;
   jobId: string;
