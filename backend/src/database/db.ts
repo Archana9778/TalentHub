@@ -21,6 +21,8 @@ import {
   initialApplicationStageHistory,
 } from './seedData';
 import { config } from '../config';
+import { mysqlDb } from './mysql';
+import { mysqlRepository } from './mysqlRepository';
 
 interface DatabaseSchema {
   users: User[];
@@ -49,10 +51,29 @@ class DatabaseManager {
       jobAlerts: [],
       applicationStageHistory: [],
     };
-    this.init();
+    this.initJson();
   }
 
-  private init() {
+  async initialize(): Promise<void> {
+    if (config.dbMode === 'json') {
+      console.log('[TalentHub DB] Operating with Embedded Local Persistence Engine.');
+      return;
+    }
+
+    await mysqlDb.initialize();
+    console.log('[TalentHub DB] Connected to the required MySQL database.');
+  }
+
+  get isMysql(): boolean {
+    return config.dbMode === 'mysql' && mysqlDb.connected;
+  }
+
+  async checkHealth(): Promise<boolean> {
+    if (config.dbMode === 'json') return true;
+    return mysqlDb.checkHealth();
+  }
+
+  private initJson() {
     if (!fs.existsSync(config.dataDir)) {
       fs.mkdirSync(config.dataDir, { recursive: true });
     }
@@ -68,11 +89,11 @@ class DatabaseManager {
         this.upgradeSchemaIfNeeded();
       } catch (err) {
         console.error('[TalentHub DB] Error reading existing database. Re-seeding...', err);
-        this.seed();
+        this.seedJson();
       }
     } else {
       console.log('[TalentHub DB] Initializing fresh database with seed data...');
-      this.seed();
+      this.seedJson();
     }
   }
 
@@ -146,11 +167,11 @@ class DatabaseManager {
     }
 
     if (modified) {
-      this.persist();
+      this.persistJson();
     }
   }
 
-  private seed() {
+  private seedJson() {
     this.data = {
       users: [...initialUsers],
       companies: [...initialCompanies],
@@ -161,10 +182,13 @@ class DatabaseManager {
       jobAlerts: [...initialJobAlerts],
       applicationStageHistory: [...initialApplicationStageHistory],
     };
-    this.persist();
+    this.persistJson();
   }
 
-  private persist() {
+  private persistJson() {
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
     try {
       const tempPath = `${this.filePath}.tmp`;
       fs.writeFileSync(tempPath, JSON.stringify(this.data, null, 2), 'utf-8');
@@ -174,26 +198,33 @@ class DatabaseManager {
     }
   }
 
-  // --- Users ---
-  getUsers(): User[] {
+  // ==========================================
+  // USERS
+  // ==========================================
+  async getUsers(): Promise<User[]> {
+    if (this.isMysql) return mysqlRepository.getUsers();
     return this.data.users;
   }
 
-  getUserById(id: string): User | undefined {
+  async getUserById(id: string): Promise<User | undefined> {
+    if (this.isMysql) return mysqlRepository.getUserById(id);
     return this.data.users.find((u) => u.id === id);
   }
 
-  getUserByEmail(email: string): User | undefined {
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    if (this.isMysql) return mysqlRepository.getUserByEmail(email);
     return this.data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
   }
 
-  createUser(user: User): User {
+  async createUser(user: User): Promise<User> {
+    if (this.isMysql) return mysqlRepository.createUser(user);
     this.data.users.push(user);
-    this.persist();
+    this.persistJson();
     return user;
   }
 
-  updateUser(id: string, updates: Partial<User>): User | undefined {
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    if (this.isMysql) return mysqlRepository.updateUser(id, updates);
     const idx = this.data.users.findIndex((u) => u.id === id);
     if (idx === -1) return undefined;
     this.data.users[idx] = {
@@ -201,44 +232,52 @@ class DatabaseManager {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    this.persist();
+    this.persistJson();
     return this.data.users[idx];
   }
 
-  deleteUser(id: string): boolean {
+  async deleteUser(id: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteUser(id);
     const initLen = this.data.users.length;
     this.data.users = this.data.users.filter((u) => u.id !== id);
     if (this.data.users.length !== initLen) {
-      this.persist();
+      this.persistJson();
       return true;
     }
     return false;
   }
 
-  getRecruiters(companyId?: string): User[] {
-    let recruiters = this.data.users.filter((u) => u.role === 'recruiter');
+  async getRecruiters(companyId?: string): Promise<User[]> {
+    const allUsers = await this.getUsers();
+    let recruiters = allUsers.filter((u) => u.role === 'recruiter');
     if (companyId) {
       recruiters = recruiters.filter((u) => u.companyId === companyId);
     }
     return recruiters;
   }
 
-  // --- Companies ---
-  getCompanies(): Company[] {
+  // ==========================================
+  // COMPANIES
+  // ==========================================
+  async getCompanies(): Promise<Company[]> {
+    if (this.isMysql) return mysqlRepository.getCompanies();
     return this.data.companies;
   }
 
-  getCompanyById(id: string): Company | undefined {
+  async getCompanyById(id: string): Promise<Company | undefined> {
+    if (this.isMysql) return mysqlRepository.getCompanyById(id);
     return this.data.companies.find((c) => c.id === id);
   }
 
-  createCompany(company: Company): Company {
+  async createCompany(company: Company): Promise<Company> {
+    if (this.isMysql) return mysqlRepository.createCompany(company);
     this.data.companies.push(company);
-    this.persist();
+    this.persistJson();
     return company;
   }
 
-  updateCompany(id: string, updates: Partial<Company>): Company | undefined {
+  async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
+    if (this.isMysql) return mysqlRepository.updateCompany(id, updates);
     const idx = this.data.companies.findIndex((c) => c.id === id);
     if (idx === -1) return undefined;
     this.data.companies[idx] = {
@@ -246,136 +285,172 @@ class DatabaseManager {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    this.persist();
+    this.persistJson();
     return this.data.companies[idx];
   }
 
-  deleteCompany(id: string): boolean {
+  async deleteCompany(id: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteCompany(id);
     const initLen = this.data.companies.length;
     this.data.companies = this.data.companies.filter((c) => c.id !== id);
     if (this.data.companies.length !== initLen) {
-      this.persist();
+      this.persistJson();
       return true;
     }
     return false;
   }
 
-  // --- Categories ---
-  getCategories(): JobCategory[] {
+  // ==========================================
+  // CATEGORIES
+  // ==========================================
+  async getCategories(): Promise<JobCategory[]> {
+    if (this.isMysql) return mysqlRepository.getCategories();
     return this.data.categories;
   }
 
-  getCategoryById(id: string): JobCategory | undefined {
+  async getCategoryById(id: string): Promise<JobCategory | undefined> {
+    if (this.isMysql) return mysqlRepository.getCategoryById(id);
     return this.data.categories.find((c) => c.id === id);
   }
 
-  createCategory(category: JobCategory): JobCategory {
+  async createCategory(category: JobCategory): Promise<JobCategory> {
+    if (this.isMysql) return mysqlRepository.createCategory(category);
     this.data.categories.push(category);
-    this.persist();
+    this.persistJson();
     return category;
   }
 
-  updateCategory(id: string, updates: Partial<JobCategory>): JobCategory | undefined {
+  async updateCategory(id: string, updates: Partial<JobCategory>): Promise<JobCategory | undefined> {
+    if (this.isMysql) return mysqlRepository.updateCategory(id, updates);
     const idx = this.data.categories.findIndex((c) => c.id === id);
     if (idx === -1) return undefined;
     this.data.categories[idx] = { ...this.data.categories[idx], ...updates };
-    this.persist();
+    this.persistJson();
     return this.data.categories[idx];
   }
 
-  deleteCategory(id: string): boolean {
+  async deleteCategory(id: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteCategory(id);
     const initLen = this.data.categories.length;
     this.data.categories = this.data.categories.filter((c) => c.id !== id);
     if (this.data.categories.length !== initLen) {
-      this.persist();
+      this.persistJson();
       return true;
     }
     return false;
   }
 
-  // --- Jobs ---
-  getJobs(): Job[] {
+  // ==========================================
+  // JOBS
+  // ==========================================
+  async getJobs(): Promise<Job[]> {
+    if (this.isMysql) return mysqlRepository.getJobs();
     return this.data.jobs;
   }
 
-  getJobById(id: string): Job | undefined {
+  async getJobById(id: string): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.getJobById(id);
     return this.data.jobs.find((j) => j.id === id);
   }
 
-  getJobsByCompanyId(companyId: string): Job[] {
-    return this.data.jobs.filter((j) => j.companyId === companyId);
-  }
-
-  getJobsByRecruiterId(recruiterId: string): Job[] {
-    return this.data.jobs.filter((j) => j.recruiterId === recruiterId);
-  }
-
-  createJob(job: Job): Job {
-    this.data.jobs.unshift(job);
-    const cat = this.data.categories.find((c) => c.id === job.categoryId);
-    if (cat) cat.jobCount = (cat.jobCount || 0) + 1;
-    this.persist();
+  async createJob(job: Job): Promise<Job> {
+    if (this.isMysql) return mysqlRepository.createJob(job);
+    this.data.jobs.push(job);
+    this.persistJson();
     return job;
   }
 
-  updateJob(id: string, updates: Partial<Job>): Job | undefined {
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.updateJob(id, updates);
     const idx = this.data.jobs.findIndex((j) => j.id === id);
     if (idx === -1) return undefined;
-    this.data.jobs[idx] = { ...this.data.jobs[idx], ...updates, updatedAt: new Date().toISOString() };
-    this.persist();
+    this.data.jobs[idx] = {
+      ...this.data.jobs[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    this.persistJson();
     return this.data.jobs[idx];
   }
 
-  deleteJob(id: string): boolean {
-    const job = this.getJobById(id);
-    if (!job) return false;
-    const cat = this.data.categories.find((c) => c.id === job.categoryId);
-    if (cat && cat.jobCount > 0) cat.jobCount -= 1;
+  async deleteJob(id: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJob(id);
+    const initLen = this.data.jobs.length;
     this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
-    this.persist();
-    return true;
+    if (this.data.jobs.length !== initLen) {
+      this.persistJson();
+      return true;
+    }
+    return false;
   }
 
-  incrementJobViews(id: string): void {
-    const job = this.getJobById(id);
+  async incrementJobViews(id: string): Promise<void> {
+    if (this.isMysql) {
+      await mysqlRepository.incrementJobViews(id);
+      return;
+    }
+    const job = this.data.jobs.find((j) => j.id === id);
     if (job) {
       job.viewsCount = (job.viewsCount || 0) + 1;
-      this.persist();
+      this.persistJson();
     }
   }
 
-  // --- Applications ---
-  getApplications(): Application[] {
+  async getJobsByCompanyId(companyId: string): Promise<Job[]> {
+    const allJobs = await this.getJobs();
+    return allJobs.filter((j) => j.companyId === companyId);
+  }
+
+  async getJobsByRecruiterId(recruiterId: string): Promise<Job[]> {
+    const allJobs = await this.getJobs();
+    return allJobs.filter((j) => j.recruiterId === recruiterId);
+  }
+
+  // ==========================================
+  // APPLICATIONS
+  // ==========================================
+  async getApplications(): Promise<Application[]> {
+    if (this.isMysql) return mysqlRepository.getApplications();
     return this.data.applications;
   }
 
-  getApplicationById(id: string): Application | undefined {
+  async getApplicationById(id: string): Promise<Application | undefined> {
+    if (this.isMysql) return mysqlRepository.getApplicationById(id);
     return this.data.applications.find((a) => a.id === id);
   }
 
-  getApplicationsByCandidateId(candidateId: string): Application[] {
+  async getApplicationsByCandidateId(candidateId: string): Promise<Application[]> {
+    if (this.isMysql) return mysqlRepository.getApplicationsByCandidateId(candidateId);
     return this.data.applications.filter((a) => a.candidateId === candidateId);
   }
 
-  getApplicationsByJobId(jobId: string): Application[] {
+  async getApplicationsByJobId(jobId: string): Promise<Application[]> {
+    if (this.isMysql) return mysqlRepository.getApplicationsByJobId(jobId);
     return this.data.applications.filter((a) => a.jobId === jobId);
   }
 
-  getApplicationsByCompanyId(companyId: string): Application[] {
-    return this.data.applications.filter((a) => a.companyId === companyId);
+  async getApplicationsByCompanyId(companyId: string): Promise<Application[]> {
+    const allApps = await this.getApplications();
+    return allApps.filter((a) => a.companyId === companyId);
   }
 
-  createApplication(app: Application): Application {
-    this.data.applications.unshift(app);
-    const job = this.getJobById(app.jobId);
+  async createApplication(app: Application): Promise<Application> {
+    if (this.isMysql) return mysqlRepository.createApplication(app);
+    this.data.applications.push(app);
+    const job = this.data.jobs.find((j) => j.id === app.jobId);
     if (job) {
       job.applicantsCount = (job.applicantsCount || 0) + 1;
     }
-    this.persist();
+    this.persistJson();
     return app;
   }
 
-  updateApplication(id: string, updates: Partial<Application>): Application | undefined {
+  async updateApplication(
+    id: string,
+    updates: Partial<Application>,
+    auditEntry?: any
+  ): Promise<Application | undefined> {
+    if (this.isMysql) return mysqlRepository.updateApplication(id, updates, auditEntry);
     const idx = this.data.applications.findIndex((a) => a.id === id);
     if (idx === -1) return undefined;
     this.data.applications[idx] = {
@@ -383,81 +458,142 @@ class DatabaseManager {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
-    this.persist();
+    this.persistJson();
     return this.data.applications[idx];
   }
 
-  // --- Application Status History / Audit Trail ---
-  getApplicationHistory(applicationId: string): ApplicationStatusHistory[] {
+  async deleteApplication(id: string): Promise<boolean> {
+    if (this.isMysql) {
+      return false;
+    }
+    const initLen = this.data.applications.length;
+    this.data.applications = this.data.applications.filter((a) => a.id !== id);
+    if (this.data.applications.length !== initLen) {
+      this.persistJson();
+      return true;
+    }
+    return false;
+  }
+
+  // ==========================================
+  // APPLICATION AUDIT TRAIL / STATUS HISTORY
+  // ==========================================
+  async getApplicationStageHistory(applicationId: string): Promise<any[]> {
+    if (this.isMysql) return mysqlRepository.getApplicationStageHistory(applicationId);
+    const history = this.data.applicationStageHistory || [];
+    const appHistory = history.filter((h) => h.applicationId === applicationId);
+    if (appHistory.length > 0) return appHistory;
+    const app = this.data.applications.find((a) => a.id === applicationId);
+    return app?.timeline || [];
+  }
+
+  async getApplicationHistory(applicationId: string): Promise<ApplicationStatusHistory[]> {
+    if (this.isMysql) {
+      const rows = await mysqlRepository.getApplicationStageHistory(applicationId);
+      return rows.map((r: any) => ({
+        id: r.id,
+        applicationId: r.applicationId,
+        previousStatus: r.fromStage || 'None',
+        newStatus: r.toStage,
+        changedBy: r.changedByUserId,
+        changedByName: r.changedByName,
+        timestamp: r.createdAt || new Date().toISOString(),
+        comments: r.comment,
+        reason: r.comment,
+        interviewType: r.interviewType,
+        interviewDate: r.interviewDate,
+      }));
+    }
     if (!this.data.applicationStageHistory) {
       this.data.applicationStageHistory = [];
     }
     return this.data.applicationStageHistory.filter((h) => h.applicationId === applicationId);
   }
 
-  createApplicationHistory(entry: ApplicationStatusHistory): ApplicationStatusHistory {
+  async createApplicationHistory(entry: ApplicationStatusHistory): Promise<ApplicationStatusHistory> {
     if (!this.data.applicationStageHistory) {
       this.data.applicationStageHistory = [];
     }
     this.data.applicationStageHistory.push(entry);
-    this.persist();
+    this.persistJson();
     return entry;
   }
 
-  // --- Reported Jobs ---
-  getReportedJobs(): ReportedJob[] {
+  // ==========================================
+  // REPORTED JOBS
+  // ==========================================
+  async getReportedJobs(): Promise<ReportedJob[]> {
+    if (this.isMysql) return mysqlRepository.getReportedJobs();
     return this.data.reportedJobs;
   }
 
-  createReportedJob(rep: ReportedJob): ReportedJob {
-    this.data.reportedJobs.unshift(rep);
-    this.persist();
+  async createReportedJob(rep: ReportedJob): Promise<ReportedJob> {
+    if (this.isMysql) return mysqlRepository.createReportedJob(rep);
+    this.data.reportedJobs.push(rep);
+    this.persistJson();
     return rep;
   }
 
-  updateReportedJob(id: string, status: 'pending' | 'resolved' | 'dismissed'): ReportedJob | undefined {
+  async updateReportedJob(id: string, status: 'pending' | 'resolved' | 'dismissed'): Promise<ReportedJob | undefined> {
+    if (this.isMysql) return mysqlRepository.updateReportedJob(id, status);
     const idx = this.data.reportedJobs.findIndex((r) => r.id === id);
     if (idx === -1) return undefined;
     this.data.reportedJobs[idx].status = status;
-    this.persist();
+    this.persistJson();
     return this.data.reportedJobs[idx];
   }
 
-  // --- Job Alerts ---
-  getJobAlerts(userId?: string): JobAlert[] {
-    if (userId) {
-      return this.data.jobAlerts.filter((a) => a.userId === userId);
-    }
+  // ==========================================
+  // JOB ALERTS
+  // ==========================================
+  async getJobAlerts(userId?: string): Promise<JobAlert[]> {
+    if (this.isMysql) return mysqlRepository.getJobAlerts(userId);
+    if (userId) return this.data.jobAlerts.filter((a) => a.userId === userId);
     return this.data.jobAlerts;
   }
 
-  createJobAlert(alert: JobAlert): JobAlert {
-    this.data.jobAlerts.unshift(alert);
-    this.persist();
+  async createJobAlert(alert: JobAlert): Promise<JobAlert> {
+    if (this.isMysql) return mysqlRepository.createJobAlert(alert);
+    this.data.jobAlerts.push(alert);
+    this.persistJson();
     return alert;
   }
 
-  updateJobAlert(id: string, updates: Partial<JobAlert>): JobAlert | undefined {
-    const idx = this.data.jobAlerts.findIndex((a) => a.id === id);
+  async updateJobAlert(id: string, userId: string, updates: Partial<JobAlert>): Promise<JobAlert | undefined> {
+    if (this.isMysql) return mysqlRepository.updateJobAlert(id, userId, updates);
+    const idx = this.data.jobAlerts.findIndex((a) => a.id === id && a.userId === userId);
     if (idx === -1) return undefined;
     this.data.jobAlerts[idx] = { ...this.data.jobAlerts[idx], ...updates };
-    this.persist();
+    this.persistJson();
     return this.data.jobAlerts[idx];
   }
 
-  deleteJobAlert(id: string): boolean {
+  async deleteJobAlert(id: string, userId: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobAlert(id, userId);
     const initLen = this.data.jobAlerts.length;
-    this.data.jobAlerts = this.data.jobAlerts.filter((a) => a.id !== id);
+    this.data.jobAlerts = this.data.jobAlerts.filter((a) => !(a.id === id && a.userId === userId));
     if (this.data.jobAlerts.length !== initLen) {
-      this.persist();
+      this.persistJson();
       return true;
     }
     return false;
   }
 
-  // Reset database back to default seed
+  // ==========================================
+  // TEST UTILITIES
+  // ==========================================
   resetToSeed(): void {
-    this.seed();
+    this.data = {
+      users: [...initialUsers],
+      companies: [...initialCompanies],
+      categories: [...initialCategories],
+      jobs: [...initialJobs],
+      applications: [...initialApplications],
+      reportedJobs: [...initialReportedJobs],
+      jobAlerts: [...initialJobAlerts],
+      applicationStageHistory: [...initialApplicationStageHistory],
+    };
+    this.persistJson();
   }
 }
 

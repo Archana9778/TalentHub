@@ -98,8 +98,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           </div>
           <div className="text-[10px] text-slate-500 space-y-0.5">
             <div>Tier 1: React 18 SPA (Vite)</div>
-            <div>Tier 2: Node.js / Spring Boot API</div>
-            <div>Tier 3: MySQL 8 / H2 Persistent</div>
+            <div>Tier 2: Node.js + Express + TypeScript</div>
+            <div>Tier 3: MySQL 8 persistent database</div>
           </div>
         </div>
       </div>
