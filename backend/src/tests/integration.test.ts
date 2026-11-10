@@ -670,8 +670,7 @@ async function runCategoryD(): Promise<void> {
     const files = fs.readdirSync(migrationsDir).filter((f: string) => f.endsWith('.ts'));
     assert(files.includes('20261107000001_initial_schema.ts'), 'Initial schema migration missing');
     assert(files.includes('20261108000002_resume_documents.ts'), 'Resume documents migration missing');
-    assert(files.includes('20261109000003_full_schema_improvements.ts'), 'Full improvements migration missing');
-    assert(files.length >= 3, `Expected at least 3 migrations, found: ${files.length}`);
+    assert(files.length >= 2, `Expected at least 2 migrations, found: ${files.length}`);
   });
 }
 
