@@ -665,6 +665,128 @@
   ],
   "applications": [
     {
+      "id": "app-d2836239",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-bb15e8ef",
+      "candidateName": "Jordan Lee 4875",
+      "candidateEmail": "candidate.test4875@talenthub.com",
+      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
+      "candidateTitle": "Full-Stack Node/React Engineer",
+      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
+      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
+      "stage": "Interview",
+      "matchScore": 53,
+      "matchDetails": {
+        "score": 53,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "MySQL",
+          "Docker"
+        ],
+        "missingSkills": [
+          "Java",
+          "Spring Boot",
+          "Azure",
+          "REST API"
+        ],
+        "skillScore": 50,
+        "experienceScore": 60,
+        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
+      },
+      "recruiterNotes": "Reviewed candidate GitHub and profile.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-bb15e8ef",
+          "changedByName": "Jordan Lee 4875",
+          "changedAt": "2026-11-04T07:17:39.191Z",
+          "comment": "Candidate submitted online application via TalentHub portal."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:17:39.280Z",
+          "comment": "Strong background in Node.js and TypeScript. Moving forward."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:17:39.292Z",
+          "comment": "Scheduled technical discussion with team lead."
+        }
+      ],
+      "createdAt": "2026-11-04T07:17:39.191Z",
+      "updatedAt": "2026-11-04T07:17:39.292Z",
+      "interviewDate": "2026-11-07T12:47:39Z",
+      "interviewType": "Technical Round"
+    },
+    {
+      "id": "app-5dbc732a",
+      "jobId": "job-1",
+      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "companyName": "CloudScale Technologies",
+      "candidateId": "user-973cc7ba",
+      "candidateName": "Jordan Lee 3143",
+      "candidateEmail": "candidate.test3143@talenthub.com",
+      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
+      "candidateTitle": "Full-Stack Node/React Engineer",
+      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
+      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
+      "stage": "Interview",
+      "matchScore": 53,
+      "matchDetails": {
+        "score": 53,
+        "matchedSkills": [
+          "React",
+          "TypeScript",
+          "MySQL",
+          "Docker"
+        ],
+        "missingSkills": [
+          "Java",
+          "Spring Boot",
+          "Azure",
+          "REST API"
+        ],
+        "skillScore": 50,
+        "experienceScore": 60,
+        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
+      },
+      "recruiterNotes": "Reviewed candidate GitHub and profile.",
+      "timeline": [
+        {
+          "stage": "Applied",
+          "changedBy": "user-973cc7ba",
+          "changedByName": "Jordan Lee 3143",
+          "changedAt": "2026-11-04T07:13:47.995Z",
+          "comment": "Candidate submitted online application via TalentHub portal."
+        },
+        {
+          "stage": "Screening",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:13:48.115Z",
+          "comment": "Strong background in Node.js and TypeScript. Moving forward."
+        },
+        {
+          "stage": "Interview",
+          "changedBy": "user-recruiter-1",
+          "changedByName": "Sarah Jenkins",
+          "changedAt": "2026-11-04T07:13:48.139Z",
+          "comment": "Scheduled technical discussion with team lead."
+        }
+      ],
+      "createdAt": "2026-11-04T07:13:47.995Z",
+      "updatedAt": "2026-11-04T07:13:48.139Z",
+      "interviewDate": "2026-11-07T12:43:48Z",
+      "interviewType": "Technical Round"
+    },
+    {
       "id": "app-1",
       "jobId": "job-1",
       "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",

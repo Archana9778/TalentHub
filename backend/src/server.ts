@@ -34,7 +34,7 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Serve static uploaded resumes & company logos
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
-// Health probes (matches Azure Application Gateway, Spring Actuator, and container orchestrator specifications)
+// Health probes (matches Azure Application Gateway, Spring Actuator, and container orchestrators)
 app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => {
   try {
     const databaseHealthy = await db.checkHealth();
@@ -51,7 +51,7 @@ app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => 
             ? 'MySQL 8.0'
             : 'Embedded JSON persistence (development/test opt-in)',
         },
-        resumeParsing: { status: 'READY' },
+        resumeParsing: { status: 'READY', mode: 'local-heuristic' },
         azureDocumentIntelligence: { status: 'READY' },
       },
     });

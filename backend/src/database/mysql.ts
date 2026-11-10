@@ -1,14 +1,4 @@
-let mysql: any;
-try {
-  mysql = require('mysql2/promise');
-} catch {
-  mysql = null;
-}
-export interface Pool {
-  query<T = any>(sql: string, values?: any): Promise<[T, any]>;
-  getConnection(): Promise<{ release: () => void }>;
-  end(): Promise<void>;
-}
+import mysql, { Pool } from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
@@ -130,7 +120,7 @@ class MySqlDatabase {
           await this.pool.query(v3Sql);
         } else throw new Error('Required migration V3__audit_trail.sql was not found.');
 
-        console.log('[TalentHub MySQL] âœ… Migrations completed successfully.');
+        console.log('[TalentHub MySQL] ✅ Migrations completed successfully.');
       } else {
         // Ensure V3 audit trail table exists even if V1/V2 already exist
         const [v3Rows] = await this.pool.query<any[]>(

@@ -7,15 +7,32 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx src/tests/featureTest.ts"
+    "test": "tsx src/tests/featureTest.ts",
+    "db:test": "tsx src/database/test-connection.ts",
+    "db:verify": "tsx src/database/verify-schema.ts",
+    "db:import": "tsx src/database/import-json-data.ts",
+    "migrate": "tsx src/database/migrator.ts up",
+    "migrate:latest": "tsx src/database/migrator.ts up",
+    "migrate:rollback": "tsx src/database/migrator.ts down",
+    "migrate:status": "tsx src/database/migrator.ts status",
+    "migrate:unlock": "tsx src/database/migrator.ts unlock",
+    "test:validation": "tsx src/tests/resumeValidation.test.ts",
+    "test:integration": "tsx src/tests/integration.test.ts",
+    "test:unit": "SKIP_INTEGRATION=true tsx src/tests/integration.test.ts",
+    "test:all": "tsx src/tests/featureTest.ts && tsx src/tests/resumeValidation.test.ts && tsx src/tests/integration.test.ts"
   },
   "dependencies": {
+    "@azure/identity": "^4.14.1",
+    "@azure/storage-blob": "^12.34.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "file-type": "^22.3.0",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.3.0",
     "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.24.6",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
@@ -23,10 +40,9 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.9",
-    "@types/multer": "^1.4.12",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.13.10",
     "@types/uuid": "^10.0.0",
-    "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.15",
     "typescript": "^5.8.2"
   }

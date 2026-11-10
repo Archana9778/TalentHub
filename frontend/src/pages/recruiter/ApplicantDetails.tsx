@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Sparkles,
+  Layers,
   FileText,
   Calendar,
   CheckCircle2,
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import { SkillMatchModal } from '../../components/SkillMatchModal';
+import { MatchDetailsModal } from '../../components/MatchDetailsModal';
 import { Application, User as UserType, Job, ApplicationStage, ApplicationStatusHistory } from '../../types';
 import { Loading } from '../../components/Loading';
 

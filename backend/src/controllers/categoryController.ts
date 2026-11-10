@@ -9,6 +9,7 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
     const categories = await db.getCategories();
     res.json({ total: categories.length, categories });
   } catch (err: any) {
+    console.error('[categoryController] getAllCategories error:', err);
     res.status(500).json({ message: 'Error retrieving categories', error: err.message });
   }
 };
@@ -32,6 +33,7 @@ export const createCategory = async (req: AuthRequest, res: Response): Promise<v
     await db.createCategory(newCat);
     res.status(201).json({ message: 'Category created successfully.', category: newCat });
   } catch (err: any) {
+    console.error('[categoryController] createCategory error:', err);
     res.status(500).json({ message: 'Error creating category', error: err.message });
   }
 };
@@ -46,6 +48,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
     }
     res.json({ message: 'Category updated successfully.', category: updated });
   } catch (err: any) {
+    console.error('[categoryController] updateCategory error:', err);
     res.status(500).json({ message: 'Error updating category', error: err.message });
   }
 };
@@ -60,6 +63,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
     }
     res.json({ message: 'Category deleted successfully.' });
   } catch (err: any) {
+    console.error('[categoryController] deleteCategory error:', err);
     res.status(500).json({ message: 'Error deleting category', error: err.message });
   }
 };

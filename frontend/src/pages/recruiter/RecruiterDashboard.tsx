@@ -107,7 +107,7 @@ export const RecruiterDashboard: React.FC = () => {
               Recruiter Dashboard
             </h1>
             <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Real-time candidate pipelines, recruiter team management, job ownership assignments, and full ATS stage governance for your company requisitions.
+              Real-time candidate pipelines, recruiter team management, job ownership assignments, skill matching, and full ATS stage governance for your company requisitions.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
@@ -404,7 +404,7 @@ export const RecruiterDashboard: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-indigo-600" />
                 <span>Top Candidate Matches</span>
               </h2>
-              <p className="text-xs text-slate-500">Ranked by Azure AI Document Intelligence match score</p>
+              <p className="text-xs text-slate-500">Ranked by local candidate match score</p>
             </div>
             <Link
               to="/recruiter/applicants"

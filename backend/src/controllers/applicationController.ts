@@ -9,6 +9,7 @@ import {
   StageTimelineItem,
 } from '../types';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
+import { MatchingService } from '../services/matchingService';
 
 // Controlled status transition rules:
 // Applied -> Screening
@@ -65,11 +66,7 @@ export const applyForJob = async (req: AuthRequest, res: Response): Promise<void
         : ['React', 'TypeScript', 'Node.js', 'Java'];
     const candidateYears = req.user.experience ? Math.max(req.user.experience.length * 2, 3) : 4;
 
-    const matchDetails = AzureDocumentIntelligenceService.computeMatchScore(
-      candidateSkills,
-      candidateYears,
-      job
-    );
+    const matchDetails = MatchingService.computeCandidateJobMatch(req.user, job);
 
     const appId = `app-${uuidv4().substring(0, 8)}`;
     const now = new Date().toISOString();
@@ -575,6 +572,11 @@ export const getApplicationAuditTimeline = async (req: AuthRequest, res: Respons
       total: resultHistory.length,
       history: resultHistory,
       timeline: application.timeline || [],
+      auditTimeline: resultHistory,
+      applicationId: application.id,
+      jobTitle: application.jobTitle,
+      candidateName: application.candidateName,
+      currentStage: application.stage,
     });
   } catch (err: any) {
     res.status(500).json({ message: 'Error retrieving audit timeline', error: err.message });

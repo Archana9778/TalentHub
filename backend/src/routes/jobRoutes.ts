@@ -9,6 +9,8 @@ import {
   getRecruiterJobs,
   reportJob,
 } from '../controllers/jobController';
+import { getJobMatches, getJobCandidateMatch } from '../controllers/matchingController';
+import { getCandidateSkillMatch } from '../controllers/skillComparisonController';
 import { authenticateToken, requireRoles } from '../middleware/auth';
 
 const router = Router();
@@ -16,6 +18,14 @@ const router = Router();
 // Public / Candidate view
 router.get('/', getAllJobs);
 router.get('/recruiter/my-jobs', authenticateToken, requireRoles('recruiter', 'admin'), getRecruiterJobs);
+
+// Candidate Matching & Ranking endpoints
+router.get('/:jobId/matches', authenticateToken, requireRoles('recruiter', 'admin'), getJobMatches);
+router.get('/:jobId/matches/:candidateId', authenticateToken, getJobCandidateMatch);
+
+// Candidate Skills vs Job Requirements Comparison
+router.get('/:jobId/candidates/:candidateId/skill-match', authenticateToken, getCandidateSkillMatch);
+
 router.get('/:id', getJobById);
 
 // Recruiter / Admin job management

@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Send,
   Upload,
+  Clock,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, Company } from '../../types';
@@ -74,9 +75,10 @@ export const JobDetails: React.FC = () => {
 
   // Calculate Match Score
   const candidateSkillsNorm = new Set((user?.skills || []).map((s) => s.toLowerCase()));
-  const matchedSkills = job.skills.filter((s) => candidateSkillsNorm.has(s.toLowerCase()));
-  const missingSkills = job.skills.filter((s) => !candidateSkillsNorm.has(s.toLowerCase()));
-  const matchPct = job.skills.length > 0 ? Math.round((matchedSkills.length / job.skills.length) * 100) : 80;
+  const skillsList = Array.isArray(job.skills) ? job.skills : [];
+  const matchedSkills = skillsList.filter((s) => candidateSkillsNorm.has(s.toLowerCase()));
+  const missingSkills = skillsList.filter((s) => !candidateSkillsNorm.has(s.toLowerCase()));
+  const matchPct = skillsList.length > 0 ? Math.round((matchedSkills.length / skillsList.length) * 100) : 80;
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,16 +130,27 @@ export const JobDetails: React.FC = () => {
               className="w-16 h-16 rounded-2xl object-cover border border-slate-100 p-1 shadow-xs shrink-0"
             />
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                  {job.categoryName}
-                </span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                  {job.workplaceType}
-                </span>
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                  {job.jobType}
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {job.categoryName && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                    {job.categoryName}
+                  </span>
+                )}
+                {job.workplaceType && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                    {job.workplaceType}
+                  </span>
+                )}
+                {job.jobType && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                    {job.jobType}
+                  </span>
+                )}
+                {job.experienceLevel && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                    {job.experienceLevel}
+                  </span>
+                )}
               </div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
                 {job.title}
@@ -151,12 +164,20 @@ export const JobDetails: React.FC = () => {
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
                   <span>{job.location}</span>
                 </div>
-                <div className="flex items-center gap-1 text-emerald-700 font-semibold">
-                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>
-                    ${(job.salaryMin / 1000).toFixed(0)}k - ${(job.salaryMax / 1000).toFixed(0)}k / year
-                  </span>
-                </div>
+                {job.salaryMin !== undefined && job.salaryMax !== undefined && (
+                  <div className="flex items-center gap-1 text-emerald-700 font-semibold">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>
+                      ${(job.salaryMin / 1000).toFixed(0)}k - ${(job.salaryMax / 1000).toFixed(0)}k / year
+                    </span>
+                  </div>
+                )}
+                {job.createdAt && !isNaN(new Date(job.createdAt).getTime()) && (
+                  <div className="flex items-center gap-1 text-slate-500">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Posted {new Date(job.createdAt).toLocaleDateString()}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -173,7 +194,7 @@ export const JobDetails: React.FC = () => {
               }}
               className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md shadow-blue-600/20 transition-all"
             >
-              Apply for this Role
+              Apply Now
             </button>
           </div>
         </div>
@@ -191,6 +212,22 @@ export const JobDetails: React.FC = () => {
                 {job.description}
               </p>
             </div>
+
+            {job.skills && job.skills.length > 0 && (
+              <div>
+                <h2 className="text-base font-bold text-slate-900 mb-2">Required Skills</h2>
+                <div className="flex flex-wrap gap-2">
+                  {job.skills.map((skill, i) => (
+                    <span
+                      key={i}
+                      className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {job.requirements && job.requirements.length > 0 && (
               <div>
@@ -227,7 +264,7 @@ export const JobDetails: React.FC = () => {
               Submit Your Application
             </h2>
             <p className="text-xs text-slate-500 mb-5">
-              Your profile resume and skills will be scored against the job requirements using Azure Document Intelligence.
+              Your profile skills and experience will be used for a local match estimate.
             </p>
 
             {appliedSuccess ? (
@@ -316,7 +353,7 @@ export const JobDetails: React.FC = () => {
                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md disabled:opacity-50 transition-colors"
                   >
                     <Send className="w-4 h-4" />
-                    <span>{applying ? 'Submitting Application...' : 'Send Application'}</span>
+                    <span>{applying ? 'Submitting Application...' : 'Apply Now'}</span>
                   </button>
                 </div>
               </form>

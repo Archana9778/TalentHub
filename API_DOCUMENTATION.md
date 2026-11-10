@@ -1,6 +1,6 @@
 # TalentHub REST API Documentation
 
-This document specifies the REST API contract for TalentHub, supported by both the Node.js/Express service (`backend/`) and the Java 21 / Spring Boot 3 enterprise service (`backend-spring/`).
+This document describes the implemented Node.js + Express.js + TypeScript API (`backend/`). The normal runtime requires MySQL 8.0. Azure Database for MySQL Flexible Server is the planned cloud target, not a completed migration.
 
 ---
 
@@ -205,17 +205,16 @@ Authorization: Bearer <jwt_token>
 
 ### 3.1 Apply for a Job
 - **Endpoint**: `POST /api/applications/apply` (or `POST /api/applications`)
-- **Access**: Protected (`candidate`)
-- **Request Body** (JSON or `multipart/form-data`):
+- **Access**: Candidate
+- **Request Body** (`multipart/form-data` from the React client; JSON is also accepted):
 ```json
 {
   "jobId": "job-101",
   "coverLetter": "Excited to apply for the Lead Cloud Engineer role...",
-  "candidateId": "cand-001"
 }
 ```
 - **Validation**: Enforces single application per candidate per job (duplicate prevention).
-- **Match Scoring**: Calculates AI match percentage based on candidate skills vs. job required skills.
+- **Match Scoring**: Calculates a local skill/experience match estimate from the signed-in candidate and job requirements.
 - **Audit Log**: Automatically writes initial stage audit record (`Applied`).
 - **Response** `201 Created`:
 ```json
@@ -260,7 +259,7 @@ Authorization: Bearer <jwt_token>
 ```
 
 ### 3.3 Recruiter Applicant Tracking (ATS View)
-- **Endpoint**: `GET /api/applications/applicants` (or `GET /api/applications`)
+- **Endpoint**: `GET /api/applications/applicants` (or `GET /api/applications/job/:jobId`)
 - **Access**: Protected (`recruiter`, `admin`)
 - **Query Parameters**:
   - `jobId` (optional): Filter to candidates for a specific requisition
@@ -285,29 +284,23 @@ Authorization: Bearer <jwt_token>
 
 ### 3.5 Application Stage Audit Timeline
 - **Endpoint**: `GET /api/applications/:id/audit`
-- **Access**: Protected (`candidate` for own app, `recruiter`, `admin`)
+- **Access**: Candidate for their own application; recruiter for applications to their own jobs; admin.
 - **Response** `200 OK`:
 ```json
 {
-  "applicationId": "app-501",
-  "auditTimeline": [
+  "total": 1,
+  "timeline": [
     {
-      "id": "audit-01",
-      "stage": "Applied",
-      "previousStage": null,
-      "changedBy": "cand-001",
-      "changedByName": "Jane Doe",
-      "comment": "Application submitted",
-      "changedAt": "2026-11-03T18:00:00Z"
-    },
-    {
-      "id": "audit-02",
-      "stage": "Screening",
-      "previousStage": "Applied",
-      "changedBy": "rec-001",
+      "id": "hist-12345678",
+      "applicationId": "app-501",
+      "fromStage": "Applied",
+      "toStage": "Interview",
+      "changedByUserId": "rec-001",
       "changedByName": "Alex Morgan",
-      "comment": "Profile reviewed by hiring team",
-      "changedAt": "2026-11-04T10:00:00Z"
+      "comment": "Scheduled technical interview",
+      "interviewType": "Technical Round",
+      "interviewDate": "2026-11-10T14:00:00Z",
+      "createdAt": "2026-11-05T09:30:00Z"
     }
   ]
 }
@@ -315,7 +308,7 @@ Authorization: Bearer <jwt_token>
 
 ---
 
-## 4. Azure AI Document Intelligence & Resume Parsing (`/api/resume`)
+## 4. Resume Upload and Parsing (`/api/resume`)
 
 ### 4.1 Upload & Parse Resume
 - **Endpoint**: `POST /api/resume/upload`
@@ -325,7 +318,7 @@ Authorization: Bearer <jwt_token>
 - **Response** `200 OK`:
 ```json
 {
-  "message": "Resume uploaded and parsed via Azure Document Intelligence",
+  "message": "Resume uploaded and processed with the local heuristic parser.",
   "parsedData": {
     "extractedSkills": ["React", "TypeScript", "Node.js", "Java", "Docker"],
     "experienceYears": 6,
@@ -342,9 +335,8 @@ Authorization: Bearer <jwt_token>
 
 ### 4.2 On-Demand Resume Parsing
 - **Endpoint**: `POST /api/resume/parse`
-- **Access**: Protected (`candidate`, `recruiter`)
-- **Content-Type**: `multipart/form-data`
-- **Form Field**: `resume`
+- **Access**: Authenticated
+- **Content-Type**: `multipart/form-data` with an optional `resume` field, or JSON with an optional `filename`.
 - **Response** `200 OK`: Extracted entity structure without automatically updating candidate profile.
 
 ---
@@ -411,17 +403,29 @@ Authorization: Bearer <jwt_token>
 
 ---
 
-## 6. Administration & Governance Endpoints (`/api/admin`)
+## 6. Companies, Categories, and Job Alerts
 
-- `GET /api/admin/users`: List all platform users with role, status, company affiliation
-- `PATCH /api/admin/users/:id/status`: Suspend or reinstate user (`active` | `suspended`)
-- `PATCH /api/admin/users/:id/role`: Upgrade or modify user role
-- `DELETE /api/admin/users/:id`: Delete user account
-- `GET /api/admin/companies`: List registered companies
-- `POST /api/admin/companies`: Register partner company
-- `PATCH /api/admin/companies/:id/verify`: Toggle company verification badge
-- `GET /api/admin/categories`: List job categories
-- `POST /api/admin/categories`: Create new job category taxonomy
-- `GET /api/admin/reported-jobs`: Queue of candidate-reported postings
-- `PATCH /api/admin/reported-jobs/:id`: Resolve, dismiss, or action flagged posting
+- `GET /api/companies` and `GET /api/companies/:id`: Public company directory and company details with jobs.
+- `POST /api/companies`: Recruiter or admin creates a company.
+- `PUT /api/companies/:id` and `DELETE /api/companies/:id`: Admin only.
+- `GET /api/categories`: Public category list. `POST`, `PUT /:id`, and `DELETE /:id` require admin.
+- `GET /api/job-alerts`, `POST /api/job-alerts`, `PATCH /api/job-alerts/:id/toggle`, and `DELETE /api/job-alerts/:id`: Candidate-only operations, scoped to the signed-in candidate.
+
+## 7. Administration & Governance Endpoints (`/api/admin`)
+
+All endpoints require an admin JWT:
+
+- `GET /api/admin/statistics`: Platform counts and application-stage totals.
+- `GET /api/admin/users`: List users; accepts `role`, `status`, and `search` filters.
+- `PATCH /api/admin/users/:id`: Change a user's `status` and/or `role`.
+- `DELETE /api/admin/users/:id`: Delete a user account (admins cannot delete themselves).
+- `GET /api/admin/reported-jobs`: List job reports.
+- `PATCH /api/admin/reported-jobs/:id`: Set `pending`, `resolved`, or `dismissed`; optional `removeJob` deletes the reported job.
+
+## Database and runtime notes
+
+- Set `DB_MODE=mysql` (the default), `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME`. The API refuses to start if MySQL is unavailable or migrations fail.
+- `DB_MODE=json` explicitly opts into local JSON storage in `development` or `test` only; it is not available in production and does not synchronize data with MySQL.
+- Migrations V1–V4 create the initial schema, seed demo data on a fresh schema, add the application-stage audit table, and add JSON-backed profile fields. Existing rows are retained.
+- Application stage changes support interview scheduling through `interviewDate` and `interviewType`; audit history is available from `GET /api/applications/:id/audit`.
 

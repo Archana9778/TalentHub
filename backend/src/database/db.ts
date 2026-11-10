@@ -9,6 +9,7 @@ import {
   ReportedJob,
   JobAlert,
   ApplicationStatusHistory,
+  ResumeDocument,
 } from '../types';
 import {
   initialUsers,
@@ -33,6 +34,7 @@ interface DatabaseSchema {
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
   applicationStageHistory: ApplicationStatusHistory[];
+  resumeDocuments?: ResumeDocument[];
 }
 
 class DatabaseManager {
@@ -580,6 +582,46 @@ class DatabaseManager {
   }
 
   // ==========================================
+  // RESUME DOCUMENTS (BLOB STORAGE)
+  // ==========================================
+  async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
+    const list = this.data.resumeDocuments || [];
+    return list.find((d) => d.candidateId === candidateId && d.isCurrent);
+  }
+
+  async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
+    const list = this.data.resumeDocuments || [];
+    return list.filter((d) => d.candidateId === candidateId);
+  }
+
+  async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
+    const list = this.data.resumeDocuments || [];
+    return list.find((d) => d.id === id);
+  }
+
+  async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
+    if (!this.data.resumeDocuments) {
+      this.data.resumeDocuments = [];
+    }
+    this.data.resumeDocuments.forEach((d) => {
+      if (d.candidateId === doc.candidateId) d.isCurrent = false;
+    });
+    this.data.resumeDocuments.push(doc);
+    this.persistJson();
+    return doc;
+  }
+
+  async markResumeDeleted(id: string, candidateId?: string): Promise<void> {
+    if (!this.data.resumeDocuments) return;
+    const doc = this.data.resumeDocuments.find((d) => d.id === id && (!candidateId || d.candidateId === candidateId));
+    if (doc) {
+      doc.uploadStatus = 'deleted';
+      doc.isCurrent = false;
+      this.persistJson();
+    }
+  }
+
+  // ==========================================
   // TEST UTILITIES
   // ==========================================
   resetToSeed(): void {
@@ -592,9 +634,11 @@ class DatabaseManager {
       reportedJobs: [...initialReportedJobs],
       jobAlerts: [...initialJobAlerts],
       applicationStageHistory: [...initialApplicationStageHistory],
+      resumeDocuments: [],
     };
     this.persistJson();
   }
 }
 
 export const db = new DatabaseManager();
+export default db;

@@ -4,17 +4,13 @@ import { db } from '../database/db';
 import { ApplicationStage } from '../types';
 
 export const getDashboardAnalytics = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
-    }
+  if (!req.user) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
 
+  try {
     const user = req.user;
-    const allJobs = await db.getJobs();
-    const allApps = await db.getApplications();
-    const allUsers = await db.getUsers();
-    const allCompanies = await db.getCompanies();
 
     if (user.role === 'candidate') {
       const myApps = await db.getApplicationsByCandidateId(user.id);
@@ -40,6 +36,7 @@ export const getDashboardAnalytics = async (req: AuthRequest, res: Response): Pr
     }
 
     if (user.role === 'recruiter') {
+      const [allJobs, allApps] = await Promise.all([db.getJobs(), db.getApplications()]);
       const company = user.companyId ? await db.getCompanyById(user.companyId) : undefined;
       const companyRecruiters = user.companyId ? await db.getRecruiters(user.companyId) : [];
       const activeRecruiters = companyRecruiters.filter((r) => r.status === 'active');
@@ -102,7 +99,14 @@ export const getDashboardAnalytics = async (req: AuthRequest, res: Response): Pr
       return;
     }
 
-    // Admin role
+    // Admin role — fetch everything in parallel
+    const [allApps, allUsers, allCompanies, allJobs] = await Promise.all([
+      db.getApplications(),
+      db.getUsers(),
+      db.getCompanies(),
+      db.getJobs(),
+    ]);
+
     const stageCounts: Record<ApplicationStage, number> = {
       Applied: 0,
       Screening: 0,
@@ -130,6 +134,7 @@ export const getDashboardAnalytics = async (req: AuthRequest, res: Response): Pr
       },
     });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error retrieving dashboard analytics', error: err.message });
+    console.error('[analyticsController] getDashboardAnalytics error:', err);
+    res.status(500).json({ message: 'Failed to retrieve analytics.', error: err.message });
   }
 };

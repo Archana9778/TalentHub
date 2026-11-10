@@ -1,34 +1,49 @@
 import multer from 'multer';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (!fs.existsSync(config.uploadDir)) {
-      fs.mkdirSync(config.uploadDir, { recursive: true });
+const memoryStorage = multer.memoryStorage();
+
+/**
+ * Resume upload middleware.
+ * - Uses memory storage (no disk writes).
+ * - Hard size limit: config.storage.maxResumeSizeBytes (enforced by multer before controller).
+ * - Extension pre-filter: provides an early 415 for clearly wrong file types.
+ *   The controller performs authoritative content-based validation.
+ */
+export const uploadResume = multer({
+  storage: memoryStorage,
+  limits: { fileSize: config.storage.maxResumeSizeBytes },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf' || ext === 'docx') {
+      cb(null, true);
+    } else {
+      const err = new multer.MulterError('LIMIT_UNEXPECTED_FILE');
+      (err as any).message = `Unsupported file type ".${ext ?? '?'}". Only PDF and DOCX resumes are accepted.`;
+      cb(err);
     }
-    cb(null, config.uploadDir);
   },
-  filename: (req, file, cb) => {
+});
+
+const logoUploadDir = path.resolve(__dirname, '../../uploads');
+
+const logoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(logoUploadDir)) {
+      fs.mkdirSync(logoUploadDir, { recursive: true });
+    }
+    cb(null, logoUploadDir);
+  },
+  filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
     const safeName = file.originalname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     cb(null, `${Date.now()}_${safeName}${ext}`);
   },
 });
 
-const resumeFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedExtensions = ['.pdf', '.doc', '.docx'];
-  const ext = path.extname(file.originalname).toLowerCase();
-
-  if (allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only .pdf, .doc, and .docx resume files are allowed!'));
-  }
-};
-
-const imageFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const imageFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
   const ext = path.extname(file.originalname).toLowerCase();
 
@@ -39,14 +54,8 @@ const imageFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
   }
 };
 
-export const uploadResume = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: resumeFileFilter,
-});
-
 export const uploadLogo = multer({
-  storage,
+  storage: logoStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: imageFileFilter,
 });

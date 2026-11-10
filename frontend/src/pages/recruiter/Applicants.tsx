@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import { SkillMatchModal } from '../../components/SkillMatchModal';
+import { MatchDetailsModal } from '../../components/MatchDetailsModal';
 import { Application, Job, ApplicationStage, ApplicationStatusHistory } from '../../types';
 import { Loading } from '../../components/Loading';
 
@@ -56,6 +58,14 @@ export const Applicants: React.FC = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedJobId, setSelectedJobId] = useState(initialJobId);
   const [selectedStage, setSelectedStage] = useState('all');
+  const [inspectingApp, setInspectingApp] = useState<Application | null>(null);
+  const [skillModalTarget, setSkillModalTarget] = useState<{
+    isOpen: boolean;
+    jobId?: string;
+    candidateId?: string;
+    candidateName?: string;
+    jobTitle?: string;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'date' | 'status' | 'matchScore'>('date');
@@ -875,6 +885,31 @@ export const Applicants: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Match Details Modal */}
+      {inspectingApp && (
+        <MatchDetailsModal
+          isOpen={!!inspectingApp}
+          onClose={() => setInspectingApp(null)}
+          candidateName={inspectingApp.candidateName}
+          candidateTitle={inspectingApp.candidateTitle}
+          jobTitle={inspectingApp.jobTitle}
+          matchScore={inspectingApp.matchScore || 0}
+          matchCategory={inspectingApp.matchDetails?.category}
+          matchDetails={inspectingApp.matchDetails}
+        />
+      )}
+
+      {/* Candidate Skills vs Job Requirements Comparison Modal */}
+      {skillModalTarget && (
+        <SkillMatchModal
+          isOpen={skillModalTarget.isOpen}
+          onClose={() => setSkillModalTarget(null)}
+          jobId={skillModalTarget.jobId}
+          candidateId={skillModalTarget.candidateId}
+          candidateName={skillModalTarget.candidateName}
+          jobTitle={skillModalTarget.jobTitle}
+        />
       )}
     </div>
   );

@@ -9,6 +9,7 @@ export const getAllCompanies = async (req: Request, res: Response): Promise<void
     const companies = await db.getCompanies();
     res.json({ total: companies.length, companies });
   } catch (err: any) {
+    console.error('[companyController] getAllCompanies error:', err);
     res.status(500).json({ message: 'Error retrieving companies', error: err.message });
   }
 };
@@ -16,12 +17,16 @@ export const getAllCompanies = async (req: Request, res: Response): Promise<void
 export const getCompanyById = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const company = await db.getCompanyById(id);
+    const [company, allJobs] = await Promise.all([
+      db.getCompanyById(id),
+      db.getJobs(),
+    ]);
+
     if (!company) {
       res.status(404).json({ message: 'Company not found.' });
       return;
     }
-    const allJobs = await db.getJobs();
+
     const jobs = allJobs.filter((j) => j.companyId === id);
     const companyRecruiters = await db.getRecruiters(id);
     const activeRecruiters = companyRecruiters.filter((r) => r.status === 'active');
@@ -36,6 +41,7 @@ export const getCompanyById = async (req: Request, res: Response): Promise<void>
       },
     });
   } catch (err: any) {
+    console.error('[companyController] getCompanyById error:', err);
     res.status(500).json({ message: 'Error retrieving company details', error: err.message });
   }
 };
@@ -114,6 +120,7 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
       company: newCompany,
     });
   } catch (err: any) {
+    console.error('[companyController] createCompany error:', err);
     res.status(500).json({ message: 'Error creating company', error: err.message });
   }
 };
@@ -210,6 +217,7 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
       company: updated,
     });
   } catch (err: any) {
+    console.error('[companyController] updateCompany error:', err);
     res.status(500).json({ message: 'Error updating company', error: err.message });
   }
 };
@@ -255,6 +263,7 @@ export const uploadCompanyLogo = async (req: AuthRequest, res: Response): Promis
       company: updated,
     });
   } catch (err: any) {
+    console.error('[companyController] uploadCompanyLogo error:', err);
     res.status(500).json({ message: 'Error uploading company logo', error: err.message });
   }
 };
@@ -290,6 +299,7 @@ export const getCompanyRecruiters = async (req: AuthRequest, res: Response): Pro
       recruiters: safeRecruiters,
     });
   } catch (err: any) {
+    console.error('[companyController] getCompanyRecruiters error:', err);
     res.status(500).json({ message: 'Error retrieving recruiters', error: err.message });
   }
 };
@@ -304,6 +314,7 @@ export const deleteCompany = async (req: AuthRequest, res: Response): Promise<vo
     }
     res.json({ message: 'Company deleted successfully.' });
   } catch (err: any) {
+    console.error('[companyController] deleteCompany error:', err);
     res.status(500).json({ message: 'Error deleting company', error: err.message });
   }
 };

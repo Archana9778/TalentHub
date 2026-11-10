@@ -46,7 +46,8 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       typeof val === 'string' && val.toLowerCase().includes(q);
 
     const matchArr = (arr: unknown, q: string): boolean =>
-      Array.isArray(arr) && (arr as unknown[]).some((el) => matchStr(el, q));
+      Array.isArray(arr) &&
+      (arr as unknown[]).some((el) => matchStr(el, q));
 
     // Keyword search over title, description, skills, company name, location, requirements, benefits
     if (search && typeof search === 'string') {
@@ -104,6 +105,7 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       if (!isNaN(max)) jobs = jobs.filter((j) => j.salaryMin <= max);
     }
 
+    // Featured only
     if (featuredOnly === 'true') {
       jobs = jobs.filter((j) => j.isFeatured);
     }
@@ -112,18 +114,18 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
     if (skills && typeof skills === 'string') {
       const skillList = skills
         .split(',')
-        .map((s) => s.toLowerCase().trim())
+        .map((s) => s.trim().toLowerCase())
         .filter(Boolean);
       if (skillList.length > 0) {
-        jobs = jobs.filter((j) => skillList.some((sk) => matchArr(j.skills, sk)));
+        jobs = jobs.filter((j) =>
+          skillList.some((sk) => matchArr(j.skills, sk))
+        );
       }
     }
 
-    res.json({
-      total: jobs.length,
-      jobs,
-    });
+    res.json({ total: jobs.length, jobs });
   } catch (err: any) {
+    console.error('[jobController] getAllJobs error:', err);
     res.status(500).json({ message: 'Error retrieving jobs', error: err.message });
   }
 };
@@ -134,11 +136,11 @@ export const getJobById = async (req: Request, res: Response): Promise<void> => 
     const job = await db.getJobById(id);
 
     if (!job) {
-      res.status(404).json({ message: 'Job posting not found.' });
+      res.status(404).json({ message: 'Job not found.' });
       return;
     }
 
-    // Increment view counter
+    // Increment views
     await db.incrementJobViews(id);
 
     const company = await db.getCompanyById(job.companyId);
@@ -158,6 +160,7 @@ export const getJobById = async (req: Request, res: Response): Promise<void> => 
         : null,
     });
   } catch (err: any) {
+    console.error('[jobController] getJobById error:', err);
     res.status(500).json({ message: 'Error retrieving job details', error: err.message });
   }
 };
@@ -282,7 +285,8 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
       job: newJob,
     });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error creating job', error: err.message });
+    console.error('[jobController] createJob error:', err);
+    res.status(500).json({ message: 'Error creating job posting', error: err.message });
   }
 };
 
@@ -316,12 +320,16 @@ export const updateJob = async (req: AuthRequest, res: Response): Promise<void> 
         });
         return;
       }
+    } else if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
+      res.status(403).json({ message: 'You do not have permission to edit this job posting.' });
+      return;
     }
 
     const updated = await db.updateJob(id, req.body);
     res.json({ message: 'Job updated successfully.', job: updated });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error updating job', error: err.message });
+    console.error('[jobController] updateJob error:', err);
+    res.status(500).json({ message: 'Error updating job posting', error: err.message });
   }
 };
 
@@ -354,12 +362,16 @@ export const deleteJob = async (req: AuthRequest, res: Response): Promise<void> 
         });
         return;
       }
+    } else if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
+      res.status(403).json({ message: 'You do not have permission to delete this job posting.' });
+      return;
     }
 
     await db.deleteJob(id);
     res.json({ message: 'Job posting deleted successfully.' });
   } catch (err: any) {
-    res.status(500).json({ message: 'Error deleting job', error: err.message });
+    console.error('[jobController] deleteJob error:', err);
+    res.status(500).json({ message: 'Error deleting job posting', error: err.message });
   }
 };
 
@@ -441,6 +453,7 @@ export const assignJob = async (req: AuthRequest, res: Response): Promise<void> 
       job: updatedJob,
     });
   } catch (err: any) {
+    console.error('[jobController] assignJob error:', err);
     res.status(500).json({ message: 'Error assigning job', error: err.message });
   }
 };
@@ -477,6 +490,7 @@ export const getRecruiterJobs = async (req: AuthRequest, res: Response): Promise
 
     res.json({ total: jobs.length, jobs });
   } catch (err: any) {
+    console.error('[jobController] getRecruiterJobs error:', err);
     res.status(500).json({ message: 'Error retrieving recruiter jobs', error: err.message });
   }
 };
@@ -488,30 +502,41 @@ export const reportJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const { jobId, reason, details } = req.body;
-    const targetJob = await db.getJobById(jobId);
+    const id = req.params.id as string;
+    const { reason, details } = req.body;
 
-    if (!targetJob) {
-      res.status(404).json({ message: 'Job to report does not exist.' });
+    if (!reason) {
+      res.status(400).json({ message: 'Reason for report is required.' });
       return;
     }
 
-    const report: ReportedJob = {
+    const targetJob = await db.getJobById(id);
+    if (!targetJob) {
+      res.status(404).json({ message: 'Job posting not found.' });
+      return;
+    }
+
+    const newReport: ReportedJob = {
       id: `rep-${uuidv4().substring(0, 8)}`,
-      jobId,
+      jobId: id,
       jobTitle: targetJob.title,
       companyName: targetJob.companyName,
       reportedByUserId: req.user.id,
       reportedByName: req.user.name,
-      reason: reason || 'Suspicious or inaccurate information',
-      details: details || 'Reported by candidate for admin review.',
+      reason,
+      details: details || '',
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
 
-    await db.createReportedJob(report);
-    res.status(201).json({ message: 'Job has been reported for administrator moderation.', report });
+    await db.createReportedJob(newReport);
+
+    res.status(201).json({
+      message: 'Job report filed. Our compliance team will review.',
+      report: newReport,
+    });
   } catch (err: any) {
+    console.error('[jobController] reportJob error:', err);
     res.status(500).json({ message: 'Error reporting job', error: err.message });
   }
 };
