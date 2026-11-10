@@ -22,33 +22,48 @@ if (!jwtSecret || jwtSecret.length < 32) {
 }
 
 export const config = {
-  port: parseInt(process.env.PORT || '5000', 10),
-  nodeEnv,
-  jwtSecret,
+  dbMode,
+  port: process.env.PORT || 5000,
+  nodeEnv: process.env.NODE_ENV || 'development',
+  jwtSecret: process.env.JWT_SECRET || 'talenthub-super-secret-azure-enterprise-key-2026',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
   uploadDir: path.resolve(__dirname, '../../uploads/resumes'),
-  corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
-  dbMode,
-
-  // MySQL 8.0 & Azure Database for MySQL Flexible Server Configuration
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '3306', 10),
-    user: process.env.DB_USER || '',
+    database: process.env.DB_NAME || 'talenthub',
+    user: process.env.DB_USER || 'talenthub_user',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || '',
-    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    connectionLimit: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
   },
-
-  // Azure Blob Storage & Azurite Configuration
+  database: {
+    driver: process.env.DB_DRIVER || 'mysql2',
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    name: process.env.DB_NAME || 'talenthub',
+    user: process.env.DB_USER || 'talenthub_user',
+    password: process.env.DB_PASSWORD || '',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
+    pool: {
+      min: parseInt(process.env.DB_POOL_MIN || '2', 10),
+      max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+    },
+  },
   storage: {
+    /** 'azurite' (local emulator) or 'azure' (production DefaultAzureCredential) */
     provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',
+    /** Azurite / local dev connection string */
     connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    /** Azure production account name (used with DefaultAzureCredential) */
     accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
+    /** Private container name */
     containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
+    /** Maximum resume file size in bytes (default 10 MB) */
     maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '10', 10) * 1024 * 1024,
+    /** Short-lived SAS URL expiry in minutes (default 15 min) */
     sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '15', 10),
   },
 };

@@ -24,7 +24,7 @@ import { config } from '../config';
 
 export interface UploadResult {
   blobName: string;
-  blobUrl: string;
+  blobUrl?: string;
   containerName: string;
   contentType: string;
   sizeBytes: number;
@@ -36,6 +36,7 @@ function buildBlobServiceClient(): BlobServiceClient {
   const provider = config.storage.provider;
 
   if (provider === 'azure') {
+    // Production: Managed Identity / DefaultAzureCredential
     const accountName = config.storage.accountName;
     if (!accountName) {
       throw new Error('[BlobStorage] AZURE_STORAGE_ACCOUNT_NAME is required for provider=azure');
@@ -74,6 +75,7 @@ export async function ensureContainer(): Promise<ContainerClient> {
     // Create private container (no anonymous access)
     await containerClient.createIfNotExists({ access: undefined });
     _containerEnsured = true;
+    console.log(`[BlobStorage] Container '${containerName}' ready.`);
   }
 
   return containerClient;
@@ -148,6 +150,11 @@ export async function generateReadSasUrl(
   return _generateAzuriteSasUrl(containerName, blobName, expiryMinutes);
 }
 
+/**
+ * Azurite: Shared Key SAS (the only mechanism supported by the emulator).
+ * Account key is sourced from AZURE_STORAGE_CONNECTION_STRING server-side only.
+ * Never sent to the client.
+ */
 function _generateAzuriteSasUrl(
   containerName: string,
   blobName: string,
@@ -165,17 +172,17 @@ function _generateAzuriteSasUrl(
   }
 
   const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
-  const startsOn = new Date(Date.now() - 5 * 60 * 1000);
+  const startsOn = new Date(Date.now() - 5 * 60 * 1000); // 5-minute clock skew tolerance
   const expiresOn = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const sasQueryParams = generateBlobSASQueryParameters(
     {
       containerName,
       blobName,
-      permissions: BlobSASPermissions.parse('r'),
+      permissions: BlobSASPermissions.parse('r'), // read-only
       startsOn,
       expiresOn,
-      protocol: SASProtocol.HttpsAndHttp,
+      protocol: SASProtocol.HttpsAndHttp, // Azurite runs on HTTP locally
     },
     sharedKeyCredential
   );
@@ -184,6 +191,10 @@ function _generateAzuriteSasUrl(
   return `${blobEndpoint}/${containerName}/${blobName}?${sasQueryParams.toString()}`;
 }
 
+/**
+ * Azure Production: User Delegation SAS via DefaultAzureCredential.
+ * Requires Storage Blob Data Reader role + Entra token.
+ */
 async function _generateAzureSasUrl(
   containerName: string,
   blobName: string,
@@ -220,6 +231,7 @@ export async function downloadBlobToBuffer(blobName: string): Promise<Buffer> {
   return await blockBlobClient.downloadToBuffer();
 }
 
+/** Health-check: returns true if the Blob service endpoint is reachable. */
 export async function pingBlobStorage(): Promise<boolean> {
   try {
     const client = getClient();
@@ -230,6 +242,8 @@ export async function pingBlobStorage(): Promise<boolean> {
     return false;
   }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function _parseConnectionString(connStr: string): Record<string, string> {
   const result: Record<string, string> = {};

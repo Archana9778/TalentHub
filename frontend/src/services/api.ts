@@ -9,6 +9,9 @@ import {
   ReportedJob,
   SystemStats,
   ApplicationStage,
+  MatchDetails,
+  CandidateJobMatch,
+  SkillComparisonResult,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -104,25 +107,43 @@ export const api = {
     return res.data;
   },
 
-  uploadResume: async (file: File) => {
+  uploadResume: async (file: File, onProgress?: (pct: number) => void) => {
     const formData = new FormData();
     formData.append('resume', file);
     const res = await apiClient.post<{
       message: string;
-      resumeUrl: string;
+      resume: any;
       user: User;
       parsedData: any;
     }>('/resume/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress
+        ? (evt: any) => {
+            const pct = evt.total ? Math.round((evt.loaded * 100) / evt.total) : 0;
+            onProgress(pct);
+          }
+        : undefined,
     });
     return res.data;
   },
 
-  getResumeDownloadUrl: async (candidateId?: string) => {
-    const url = candidateId ? `/resume/download/${candidateId}` : '/resume/download';
+  getMyResume: async () => {
+    const res = await apiClient.get<{ resume: any | null; message?: string }>('/resume/my');
+    return res.data;
+  },
+
+  getResumeHistory: async () => {
+    const res = await apiClient.get<{ total: number; history: any[] }>('/resume/history');
+    return res.data;
+  },
+
+  getResumeDownloadUrl: async (idOrCandidateId?: string) => {
+    const url = idOrCandidateId ? `/resume/download/${idOrCandidateId}` : '/resume/download';
     const res = await apiClient.get<{
-      candidateId: string;
-      originalName: string;
+      message?: string;
+      candidateId?: string;
+      originalName?: string;
+      filename?: string;
       downloadUrl: string;
       expiresInMinutes: number;
     }>(url);
@@ -208,10 +229,46 @@ export const api = {
     return res.data;
   },
 
-  getJobApplicants: async (jobId?: string, stage?: string) => {
-    const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications/applicants', {
-      params: { jobId: jobId !== 'all' ? jobId : undefined, stage: stage !== 'all' ? stage : undefined },
+  getJobApplicants: async (jobId?: string, stage?: string, sort?: 'highest' | 'lowest' | 'recent') => {
+    const res = await apiClient.get<{ total: number; sort?: string; applications: Application[] }>('/applications/applicants', {
+      params: {
+        jobId: jobId !== 'all' ? jobId : undefined,
+        stage: stage !== 'all' ? stage : undefined,
+        sort: sort || 'highest',
+      },
     });
+    return res.data;
+  },
+
+  getJobMatches: async (jobId: string, sort: 'highest' | 'lowest' | 'recent' = 'highest', stage: string = 'all') => {
+    const res = await apiClient.get<{
+      total: number;
+      jobId: string;
+      jobTitle: string;
+      companyName: string;
+      sort: string;
+      stage: string;
+      matches: CandidateJobMatch[];
+    }>(`/jobs/${jobId}/matches`, {
+      params: { sort, stage: stage !== 'all' ? stage : undefined },
+    });
+    return res.data;
+  },
+
+  getJobCandidateMatch: async (jobId: string, candidateId: string) => {
+    const res = await apiClient.get<{
+      job: Job;
+      candidate: User;
+      matchDetails: MatchDetails;
+      rank?: number;
+    }>(`/jobs/${jobId}/matches/${candidateId}`);
+    return res.data;
+  },
+
+  getCandidateSkillMatch: async (jobId: string, candidateId: string) => {
+    const res = await apiClient.get<SkillComparisonResult>(
+      `/jobs/${jobId}/candidates/${candidateId}/skill-match`
+    );
     return res.data;
   },
 

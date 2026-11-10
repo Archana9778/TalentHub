@@ -29,6 +29,7 @@ export interface User {
   location?: string;
   bio?: string;
   skills?: string[];
+  certifications?: string[];
   experience?: UserExperience[];
   education?: UserEducation[];
   resumeUrl?: string;
@@ -114,13 +115,59 @@ export interface StageTimelineItem {
   comment?: string;
 }
 
+export type MatchCategory = 'Excellent Match' | 'Good Match' | 'Moderate Match' | 'Low Match';
+
 export interface MatchDetails {
   score: number;
+  category?: MatchCategory;
   matchedSkills: string[];
   missingSkills: string[];
-  skillScore: number;
-  experienceScore: number;
+  skillScore: number; // 0-100 (40% weight)
+  experienceScore: number; // 0-100 (25% weight)
+  educationScore?: number; // 0-100 (15% weight)
+  certificationsScore?: number; // 0-100 (10% weight)
+  additionalScore?: number; // 0-100 (10% weight)
+  relevantExperience?: string[];
+  matchingCertifications?: string[];
+  missingQualifications?: string[];
   analysisNotes: string;
+}
+
+export interface CandidateJobMatch {
+  rank: number;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidateTitle?: string;
+  candidateAvatar?: string;
+  candidateLocation?: string;
+  candidatePhone?: string;
+  jobId: string;
+  jobTitle: string;
+  companyName: string;
+  applicationId?: string;
+  applicationStage?: ApplicationStage;
+  appliedDate?: string;
+  matchScore: number;
+  matchCategory: MatchCategory;
+  matchDetails: MatchDetails;
+}
+
+export interface SkillComparisonResult {
+  candidateId: string;
+  candidateName: string;
+  jobId: string;
+  jobTitle: string;
+  matchingPercentage: number;
+  totalRequiredSkills: number;
+  matchedCount: number;
+  missingCount: number;
+  additionalCount: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  additionalSkills: string[];
+  applicationId?: string;
+  applicationStage?: ApplicationStage;
 }
 
 export interface Application {
@@ -187,3 +234,46 @@ export interface SystemStats {
   timeToHireDaysAverage: number;
 }
 
+
+// ─── Match Results ────────────────────────────────────────────────────────────
+
+export interface MatchResult {
+  id: string;
+  applicationId: string;
+  candidateId: string;
+  jobId: string;
+  /** true = this is the most recent calculation; false = historical */
+  isLatest: boolean;
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  educationScore: number;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  analysisNotes?: string;
+  recruiterOverride?: number;
+  overrideById?: string;
+  overrideReason?: string;
+  computedAt: string;
+  createdAt: string;
+}
+
+// ─── Resume Documents (Blob Storage versions) ────────────────────────────────
+
+export type ResumeUploadStatus = 'uploaded' | 'failed' | 'deleted';
+
+export interface ResumeDocument {
+  id: string;
+  candidateId: string;
+  originalFilename: string;
+  blobName: string;
+  containerName: string;
+  fileExtension: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  checksumSha256: string;
+  uploadStatus: ResumeUploadStatus;
+  isCurrent: boolean;
+  uploadedAt: string;
+  createdAt: string;
+}
