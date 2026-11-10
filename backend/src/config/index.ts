@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 const dbMode = (process.env.DB_MODE || 'mysql').toLowerCase();
@@ -60,9 +61,9 @@ export const config = {
     accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
     /** Private container name */
     containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
-    /** Maximum resume file size in bytes (default 5 MB) */
-    maxResumeSizeBytes: parseInt(process.env.MAX_RESUME_SIZE_MB || '5', 10) * 1024 * 1024,
-    /** Short-lived SAS URL expiry in minutes (default 5 min) */
-    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || '5', 10),
+    /** Maximum resume file size in bytes (default 10 MB) */
+    maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '10', 10) * 1024 * 1024,
+    /** Short-lived SAS URL expiry in minutes (default 15 min) */
+    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '15', 10),
   },
 };

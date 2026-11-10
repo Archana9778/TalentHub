@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
+  Upload,
+  Download,
   FileText,
   Sparkles,
   Plus,
   Trash2,
   CheckCircle2,
   AlertCircle,
-  Download,
   Clock,
   RefreshCw,
   HardDrive,
@@ -108,16 +109,32 @@ export const Profile: React.FC = () => {
   const [skills, setSkills] = useState<string[]>(user?.skills || []);
   const [newSkill, setNewSkill] = useState('');
 
-  // Resume state
+  // Resume state & history
   const [resumeHistory, setResumeHistory] = useState<ResumeDocument[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadingResume, setUploadingResume] = useState(false);
+  const [downloadingResume, setDownloadingResume] = useState(false);
   const [resumeSuccess, setResumeSuccess] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadResume = async () => {
+    try {
+      setDownloadingResume(true);
+      setResumeError(null);
+      const res = await api.getResumeDownloadUrl();
+      if (res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      setResumeError(err.message || 'Failed to download resume.');
+    } finally {
+      setDownloadingResume(false);
+    }
+  };
 
   // Profile save feedback
   const [savingProfile, setSavingProfile] = useState(false);
@@ -178,7 +195,7 @@ export const Profile: React.FC = () => {
         setSelectedFile(null);
         return;
       }
-      const maxMb = 5;
+      const maxMb = 10;
       if (file.size > maxMb * 1024 * 1024) {
         setResumeError(`File exceeds the ${maxMb} MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB).`);
         setSelectedFile(null);
@@ -232,7 +249,6 @@ export const Profile: React.FC = () => {
     setDownloading(id);
     try {
       const { downloadUrl } = await api.getResumeDownloadUrl(id);
-      // Open SAS URL in new tab — the browser will download the file
       window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
       alert(`Could not generate download link: ${err.message}`);
@@ -276,7 +292,7 @@ export const Profile: React.FC = () => {
         </div>
 
         <p className="text-xs text-slate-500 leading-relaxed">
-          Upload a PDF or DOCX resume (max 5 MB). Your file is validated, checksummed and stored in Azure Blob Storage.
+          Upload a PDF or DOCX resume (max 10 MB). Your file is validated, checksummed and stored in Azure Blob Storage.
           A short-lived secure link is generated for downloads — no public URLs are created.
         </p>
 
@@ -295,13 +311,15 @@ export const Profile: React.FC = () => {
         )}
 
         {/* Current resume status */}
-        {currentResume ? (
+        {currentResume || user?.resumeOriginalName ? (
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3 text-xs">
             <HardDrive className="w-4 h-4 text-blue-600 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-slate-800 truncate">{currentResume.originalFilename}</p>
+              <p className="font-semibold text-slate-800 truncate">
+                Current Resume: {currentResume ? currentResume.originalFilename : user?.resumeOriginalName}
+              </p>
               <p className="text-slate-400">
-                {formatBytes(currentResume.fileSizeBytes)} &bull; Uploaded {formatDate(currentResume.uploadedAt)}
+                {currentResume ? `${formatBytes(currentResume.fileSizeBytes)} • Uploaded ${formatDate(currentResume.uploadedAt)}` : 'Stored securely in private cloud storage'}
               </p>
             </div>
           </div>
@@ -325,23 +343,44 @@ export const Profile: React.FC = () => {
           ) : (
             <div>
               <p className="text-sm font-bold text-slate-800">
-                {currentResume ? 'Replace current resume' : 'Upload your resume'}
+                {currentResume || user?.resumeOriginalName ? 'Replace current resume' : 'Upload your resume'}
               </p>
-              <p className="text-xs text-slate-400 mt-1">PDF or DOCX &bull; Max 5 MB</p>
+              <p className="text-xs text-slate-400 mt-1">PDF or DOCX &bull; Max 10 MB</p>
             </div>
           )}
 
-          <label className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors">
-            <span>{selectedFile ? 'Change file' : 'Choose file'}</span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx"
-              disabled={uploadingResume}
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </label>
+          <div className="flex items-center gap-3">
+            {(currentResume || user?.resumeUrl) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentResume) {
+                    handleDownload(currentResume.id, currentResume.originalFilename);
+                  } else {
+                    handleDownloadResume();
+                  }
+                }}
+                disabled={downloadingResume || downloading !== null}
+                className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Download Current</span>
+              </button>
+            )}
+
+            <label className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5">
+              <Upload className="w-3.5 h-3.5 text-slate-600" />
+              <span>{selectedFile ? 'Change file' : 'Choose file'}</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx"
+                disabled={uploadingResume}
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
 
         {/* Progress bar — shown during upload */}
@@ -366,7 +405,7 @@ export const Profile: React.FC = () => {
           disabled={!selectedFile || uploadingResume}
           className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm shadow-sm transition-colors disabled:cursor-not-allowed"
         >
-          {uploadingResume ? `Uploading… (${uploadProgress}%)` : currentResume ? 'Replace Resume' : 'Upload Resume'}
+          {uploadingResume ? `Uploading… (${uploadProgress}%)` : (currentResume || user?.resumeOriginalName) ? 'Replace Resume' : 'Upload Resume'}
         </button>
       </div>
 

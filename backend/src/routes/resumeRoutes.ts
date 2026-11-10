@@ -3,6 +3,7 @@ import {
   uploadResume as uploadResumeController,
   getMyResume,
   getResumeHistory,
+  downloadResume,
   getResumeDownloadUrl,
   parseResume,
 } from '../controllers/resumeController';
@@ -16,8 +17,7 @@ router.use(authenticateToken);
 
 /**
  * POST /api/resume/upload
- * Upload (or replace) the authenticated candidate's resume.
- * Accepts: multipart/form-data, field name "resume".
+ * Candidate uploads resume (PDF/DOCX)
  */
 router.post(
   '/upload',
@@ -28,28 +28,31 @@ router.post(
 
 /**
  * GET /api/resume/my
- * Returns the current resume metadata for the authenticated candidate.
+ * Current resume metadata for authenticated candidate
  */
 router.get('/my', requireRoles('candidate'), getMyResume);
 
 /**
  * GET /api/resume/history
- * Returns all resume version records for the authenticated candidate.
+ * All resume version records for authenticated candidate
  */
 router.get('/history', requireRoles('candidate'), getResumeHistory);
 
 /**
+ * GET /api/resume/download
+ * Secure authenticated resume download (own resume)
+ */
+router.get('/download', downloadResume);
+
+/**
  * GET /api/resume/download/:id
- * Generates a short-lived SAS URL for a specific resume document.
- * Candidates: own resumes only.
- * Recruiters: only if they manage a job the candidate applied to.
- * Admins: unrestricted.
+ * Secure authorized resume download for candidate / recruiter / admin
  */
 router.get('/download/:id', getResumeDownloadUrl);
 
 /**
  * POST /api/resume/parse
- * Azure AI Document Intelligence simulation (no file storage).
+ * AI heuristic parsing test endpoint
  */
 router.post('/parse', uploadResume.single('resume'), parseResume);
 

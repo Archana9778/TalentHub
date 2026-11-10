@@ -10,6 +10,7 @@
  */
 import crypto from 'crypto';
 import { validateResumeBuffer, sanitizeFilename } from '../services/resumeValidationService';
+import { generateReadSasUrl } from '../services/blobStorageService';
 
 // ─── Minimal synthetic file buffers ──────────────────────────────────────────
 
@@ -146,6 +147,13 @@ async function main(): Promise<void> {
     assert(r.errorCode === 'EMPTY', `expected EMPTY, got: ${r.errorCode}`);
   });
 
+  await test('Legacy .doc file rejected (BAD_EXTENSION)', async () => {
+    const docBuffer = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    const r = await validateResumeBuffer(docBuffer, 'resume.doc', MAX_SIZE_BYTES);
+    assert(!r.valid, 'expected invalid');
+    assert(r.errorCode === 'BAD_EXTENSION', `expected BAD_EXTENSION, got: ${r.errorCode}`);
+  });
+
   await test('PNG file rejected (BAD_EXTENSION)', async () => {
     const r = await validateResumeBuffer(VALID_PDF, 'photo.png', MAX_SIZE_BYTES);
     assert(!r.valid, 'expected invalid');
@@ -227,6 +235,16 @@ async function main(): Promise<void> {
   await test('sanitizeFilename preserves safe alphanumeric names', () => {
     const result = sanitizeFilename('John_Doe_Resume-2026.pdf');
     assert(result === 'John_Doe_Resume-2026.pdf', `expected unchanged, got: ${result}`);
+  });
+
+  // ── D. Azure Blob & SAS Generation ─────────────────────────────────────────
+
+  await test('generateReadSasUrl produces valid signed SAS URL for Azurite', async () => {
+    const sasUrl = await generateReadSasUrl('resumes/candidate-1/test-resume.pdf', 15);
+    assert(typeof sasUrl === 'string', 'expected string SAS URL');
+    assert(sasUrl.includes('sig='), 'expected signature parameter "sig=" in SAS URL');
+    assert(sasUrl.includes('sp=r'), 'expected read-only permission "sp=r" in SAS URL');
+    assert(sasUrl.includes('se='), 'expected expiry parameter "se=" in SAS URL');
   });
 
   // ── Summary ────────────────────────────────────────────────────────────────

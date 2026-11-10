@@ -48,6 +48,22 @@ export const ApplicantDetails: React.FC = () => {
   const [interviewDate, setInterviewDate] = useState('');
   const [updatingStage, setUpdatingStage] = useState(false);
   const [stageSuccess, setStageSuccess] = useState<string | null>(null);
+  const [loadingResume, setLoadingResume] = useState(false);
+
+  const handleViewResume = async () => {
+    if (!application?.candidateId) return;
+    try {
+      setLoadingResume(true);
+      const res = await api.getResumeDownloadUrl(application.candidateId);
+      if (res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Unable to load candidate resume.');
+    } finally {
+      setLoadingResume(false);
+    }
+  };
 
   // Modals
   const [matchModalOpen, setMatchModalOpen] = useState(false);
@@ -215,15 +231,15 @@ export const ApplicantDetails: React.FC = () => {
               </div>
             </button>
 
-            <a
-              href={application.resumeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
+            <button
+              type="button"
+              onClick={handleViewResume}
+              disabled={loadingResume}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
             >
               <FileText className="w-4 h-4" />
-              <span>View Resume File</span>
-            </a>
+              <span>{loadingResume ? 'Opening Resume...' : 'View Resume File'}</span>
+            </button>
           </div>
         </div>
       </div>
