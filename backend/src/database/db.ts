@@ -35,6 +35,7 @@ interface DatabaseSchema {
   jobAlerts: JobAlert[];
   passwordResetTokens: PasswordResetToken[];
   revokedTokens: RevokedToken[];
+  resumeDocuments: ResumeDocument[];
 }
 
 class DatabaseManager {
@@ -53,6 +54,7 @@ class DatabaseManager {
       jobAlerts: [],
       passwordResetTokens: [],
       revokedTokens: [],
+      resumeDocuments: [],
     };
     if (config.dbMode === 'json') this.initJson();
   }
@@ -110,6 +112,7 @@ class DatabaseManager {
       jobAlerts: [...initialJobAlerts],
       passwordResetTokens: [],
       revokedTokens: [],
+      resumeDocuments: [],
     };
     this.persistJson();
   }
@@ -511,24 +514,56 @@ class DatabaseManager {
   // ==========================================
   // RESUME DOCUMENTS (Blob Storage support)
   // ==========================================
-  async getCurrentResume(_candidateId: string): Promise<ResumeDocument | undefined> {
-    return undefined;
+  async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
+    if (this.isMysql) return mysqlRepository.getCurrentResume(candidateId);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments.find(
+      (r) => r.candidateId === candidateId && r.isCurrent && r.uploadStatus === 'uploaded'
+    );
   }
 
-  async getResumeHistory(_candidateId: string): Promise<ResumeDocument[]> {
-    return [];
+  async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
+    if (this.isMysql) return mysqlRepository.getResumeHistory(candidateId);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments
+      .filter((r) => r.candidateId === candidateId && r.uploadStatus !== 'failed')
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   }
 
-  async getResumeDocById(_id: string): Promise<ResumeDocument | undefined> {
-    return undefined;
+  async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
+    if (this.isMysql) return mysqlRepository.getResumeDocById(id);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments.find((r) => r.id === id);
   }
 
   async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
-    return doc;
+    if (this.isMysql) return mysqlRepository.createResumeDocument(doc);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    this.data.resumeDocuments.forEach((r) => {
+      if (r.candidateId === doc.candidateId && r.isCurrent) {
+        r.isCurrent = false;
+      }
+    });
+    const newDoc: ResumeDocument = { ...doc, isCurrent: true };
+    this.data.resumeDocuments.push(newDoc);
+    const user = this.data.users.find((u) => u.id === doc.candidateId);
+    if (user) {
+      user.resumeUrl = `blob://${doc.containerName || 'talenthub-resumes'}/${doc.blobName}`;
+      user.resumeOriginalName = doc.originalFilename;
+    }
+    this.persistJson();
+    return newDoc;
   }
 
-  async markResumeDeleted(_id: string): Promise<void> {
-    // no-op
+  async markResumeDeleted(id: string): Promise<void> {
+    if (this.isMysql) return mysqlRepository.markResumeDeleted(id);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((r) => r.id === id);
+    if (doc) {
+      doc.uploadStatus = 'deleted';
+      doc.isCurrent = false;
+      this.persistJson();
+    }
   }
 }
 

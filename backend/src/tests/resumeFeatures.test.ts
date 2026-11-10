@@ -11,7 +11,7 @@
  */
 
 import crypto from 'crypto';
-import { uploadResume, downloadResume } from '../controllers/resumeController';
+import { uploadResume, downloadResume, getMyResume, getResumeHistory } from '../controllers/resumeController';
 import { BlobStorageService } from '../services/blobStorageService';
 import { db } from '../database/db';
 import { User, Application, Job } from '../types';
@@ -176,6 +176,10 @@ async function main(): Promise<void> {
   const originalUpdateUser = db.updateUser.bind(db);
   const originalGetApplicationsByCandidateId = db.getApplicationsByCandidateId.bind(db);
   const originalGetJobById = db.getJobById.bind(db);
+  const originalCreateResumeDocument = db.createResumeDocument.bind(db);
+  const originalGetCurrentResume = db.getCurrentResume.bind(db);
+  const originalGetResumeHistory = db.getResumeHistory.bind(db);
+  const originalGetResumeDocById = db.getResumeDocById.bind(db);
 
   // Mock Blob Storage upload & delete to verify interactions without external services
   let uploadedBlobs: string[] = [];
@@ -483,12 +487,104 @@ async function main(): Promise<void> {
       assert(res.body.message.includes('not authorized'), 'Expected authorization error message');
     });
 
+    // ── 5. RESUME DOCUMENT VERSIONING & METADATA ─────────────────────────────
+
+    await test('Versioned resume storage: second upload demotes first upload to isCurrent=false, keeping both in history', async () => {
+      const storedDocs: any[] = [];
+      db.createResumeDocument = async (doc: any) => {
+        storedDocs.forEach((d) => {
+          if (d.candidateId === doc.candidateId) d.isCurrent = false;
+        });
+        const saved = { ...doc, isCurrent: true };
+        storedDocs.push(saved);
+        return saved;
+      };
+      db.getCurrentResume = async (candId: string) => storedDocs.find((d) => d.candidateId === candId && d.isCurrent);
+      db.getResumeHistory = async (candId: string) => storedDocs.filter((d) => d.candidateId === candId);
+      db.getResumeDocById = async (id: string) => storedDocs.find((d) => d.id === id);
+      db.updateUser = async (id: string, updates: Partial<User>) => ({ ...testCandidate, ...updates });
+
+      // First upload: PDF
+      const req1: any = {
+        user: { ...testCandidate },
+        file: { originalname: 'Version_1.pdf', buffer: VALID_PDF },
+      };
+      const res1 = createMockResponse();
+      await uploadResume(req1, res1);
+      assert(res1.statusCode === 200, `Expected 200 for upload 1, got ${res1.statusCode}`);
+      const doc1Id = res1.body.resume.id;
+
+      // Second upload: DOCX
+      const req2: any = {
+        user: { ...testCandidate },
+        file: { originalname: 'Version_2.docx', buffer: VALID_DOCX },
+      };
+      const res2 = createMockResponse();
+      await uploadResume(req2, res2);
+      assert(res2.statusCode === 200, `Expected 200 for upload 2, got ${res2.statusCode}`);
+      const doc2Id = res2.body.resume.id;
+
+      // Verify versioning in storage
+      assert(storedDocs.length === 2, `Expected 2 stored documents, found ${storedDocs.length}`);
+      const doc1 = storedDocs.find((d) => d.id === doc1Id);
+      const doc2 = storedDocs.find((d) => d.id === doc2Id);
+      assert(doc1 && doc1.isCurrent === false, 'Expected first upload to be demoted to isCurrent=false');
+      assert(doc2 && doc2.isCurrent === true, 'Expected second upload to be isCurrent=true');
+
+      // Verify getMyResume endpoint returns latest current resume
+      const reqMy: any = { user: { ...testCandidate } };
+      const resMy = createMockResponse();
+      await getMyResume(reqMy, resMy);
+      assert(resMy.statusCode === 200, 'Expected 200 from getMyResume');
+      assert(resMy.body.resume.id === doc2Id, 'Expected getMyResume to return version 2');
+
+      // Verify getResumeHistory returns both versions
+      const reqHist: any = { user: { ...testCandidate } };
+      const resHist = createMockResponse();
+      await getResumeHistory(reqHist, resHist);
+      assert(resHist.statusCode === 200, 'Expected 200 from getResumeHistory');
+      assert(resHist.body.total === 2, `Expected 2 resumes in history, got ${resHist.body.total}`);
+
+      // Verify download by document ID (rdoc-...)
+      const reqDownDoc: any = {
+        user: { ...testCandidate },
+        params: { id: doc1Id },
+        query: {},
+      };
+      const resDownDoc = createMockResponse();
+      await downloadResume(reqDownDoc, resDownDoc);
+      assert(resDownDoc.statusCode === 200, `Expected 200 when downloading by document ID, got ${resDownDoc.statusCode}`);
+      assert(resDownDoc.body.originalName === 'Version_1.pdf', 'Expected Version 1 original filename in download');
+    });
+
+    await test('Orphan blob cleanup: deletes uploaded blob if createResumeDocument fails', async () => {
+      deletedBlobs = [];
+      db.createResumeDocument = async () => {
+        throw new Error('Database disk full');
+      };
+
+      const req: any = {
+        user: { ...testCandidate },
+        file: { originalname: 'Fail_Doc.pdf', buffer: VALID_PDF },
+      };
+      const res = createMockResponse();
+      await uploadResume(req, res);
+
+      assert(res.statusCode === 500, `Expected 500 on createResumeDocument error, got ${res.statusCode}`);
+      assert(deletedBlobs.length > 0, 'Expected uploaded blob to be deleted upon createResumeDocument failure');
+      assert(deletedBlobs[0].startsWith(`resumes/${testCandidate.id}/`), 'Deleted blob name matches candidate upload');
+    });
+
   } finally {
     // Restore mocks
     db.getUserById = originalGetUserById;
     db.updateUser = originalUpdateUser;
     db.getApplicationsByCandidateId = originalGetApplicationsByCandidateId;
     db.getJobById = originalGetJobById;
+    db.createResumeDocument = originalCreateResumeDocument;
+    db.getCurrentResume = originalGetCurrentResume;
+    db.getResumeHistory = originalGetResumeHistory;
+    db.getResumeDocById = originalGetResumeDocById;
     BlobStorageService.uploadResumeBuffer = originalUpload;
     BlobStorageService.deleteBlob = originalDelete;
   }

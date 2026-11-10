@@ -171,6 +171,9 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
   } catch (userDbErr) {
     console.error('[resumeController] User record update failed after blob upload — cleaning up blob:', blobName, userDbErr);
     await BlobStorageService.deleteBlob(blobName);
+    if (typeof (db as any).markResumeDeleted === 'function') {
+      await (db as any).markResumeDeleted(doc.id).catch(() => {});
+    }
     res.status(500).json({ message: 'Failed to update user profile with resume details.' });
     return;
   }
@@ -317,6 +320,16 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
         blobName = extractBlobName(targetUser.resumeUrl);
         originalFilename = targetUser.resumeOriginalName || 'resume.pdf';
         candidateId = targetUser.id;
+      }
+    }
+
+    // If still not found and targetId could be a candidateId, check current resume document
+    if (!blobName && typeof (db as any).getCurrentResume === 'function') {
+      const currentDoc = await (db as any).getCurrentResume(targetId);
+      if (currentDoc && currentDoc.uploadStatus !== 'deleted') {
+        blobName = currentDoc.blobName;
+        originalFilename = currentDoc.originalFilename;
+        candidateId = currentDoc.candidateId;
       }
     }
 
