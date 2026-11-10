@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 const dbMode = (process.env.DB_MODE || 'mysql').toLowerCase();
@@ -39,5 +40,15 @@ export const config = {
     database: process.env.DB_NAME || '',
     connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+  },
+
+  // Azure Blob Storage & Azurite Configuration
+  storage: {
+    provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
+    containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
+    maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '10', 10) * 1024 * 1024,
+    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '15', 10),
   },
 };

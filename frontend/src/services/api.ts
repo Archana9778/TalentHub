@@ -118,6 +118,17 @@ export const api = {
     return res.data;
   },
 
+  getResumeDownloadUrl: async (candidateId?: string) => {
+    const url = candidateId ? `/resume/download/${candidateId}` : '/resume/download';
+    const res = await apiClient.get<{
+      candidateId: string;
+      originalName: string;
+      downloadUrl: string;
+      expiresInMinutes: number;
+    }>(url);
+    return res.data;
+  },
+
   parseResume: async (file?: File) => {
     if (file) {
       const formData = new FormData();

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   User,
   Upload,
+  Download,
   FileText,
   Sparkles,
   Plus,
@@ -28,10 +29,26 @@ export const Profile: React.FC = () => {
   const [skills, setSkills] = useState<string[]>(user?.skills || []);
   const [newSkill, setNewSkill] = useState('');
 
-  // Resume upload
+  // Resume upload & download
   const [uploadingResume, setUploadingResume] = useState(false);
+  const [downloadingResume, setDownloadingResume] = useState(false);
   const [resumeSuccess, setResumeSuccess] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState<string | null>(null);
+
+  const handleDownloadResume = async () => {
+    try {
+      setDownloadingResume(true);
+      setResumeError(null);
+      const res = await api.getResumeDownloadUrl();
+      if (res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank');
+      }
+    } catch (err: any) {
+      setResumeError(err.message || 'Failed to download resume.');
+    } finally {
+      setDownloadingResume(false);
+    }
+  };
 
   // Profile save feedback
   const [savingProfile, setSavingProfile] = useState(false);
@@ -154,19 +171,34 @@ export const Profile: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-xs">
-            Supports PDF, DOC, DOCX up to 10MB
+            Supports PDF, DOCX up to 10MB
           </p>
 
-          <label className="mt-4 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors">
-            <span>{uploadingResume ? 'Processing Resume...' : 'Upload New Resume'}</span>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              disabled={uploadingResume}
-              onChange={handleResumeUpload}
-              className="hidden"
-            />
-          </label>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            {user?.resumeUrl && (
+              <button
+                type="button"
+                onClick={handleDownloadResume}
+                disabled={downloadingResume}
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
+              >
+                <Download className="w-4 h-4 text-blue-600" />
+                <span>{downloadingResume ? 'Loading...' : 'Download Stored Resume'}</span>
+              </button>
+            )}
+
+            <label className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              <span>{uploadingResume ? 'Processing Resume...' : 'Upload New Resume'}</span>
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                disabled={uploadingResume}
+                onChange={handleResumeUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
 
         {user?.parsedResumeData && (
