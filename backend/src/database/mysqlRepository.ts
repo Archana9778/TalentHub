@@ -8,6 +8,8 @@ import {
   Application,
   ReportedJob,
   JobAlert,
+  PasswordResetToken,
+  RevokedToken,
 } from '../types';
 
 export class MySqlRepository {
@@ -36,8 +38,8 @@ export class MySqlRepository {
       `INSERT INTO users (
         id, email, password_hash, name, role, status, title, location, phone,
         avatar_url, bio, company_id, company_name, resume_url, resume_original_name, skills_json,
-        experience_json, education_json, parsed_resume_data_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        experience_json, education_json, parsed_resume_data_json, token_version, last_login_at, password_changed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id,
         user.email,
@@ -58,6 +60,9 @@ export class MySqlRepository {
         JSON.stringify(user.experience || []),
         JSON.stringify(user.education || []),
         user.parsedResumeData ? JSON.stringify(user.parsedResumeData) : null,
+        user.tokenVersion || 1,
+        user.lastLoginAt ? new Date(user.lastLoginAt) : null,
+        user.passwordChangedAt ? new Date(user.passwordChangedAt) : null,
       ]
     );
     return user;
@@ -88,6 +93,9 @@ export class MySqlRepository {
     if (updates.experience !== undefined) { fields.push('experience_json = ?'); values.push(JSON.stringify(updates.experience)); }
     if (updates.education !== undefined) { fields.push('education_json = ?'); values.push(JSON.stringify(updates.education)); }
     if (updates.parsedResumeData !== undefined) { fields.push('parsed_resume_data_json = ?'); values.push(JSON.stringify(updates.parsedResumeData)); }
+    if (updates.tokenVersion !== undefined) { fields.push('token_version = ?'); values.push(updates.tokenVersion); }
+    if (updates.lastLoginAt !== undefined) { fields.push('last_login_at = ?'); values.push(updates.lastLoginAt ? new Date(updates.lastLoginAt) : null); }
+    if (updates.passwordChangedAt !== undefined) { fields.push('password_changed_at = ?'); values.push(updates.passwordChangedAt ? new Date(updates.passwordChangedAt) : null); }
 
     if (fields.length > 0) {
       values.push(id);
@@ -563,6 +571,69 @@ export class MySqlRepository {
     return result.affectedRows > 0;
   }
 
+  // --- Password Reset Tokens ---
+  async createPasswordResetToken(token: PasswordResetToken): Promise<PasswordResetToken> {
+    await this.pool.query(
+      `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at) VALUES (?, ?, ?, ?, ?)`,
+      [
+        token.id,
+        token.userId,
+        token.tokenHash,
+        new Date(token.expiresAt),
+        token.usedAt ? new Date(token.usedAt) : null,
+      ]
+    );
+    return token;
+  }
+
+  async getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM password_reset_tokens WHERE token_hash = ? ORDER BY created_at DESC LIMIT 1',
+      [tokenHash]
+    );
+    if (!rows || rows.length === 0) return undefined;
+    const r = rows[0];
+    return {
+      id: r.id,
+      userId: r.user_id,
+      tokenHash: r.token_hash,
+      expiresAt: new Date(r.expires_at).toISOString(),
+      usedAt: r.used_at ? new Date(r.used_at).toISOString() : null,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [id]
+    );
+  }
+
+  async invalidateUserResetTokens(userId: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL',
+      [userId]
+    );
+  }
+
+  // --- Token Revocation / Blacklist ---
+  async revokeToken(token: RevokedToken): Promise<RevokedToken> {
+    await this.pool.query(
+      'INSERT INTO revoked_tokens (id, token_jti, expires_at) VALUES (?, ?, ?)',
+      [token.id, token.tokenJti, new Date(token.expiresAt)]
+    );
+    return token;
+  }
+
+  async isTokenRevoked(tokenJti: string): Promise<boolean> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT COUNT(*) as count FROM revoked_tokens WHERE token_jti = ? AND expires_at > CURRENT_TIMESTAMP',
+      [tokenJti]
+    );
+    return rows && rows[0] && Number(rows[0].count) > 0;
+  }
+
   // --- Mappers ---
   private parseJson<T>(value: any, fallback: T): T {
     if (value === null || value === undefined) return fallback;
@@ -601,7 +672,11 @@ export class MySqlRepository {
       experience: this.parseJson(row.experience_json, []),
       education: this.parseJson(row.education_json, []),
       parsedResumeData: this.parseJson(row.parsed_resume_data_json, undefined),
+      tokenVersion: row.token_version !== undefined && row.token_version !== null ? Number(row.token_version) : 1,
+      lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : undefined,
+      passwordChangedAt: row.password_changed_at ? new Date(row.password_changed_at).toISOString() : undefined,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
     };
   }
 

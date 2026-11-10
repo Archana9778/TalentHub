@@ -51,8 +51,8 @@ This document outlines architectural nuances, external dependencies, and recomme
 
 ## 7. Verification Coverage and Remaining Security Work
 
-- There is no dedicated unit-test suite. Current integration scripts cover primary candidate, recruiter, admin-auth, application, interview, and audit workflows; company/category/admin CRUD paths have not all been exercised over HTTP.
+- There is an in-process automated security test suite (`npm run test:auth` covering 47 assertion groups across registration, login, logout, role enforcement, and password reset). Integration scripts cover primary candidate, recruiter, admin-auth, application, interview, and audit workflows; company/category/admin CRUD paths have not all been exercised over HTTP.
 - Resume uploads are limited by extension and size and are stored on the local filesystem. File-content inspection, malware scanning, and object storage are not implemented.
 - The schema has a foreign key for application stage history but does not enforce every business relationship. Review existing records before adding constraints.
-- Login rate limiting, refresh-token rotation, and cookie-based token storage are not implemented. JWTs remain in browser `localStorage`.
+- Login, registration, and password reset rate limiting are implemented using an in-memory sliding window limiter. HttpOnly session cookies and server-side token revocation (`revoked_tokens` table and `token_version` invalidation) are active. In the frontend SPA, tokens are stored solely in memory (`api.ts`) rather than in persistent `localStorage`.
 - The container smoke test created separate `talenthub-clean-review` and `talenthub-codex-review` test volumes. They remain stopped and intact; remove them manually only when you decide their test data is no longer needed.

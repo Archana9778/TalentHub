@@ -5,7 +5,8 @@ dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-const dbMode = (process.env.DB_MODE || 'mysql').toLowerCase();
+// DB_MODE defaults to 'mysql'. Can be overridden with 'json' for development or testing.
+const dbMode = (process.env.DB_MODE || (process.env.DB_DRIVER === 'json' ? 'json' : 'mysql')).toLowerCase();
 if (!['mysql', 'json'].includes(dbMode)) {
   throw new Error(`Invalid DB_MODE "${dbMode}". Use "mysql" or "json".`);
 }
@@ -21,37 +22,76 @@ if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error('JWT_SECRET must be set to a random value of at least 32 characters.');
 }
 
+const rawCorsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const parsedCorsOrigin = rawCorsOrigin
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+// Reject dangerous wildcard CORS when credentials/cookies are in use
+const safeCorsOrigin = parsedCorsOrigin.includes('*')
+  ? (nodeEnv === 'production'
+      ? ['http://localhost:5173'] // Never allow wildcard in production
+      : false) // Block or restrict in dev
+  : parsedCorsOrigin;
+
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbPort = parseInt(process.env.DB_PORT || '3306', 10);
+const dbName = process.env.DB_NAME || 'talenthub';
+const dbUser = process.env.DB_USER || 'talenthub_user';
+const dbPassword = process.env.DB_PASSWORD || '';
+const dbSsl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined;
+const dbPoolMin = parseInt(process.env.DB_POOL_MIN || '2', 10);
+const dbPoolMax = parseInt(process.env.DB_POOL_MAX || '10', 10);
+
 export const config = {
+  port: parseInt(process.env.PORT || '5000', 10),
+  nodeEnv,
   dbMode,
-  port: process.env.PORT || 5000,
-  nodeEnv: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET || 'talenthub-super-secret-azure-enterprise-key-2026',
+  jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
   uploadDir: path.resolve(__dirname, '../../uploads/resumes'),
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'talenthub',
-    user: process.env.DB_USER || 'talenthub_user',
-    password: process.env.DB_PASSWORD || '',
-    connectionLimit: parseInt(process.env.DB_POOL_MAX || '10', 10),
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
+  corsOrigin: safeCorsOrigin,
+  frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  authCookieName: 'talenthub_token',
+  passwordResetExpiresMinutes: parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES || '15', 10),
+
+  // SMTP Email Configuration for password reset and notifications
+  email: {
+    host: process.env.SMTP_HOST || '',
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    user: process.env.SMTP_USER || '',
+    password: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'TalentHub Security <no-reply@talenthub.com>',
+    secure: process.env.SMTP_SECURE === 'true',
   },
   database: {
-    driver: process.env.DB_DRIVER || 'mysql2',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    name: process.env.DB_NAME || 'talenthub',
-    user: process.env.DB_USER || 'talenthub_user',
-    password: process.env.DB_PASSWORD || '',
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
+    driver: process.env.DB_DRIVER || (dbMode === 'json' ? 'json' : 'mysql2'),
+    host: dbHost,
+    port: dbPort,
+    name: dbName,
+    user: dbUser,
+    password: dbPassword,
+    ssl: dbSsl,
     pool: {
-      min: parseInt(process.env.DB_POOL_MIN || '2', 10),
-      max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+      min: dbPoolMin,
+      max: dbPoolMax,
     },
   },
+
+  // MySQL 8.0 connection pool configuration
+  db: {
+    host: dbHost,
+    port: dbPort,
+    user: dbUser,
+    password: dbPassword,
+    database: dbName,
+    connectionLimit: dbPoolMax,
+    ssl: dbSsl,
+  },
+
+  // Azure Blob Storage / Azurite configuration
   storage: {
     /** 'azurite' (local emulator) or 'azure' (production DefaultAzureCredential) */
     provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',

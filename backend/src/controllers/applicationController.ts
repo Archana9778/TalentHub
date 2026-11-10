@@ -122,8 +122,9 @@ export const getJobApplicants = async (req: AuthRequest, res: Response): Promise
     // If specific job is requested
     if (jobId && typeof jobId === 'string' && jobId !== 'all') {
       applications = applications.filter((a) => a.jobId === jobId);
-    } else if (req.user.role === 'recruiter') {
-      // Only return applications for jobs belonging to this recruiter
+    }
+    if (req.user.role === 'recruiter') {
+      // Only return applications for jobs belonging to this recruiter (even when a specific jobId is requested)
       const allJobs = await db.getJobs();
       const recruiterJobs = allJobs.filter((j) => j.recruiterId === req.user!.id);
       const recruiterJobIds = new Set(recruiterJobs.map((j) => j.id));

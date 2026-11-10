@@ -6,98 +6,146 @@ This document describes the implemented Node.js + Express.js + TypeScript API (`
 
 ## 🔐 Authentication & Headers
 
-All protected endpoints require a valid JSON Web Token (JWT) provided in the HTTP Authorization header:
-
+Protected endpoints accept authentication via either:
+1. **HttpOnly Cookie** (`talenthub_token`) automatically transmitted by browsers with `credentials: include` / `withCredentials: true`.
+2. **Authorization Header**:
 ```http
 Authorization: Bearer <jwt_token>
 ```
 
 ### Roles
-- `candidate` (`ROLE_CANDIDATE`)
-- `recruiter` (`ROLE_RECRUITER`)
-- `admin` (`ROLE_ADMIN`)
+- `candidate`
+- `recruiter`
+- `admin` (or `administrator`)
 
 ---
 
 ## 1. Authentication Endpoints (`/api/auth`)
 
-### 1.1 Candidate Registration
+### 1.1 User Registration
 - **Endpoint**: `POST /api/auth/register`
-- **Access**: Public
+- **Access**: Public (Candidate & Recruiter)
+- **Rate Limit**: 15 requests / 60 minutes
+- **Password Policy**:
+  - Minimum 12 characters, maximum 128 characters.
+  - Requires uppercase letter, lowercase letter, number, and special character.
+  - Commonly compromised passwords and dictionary patterns are rejected.
+- **Role Rules**:
+  - `candidate`: requires `name`, `email`, `password`.
+  - `recruiter`: requires `name`, `email`, `password`, and `companyName`.
+  - Public registration as `admin` is strictly forbidden (HTTP 403).
 - **Request Body**:
 ```json
 {
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "password": "Password123!",
+  "name": "Alex Morgan",
+  "email": "alex.morgan@example.com",
+  "password": "SecurePass2026!#",
+  "confirmPassword": "SecurePass2026!#",
   "role": "candidate",
   "title": "Senior Frontend Engineer",
-  "location": "Seattle, WA",
-  "phone": "+1 (555) 234-5678",
-  "skills": ["React", "TypeScript", "Tailwind CSS"]
+  "location": "Seattle, WA"
 }
 ```
 - **Response** `201 Created`:
 ```json
 {
+  "message": "Account registered successfully.",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
-    "id": "cand-001",
-    "name": "Jane Doe",
-    "email": "jane@example.com",
+    "id": "user-8a9b1c2d",
+    "name": "Alex Morgan",
+    "email": "alex.morgan@example.com",
     "role": "candidate",
-    "title": "Senior Frontend Engineer",
-    "location": "Seattle, WA",
-    "skills": ["React", "TypeScript", "Tailwind CSS"]
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    "status": "active"
+  }
 }
 ```
 
 ### 1.2 User Login
 - **Endpoint**: `POST /api/auth/login`
 - **Access**: Public
+- **Rate Limit**: 10 requests / 15 minutes
+- **Security**: Timing-attack protected with constant-time password comparison and identical error responses preventing account enumeration. Sets secure, HttpOnly, SameSite session cookie.
 - **Request Body**:
 ```json
 {
-  "email": "recruiter@techcorp.com",
+  "email": "candidate@talenthub.com",
   "password": "password123"
 }
 ```
 - **Response** `200 OK`:
 ```json
 {
+  "message": "Login successful.",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
-    "id": "rec-001",
+    "id": "user-candidate-1",
     "name": "Alex Morgan",
-    "email": "recruiter@techcorp.com",
-    "role": "recruiter",
-    "companyId": "comp-001",
-    "companyName": "TechCorp Global"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### 1.3 Get Current User Profile
-- **Endpoint**: `GET /api/auth/me`
-- **Access**: Authenticated (`Candidate`, `Recruiter`, `Admin`)
-- **Response** `200 OK`:
-```json
-{
-  "user": {
-    "id": "cand-001",
-    "name": "Jane Doe",
-    "email": "jane@example.com",
+    "email": "candidate@talenthub.com",
     "role": "candidate",
-    "skills": ["React", "TypeScript", "Spring Boot"],
-    "profileCompletion": 85
+    "status": "active"
   }
 }
 ```
 
-### 1.4 Update User Profile
+### 1.3 User Logout
+- **Endpoint**: `POST /api/auth/logout`
+- **Access**: Authenticated
+- **Security**: Invalidates session token server-side (stored in revoked tokens blacklist) and clears the HttpOnly auth cookie.
+- **Response** `200 OK`:
+```json
+{
+  "message": "Logged out successfully."
+}
+```
+
+### 1.4 Forgot Password (Password Recovery Request)
+- **Endpoint**: `POST /api/auth/forgot-password`
+- **Access**: Public
+- **Rate Limit**: 5 requests / 15 minutes
+- **Security**: Generates a cryptographically secure 32-byte hex token, stores its SHA-256 hash with a 15-minute expiration, and dispatches an email via configured SMTP provider. Returns a generic success response regardless of whether the email exists to prevent user enumeration.
+- **Request Body**:
+```json
+{
+  "email": "candidate@talenthub.com"
+}
+```
+- **Response** `200 OK`:
+```json
+{
+  "message": "If an account with that email address exists, password reset instructions have been sent."
+}
+```
+
+### 1.5 Reset Password (Password Recovery Confirmation)
+- **Endpoint**: `POST /api/auth/reset-password`
+- **Access**: Public (requires valid single-use reset token)
+- **Rate Limit**: 5 requests / 15 minutes
+- **Security**: Verifies SHA-256 token hash and expiration, marks token as used, enforces the 12+ character password complexity policy, updates password with bcrypt salt, and terminates all active sessions by incrementing the user's `tokenVersion`.
+- **Request Body**:
+```json
+{
+  "token": "4a7f8e1c2b3d...",
+  "newPassword": "BrandNewPassword2026!#",
+  "confirmPassword": "BrandNewPassword2026!#"
+}
+```
+- **Response** `200 OK`:
+```json
+{
+  "message": "Password has been reset successfully. Please sign in with your new password."
+}
+```
+
+### 1.6 Get Current User Profile
+- **Endpoint**: `GET /api/auth/me`
+- **Access**: Authenticated (`candidate`, `recruiter`, `admin`)
+- **Response** `200 OK`: Returns sanitized user object.
+
+### 1.7 Update User Profile
 - **Endpoint**: `PUT /api/auth/profile`
 - **Access**: Authenticated
+- **Security**: Role, status, password, and tokenVersion are protected and cannot be changed through this endpoint.
 - **Request Body**:
 ```json
 {
@@ -106,10 +154,16 @@ Authorization: Bearer <jwt_token>
   "location": "San Francisco, CA",
   "phone": "+1 555-0199",
   "bio": "10+ years architecting scalable cloud SaaS platforms.",
-  "skills": ["React", "TypeScript", "Java", "Spring Boot", "Docker", "Kubernetes"]
+  "skills": ["React", "TypeScript", "Node.js", "Docker", "Kubernetes"]
 }
 ```
 - **Response** `200 OK`: Returns updated user object.
+
+### 1.8 Upload Candidate Resume
+- **Endpoint**: `POST /api/auth/resume`
+- **Access**: Authenticated (`candidate`, `admin`)
+- **Content-Type**: `multipart/form-data` (field: `resume`)
+- **Response** `200 OK`: Returns resume URL, parsed data, and updated candidate profile.
 
 ---
 
