@@ -45,9 +45,9 @@ const dbPoolMin = parseInt(process.env.DB_POOL_MIN || '2', 10);
 const dbPoolMax = parseInt(process.env.DB_POOL_MAX || '10', 10);
 
 export const config = {
-<<<<<<< HEAD
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv,
+  dbMode,
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
@@ -56,7 +56,6 @@ export const config = {
   frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
   authCookieName: 'talenthub_token',
   passwordResetExpiresMinutes: parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES || '15', 10),
-  dbMode,
 
   // SMTP Email Configuration for password reset and notifications
   email: {
@@ -67,27 +66,6 @@ export const config = {
     from: process.env.SMTP_FROM || 'TalentHub Security <no-reply@talenthub.com>',
     secure: process.env.SMTP_SECURE === 'true',
   },
-
-  // MySQL configuration block (Knex / migrations compatible)
-=======
-  dbMode,
-  port: process.env.PORT || 5000,
-  nodeEnv: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET || 'talenthub-super-secret-azure-enterprise-key-2026',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data')),
-  uploadDir: path.resolve(__dirname, '../../uploads/resumes'),
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'talenthub',
-    user: process.env.DB_USER || 'talenthub_user',
-    password: process.env.DB_PASSWORD || '',
-    connectionLimit: parseInt(process.env.DB_POOL_MAX || '10', 10),
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
-  },
->>>>>>> origin/main
   database: {
     driver: process.env.DB_DRIVER || (dbMode === 'json' ? 'json' : 'mysql2'),
     host: dbHost,
