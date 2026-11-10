@@ -1,4 +1,4 @@
-﻿import axios, { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import {
   User,
   Job,
@@ -11,6 +11,7 @@ import {
   ApplicationStage,
   MatchDetails,
   CandidateJobMatch,
+  SkillComparisonResult,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -163,13 +164,16 @@ export const api = {
     return res.data;
   },
 
-  getResumeDownloadUrl: async (resumeDocId: string) => {
+  getResumeDownloadUrl: async (idOrCandidateId?: string) => {
+    const url = idOrCandidateId ? `/resume/download/${idOrCandidateId}` : '/resume/download';
     const res = await apiClient.get<{
-      message: string;
+      message?: string;
+      candidateId?: string;
+      originalName?: string;
+      filename?: string;
       downloadUrl: string;
       expiresInMinutes: number;
-      filename: string;
-    }>('/resume/download/' + resumeDocId);
+    }>(url);
     return res.data;
   },
 
@@ -285,6 +289,13 @@ export const api = {
       matchDetails: MatchDetails;
       rank?: number;
     }>(`/jobs/${jobId}/matches/${candidateId}`);
+    return res.data;
+  },
+
+  getCandidateSkillMatch: async (jobId: string, candidateId: string) => {
+    const res = await apiClient.get<SkillComparisonResult>(
+      `/jobs/${jobId}/candidates/${candidateId}/skill-match`
+    );
     return res.data;
   },
 

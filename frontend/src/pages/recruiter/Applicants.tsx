@@ -23,6 +23,7 @@ import { api } from '../../services/api';
 import { Application, Job, ApplicationStage, MatchCategory } from '../../types';
 import { Loading } from '../../components/Loading';
 import { MatchDetailsModal } from '../../components/MatchDetailsModal';
+import { SkillMatchModal } from '../../components/SkillMatchModal';
 
 export const Applicants: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,6 +39,15 @@ export const Applicants: React.FC = () => {
 
   // Match details review modal
   const [inspectingApp, setInspectingApp] = useState<Application | null>(null);
+
+  // Candidate skills vs job requirements comparison modal
+  const [skillModalTarget, setSkillModalTarget] = useState<{
+    isOpen: boolean;
+    jobId: string;
+    candidateId: string;
+    candidateName: string;
+    jobTitle: string;
+  } | null>(null);
 
   // Advance Stage Dialog
   const [stageModalApp, setStageModalApp] = useState<Application | null>(null);
@@ -338,15 +348,36 @@ export const Applicants: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* View Match Details Clickable Action */}
-                        <button
-                          type="button"
-                          onClick={() => setInspectingApp(app)}
-                          className="w-full py-1 px-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border border-purple-100"
-                        >
-                          <Sparkles className="w-3 h-3 text-purple-600" />
-                          <span>View Match Details</span>
-                        </button>
+                        {/* Action buttons: Match Details & View Skill Match */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setInspectingApp(app)}
+                            className="py-1 px-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border border-purple-100"
+                            title="View candidate matching score breakdown"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-600" />
+                            <span>Score</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSkillModalTarget({
+                                isOpen: true,
+                                jobId: app.jobId,
+                                candidateId: app.candidateId,
+                                candidateName: app.candidateName,
+                                jobTitle: app.jobTitle,
+                              })
+                            }
+                            className="py-1 px-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border border-emerald-200"
+                            title="Compare candidate skills against job requirements"
+                          >
+                            <Layers className="w-3 h-3 text-emerald-600" />
+                            <span>View Skill Match</span>
+                          </button>
+                        </div>
 
                         {app.interviewDate && (
                           <div className="flex items-center gap-1 text-[10px] font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
@@ -510,14 +541,35 @@ export const Applicants: React.FC = () => {
                               style={{ width: `${Math.min(100, Math.max(0, app.matchScore || 0))}%` }}
                             />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setInspectingApp(app)}
-                            className="text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 pt-0.5"
-                          >
-                            <Sparkles className="w-3 h-3 text-purple-600" />
-                            <span>View Match Details →</span>
-                          </button>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setInspectingApp(app)}
+                              className="text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1"
+                              title="View match score breakdown"
+                            >
+                              <Sparkles className="w-3 h-3 text-purple-600" />
+                              <span>Score Details</span>
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSkillModalTarget({
+                                  isOpen: true,
+                                  jobId: app.jobId,
+                                  candidateId: app.candidateId,
+                                  candidateName: app.candidateName,
+                                  jobTitle: app.jobTitle,
+                                })
+                              }
+                              className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1"
+                              title="Compare candidate skills against job requirements"
+                            >
+                              <Layers className="w-3 h-3 text-emerald-600" />
+                              <span>View Skill Match</span>
+                            </button>
+                          </div>
                         </div>
                       </td>
 
@@ -679,6 +731,18 @@ export const Applicants: React.FC = () => {
           matchCategory={inspectingApp.matchDetails?.category}
           rank={jobRankings.get(inspectingApp.id)}
           matchDetails={inspectingApp.matchDetails}
+        />
+      )}
+
+      {/* Candidate Skills vs Job Requirements Comparison Modal */}
+      {skillModalTarget && (
+        <SkillMatchModal
+          isOpen={skillModalTarget.isOpen}
+          onClose={() => setSkillModalTarget(null)}
+          jobId={skillModalTarget.jobId}
+          candidateId={skillModalTarget.candidateId}
+          candidateName={skillModalTarget.candidateName}
+          jobTitle={skillModalTarget.jobTitle}
         />
       )}
     </div>

@@ -6,8 +6,8 @@
  * STORAGE_PROVIDER=azure    → uses DefaultAzureCredential (Managed Identity / Entra ID)
  *
  * SAS URLs:
- *   - Azurite: Shared Key SAS (the only mechanism supported by Azurite)
- *   - Azure  : User Delegation SAS via DefaultAzureCredential (preferred)
+ *   - Azurite: Shared Key SAS (supported by Azurite emulator)
+ *   - Azure  : User Delegation SAS via DefaultAzureCredential or Shared Key
  */
 import {
   BlobServiceClient,
@@ -19,6 +19,16 @@ import {
 } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 import { config } from '../config';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface UploadResult {
+  blobName: string;
+  blobUrl?: string;
+  containerName: string;
+  contentType: string;
+  sizeBytes: number;
+}
 
 // ─── Credentials & Client ────────────────────────────────────────────────────
 
@@ -47,7 +57,7 @@ function buildBlobServiceClient(): BlobServiceClient {
 }
 
 let _client: BlobServiceClient | null = null;
-function getClient(): BlobServiceClient {
+export function getClient(): BlobServiceClient {
   if (!_client) _client = buildBlobServiceClient();
   return _client;
 }
@@ -73,35 +83,37 @@ export async function ensureContainer(): Promise<ContainerClient> {
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
-export interface UploadResult {
-  blobName: string;
-  containerName: string;
-  contentType: string;
-  sizeBytes: number;
-}
-
 export async function uploadResumeBuffer(
   blobName: string,
   buffer: Buffer,
   mimeType: string,
-  originalFilename: string
+  originalFilenameOrMeta?: string | Record<string, string>
 ): Promise<UploadResult> {
   const containerClient = await ensureContainer();
   const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+  const originalFilename = typeof originalFilenameOrMeta === 'string'
+    ? originalFilenameOrMeta
+    : (originalFilenameOrMeta?.originalName || 'resume.pdf');
+
+  const metadata: Record<string, string> = typeof originalFilenameOrMeta === 'object' && originalFilenameOrMeta !== null
+    ? { ...originalFilenameOrMeta, originalFilename: encodeURIComponent(originalFilename) }
+    : {
+        originalFilename: encodeURIComponent(originalFilename),
+        uploadedAt: new Date().toISOString(),
+      };
 
   await blockBlobClient.uploadData(buffer, {
     blobHTTPHeaders: {
       blobContentType: mimeType,
       blobContentDisposition: `attachment; filename="${encodeURIComponent(originalFilename)}"`,
     },
-    metadata: {
-      originalFilename: encodeURIComponent(originalFilename),
-      uploadedAt: new Date().toISOString(),
-    },
+    metadata,
   });
 
   return {
     blobName,
+    blobUrl: blockBlobClient.url,
     containerName: config.storage.containerName,
     contentType: mimeType,
     sizeBytes: buffer.length,
@@ -110,14 +122,15 @@ export async function uploadResumeBuffer(
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export async function deleteBlob(blobName: string): Promise<void> {
+export async function deleteBlob(blobName: string): Promise<boolean> {
   try {
     const containerClient = await ensureContainer();
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-    await blockBlobClient.deleteIfExists();
+    const result = await blockBlobClient.deleteIfExists();
+    return result.succeeded;
   } catch (err) {
     console.error(`[BlobStorage] deleteBlob(${blobName}) failed:`, err);
-    // Non-fatal: log and continue
+    return false;
   }
 }
 
@@ -151,7 +164,7 @@ function _generateAzuriteSasUrl(
   if (!connStr) throw new Error('[BlobStorage] Missing connection string for Azurite SAS');
 
   const params = _parseConnectionString(connStr);
-  const accountName = params['AccountName'];
+  const accountName = params['AccountName'] || config.storage.accountName;
   const accountKey = params['AccountKey'];
 
   if (!accountName || !accountKey) {
@@ -159,8 +172,7 @@ function _generateAzuriteSasUrl(
   }
 
   const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
-
-  const startsOn = new Date();
+  const startsOn = new Date(Date.now() - 5 * 60 * 1000); // 5-minute clock skew tolerance
   const expiresOn = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const sasQueryParams = generateBlobSASQueryParameters(
@@ -192,7 +204,7 @@ async function _generateAzureSasUrl(
   if (!accountName) throw new Error('[BlobStorage] AZURE_STORAGE_ACCOUNT_NAME missing');
 
   const client = getClient();
-  const startsOn = new Date();
+  const startsOn = new Date(Date.now() - 5 * 60 * 1000);
   const expiresOn = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const userDelegationKey = await client.getUserDelegationKey(startsOn, expiresOn);
@@ -213,6 +225,24 @@ async function _generateAzureSasUrl(
   return `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasQueryParams.toString()}`;
 }
 
+export async function downloadBlobToBuffer(blobName: string): Promise<Buffer> {
+  const containerClient = await ensureContainer();
+  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+  return await blockBlobClient.downloadToBuffer();
+}
+
+/** Health-check: returns true if the Blob service endpoint is reachable. */
+export async function pingBlobStorage(): Promise<boolean> {
+  try {
+    const client = getClient();
+    const iter = client.listContainers();
+    await iter.next();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function _parseConnectionString(connStr: string): Record<string, string> {
@@ -220,21 +250,18 @@ function _parseConnectionString(connStr: string): Record<string, string> {
   for (const part of connStr.split(';')) {
     const idx = part.indexOf('=');
     if (idx > 0) {
-      result[part.substring(0, idx)] = part.substring(idx + 1);
+      result[part.substring(0, idx).trim()] = part.substring(idx + 1).trim();
     }
   }
   return result;
 }
 
-/** Health-check: returns true if the Blob service endpoint is reachable. */
-export async function pingBlobStorage(): Promise<boolean> {
-  try {
-    const client = getClient();
-    // List at most 1 container to verify connectivity
-    const iter = client.listContainers();
-    await iter.next();
-    return true;
-  } catch {
-    return false;
-  }
+export class BlobStorageService {
+  static getClient = getClient;
+  static ensureContainer = ensureContainer;
+  static uploadResumeBuffer = uploadResumeBuffer;
+  static deleteBlob = deleteBlob;
+  static generateReadSasUrl = generateReadSasUrl;
+  static downloadBlobToBuffer = downloadBlobToBuffer;
+  static pingBlobStorage = pingBlobStorage;
 }

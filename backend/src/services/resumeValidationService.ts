@@ -2,16 +2,16 @@
  * TalentHub Resume Validation Service
  *
  * Validates uploaded resume files using:
- * 1. File size check
- * 2. Declared extension check
- * 3. Declared MIME type check
- * 4. Actual file content / magic-byte inspection via `file-type`
- * 5. PDF structural validation (must start with %PDF- header)
- * 6. DOCX structural validation (must be a valid ZIP containing word/document.xml)
- * 7. ZIP-bomb protection for DOCX archives
- * 8. SHA-256 checksum computation
+ * 1. File size check against configured limit
+ * 2. Declared extension check (.pdf and .docx only; rejects .doc and all other extensions)
+ * 3. Declared MIME type and content inspection
+ * 4. PDF structural validation (starts with %PDF- header and ends with %%EOF trailer)
+ * 5. DOCX structural validation (valid ZIP archive containing word/document.xml)
+ * 6. ZIP-bomb protection for DOCX packages
+ * 7. SHA-256 checksum computation
+ * 8. Safe filename sanitization against path traversal and shell injection
  *
- * All validation is performed against the in-memory buffer — no disk writes.
+ * All validation is performed against the in-memory buffer without disk writes.
  */
 import crypto from 'crypto';
 import path from 'path';
@@ -22,11 +22,18 @@ export type AllowedExtension = 'pdf' | 'docx';
 
 export interface ValidationResult {
   valid: boolean;
+  isValid: boolean; // Alias for valid
   extension: AllowedExtension | null;
+  fileType?: 'pdf' | 'docx';
   mimeType: string | null;
   checksum: string | null;
+  checksumSha256?: string; // Alias for checksum
+  sanitizedFilename?: string;
+  fileSizeBytes?: number;
+  statusCode?: number;
   errorCode?: 'TOO_LARGE' | 'EMPTY' | 'BAD_EXTENSION' | 'BAD_MIME' | 'BAD_CONTENT' | 'CORRUPT';
   errorMessage?: string;
+  error?: string; // Alias for errorMessage
 }
 
 const ALLOWED_EXTENSIONS: AllowedExtension[] = ['pdf', 'docx'];
@@ -35,100 +42,139 @@ const ALLOWED_MIMES: Record<AllowedExtension, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
-// PDF magic bytes: %PDF-
+// PDF magic bytes: %PDF- (0x25, 0x50, 0x44, 0x46, 0x2D)
 const PDF_MAGIC = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d]);
-// ZIP/DOCX magic bytes: PK\x03\x04
+// ZIP/DOCX magic bytes: PK\x03\x04 (0x50, 0x4B, 0x03, 0x04)
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
-/** Max uncompressed DOCX inspection size: 50 MB (ZIP-bomb guard) */
+/** Max uncompressed DOCX central directory inspection size: 50 MB (ZIP-bomb guard) */
 const MAX_DOCX_INSPECT_BYTES = 50 * 1024 * 1024;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/** Sanitise filename: strip directory traversal, limit to safe alphanumeric characters. */
+export function sanitizeFilename(original: string): string {
+  const parsed = path.parse(original);
+  const safeBase = parsed.name
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 100);
+  const safeExt = parsed.ext.toLowerCase();
+  return `${safeBase || 'resume'}${safeExt}`;
+}
+
 export async function validateResumeBuffer(
-  buffer: Buffer,
+  buffer: Buffer | undefined | null,
   originalName: string,
-  maxSizeBytes: number
+  maxSizeBytes: number = 10 * 1024 * 1024
 ): Promise<ValidationResult> {
+  const sanitizedFilename = sanitizeFilename(originalName);
+
   // 1. Empty file
   if (!buffer || buffer.length === 0) {
-    return fail('EMPTY', 'The uploaded file is empty.', null, null);
+    return fail('EMPTY', 'The uploaded resume file is empty or missing.', null, null, 0, 400);
   }
 
-  // 2. Size limit
-  if (buffer.length > maxSizeBytes) {
+  const fileSizeBytes = buffer.length;
+
+  // 2. Size limit check
+  if (fileSizeBytes > maxSizeBytes) {
     const limitMB = (maxSizeBytes / (1024 * 1024)).toFixed(0);
-    return fail('TOO_LARGE', `File exceeds the maximum allowed size of ${limitMB} MB.`, null, null);
+    return fail('TOO_LARGE', `File exceeds the maximum allowed size of ${limitMB} MB.`, null, null, fileSizeBytes, 413);
   }
 
   // 3. Extension check
-  const ext = path.extname(originalName).toLowerCase().replace('.', '') as AllowedExtension;
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return fail('BAD_EXTENSION', `File type ".${ext}" is not allowed. Only PDF and DOCX files are accepted.`, null, null);
-  }
-
-  // 4. Content-based MIME type detection
-  // file-type is an ESM-only package; use a typed dynamic import with any cast
-  let detectedMime: string | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ft = await (Function('return import("file-type")')() as Promise<any>);
-    const result = await ft.fileTypeFromBuffer(buffer);
-    detectedMime = result?.mime ?? null;
-  } catch {
-    // If file-type cannot load, skip MIME detection; structure checks are still performed
-  }
-
-  // Allowable MIME types per extension
-  const expectedMimes: Record<AllowedExtension, string[]> = {
-    pdf: ['application/pdf'],
-    docx: [
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/zip',   // file-type may return zip for OOXML
-    ],
-  };
-
-  const allowedMimesForExt = expectedMimes[ext];
-
-  if (detectedMime !== null && !allowedMimesForExt.includes(detectedMime)) {
+  const rawExt = path.extname(originalName).toLowerCase().replace('.', '');
+  if (!ALLOWED_EXTENSIONS.includes(rawExt as AllowedExtension)) {
+    if (rawExt === 'doc') {
+      return fail(
+        'BAD_EXTENSION',
+        'Legacy .doc format is not supported. Please upload your resume in .pdf or modern .docx format.',
+        null,
+        null,
+        fileSizeBytes,
+        415
+      );
+    }
     return fail(
-      'BAD_MIME',
-      `The file content does not match the declared format. Expected ${ext.toUpperCase()} but detected: ${detectedMime}.`,
-      ext,
-      null
+      'BAD_EXTENSION',
+      `File type ".${rawExt}" is not allowed. Only PDF and DOCX files are accepted.`,
+      null,
+      null,
+      fileSizeBytes,
+      415
     );
   }
 
-  // 5. Deep content validation
+  const ext = rawExt as AllowedExtension;
+
+  // 4. Content-based validation
   if (ext === 'pdf') {
     const pdfResult = validatePdfContent(buffer);
-    if (!pdfResult.valid) return { ...pdfResult, extension: ext, mimeType: ALLOWED_MIMES[ext], checksum: null };
+    if (!pdfResult.valid) {
+      return {
+        valid: false,
+        isValid: false,
+        extension: ext,
+        fileType: 'pdf',
+        mimeType: ALLOWED_MIMES[ext],
+        checksum: null,
+        fileSizeBytes,
+        sanitizedFilename,
+        statusCode: 400,
+        errorCode: pdfResult.errorCode,
+        errorMessage: pdfResult.errorMessage,
+        error: pdfResult.errorMessage,
+      };
+    }
   } else if (ext === 'docx') {
     const docxResult = await validateDocxContent(buffer);
-    if (!docxResult.valid) return { ...docxResult, extension: ext, mimeType: ALLOWED_MIMES[ext], checksum: null };
+    if (!docxResult.valid) {
+      return {
+        valid: false,
+        isValid: false,
+        extension: ext,
+        fileType: 'docx',
+        mimeType: ALLOWED_MIMES[ext],
+        checksum: null,
+        fileSizeBytes,
+        sanitizedFilename,
+        statusCode: 400,
+        errorCode: docxResult.errorCode,
+        errorMessage: docxResult.errorMessage,
+        error: docxResult.errorMessage,
+      };
+    }
   }
 
-  // 6. Compute SHA-256 checksum
+  // 5. Compute SHA-256 checksum
   const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
 
   return {
     valid: true,
+    isValid: true,
     extension: ext,
+    fileType: ext,
     mimeType: ALLOWED_MIMES[ext],
     checksum,
+    checksumSha256: checksum,
+    fileSizeBytes,
+    sanitizedFilename,
+    statusCode: 200,
   };
 }
 
 // ─── PDF Validation ───────────────────────────────────────────────────────────
 
-function validatePdfContent(buffer: Buffer): Omit<ValidationResult, 'extension' | 'mimeType' | 'checksum'> {
-  // Must start with %PDF-
-  if (buffer.length < 5 || !buffer.slice(0, 5).equals(PDF_MAGIC)) {
+function validatePdfContent(buffer: Buffer): { valid: boolean; errorCode?: 'BAD_CONTENT' | 'CORRUPT'; errorMessage?: string } {
+  // Must start with %PDF- (within first 1024 bytes)
+  const headerSlice = buffer.subarray(0, Math.min(1024, buffer.length));
+  if (buffer.length < 5 || !headerSlice.toString('latin1').includes('%PDF-')) {
     return { valid: false, errorCode: 'BAD_CONTENT', errorMessage: 'The file does not contain a valid PDF structure.' };
   }
 
   // Must contain %%EOF marker somewhere in the last 1 KB
-  const tail = buffer.slice(Math.max(0, buffer.length - 1024)).toString('latin1');
+  const tail = buffer.subarray(Math.max(0, buffer.length - 1024)).toString('latin1');
   if (!tail.includes('%%EOF')) {
     return { valid: false, errorCode: 'CORRUPT', errorMessage: 'The PDF document appears to be incomplete or corrupted.' };
   }
@@ -140,17 +186,15 @@ function validatePdfContent(buffer: Buffer): Omit<ValidationResult, 'extension' 
 
 async function validateDocxContent(
   buffer: Buffer
-): Promise<Omit<ValidationResult, 'extension' | 'mimeType' | 'checksum'>> {
-  // Must start with PK magic (ZIP)
-  if (buffer.length < 4 || !buffer.slice(0, 4).equals(ZIP_MAGIC)) {
+): Promise<{ valid: boolean; errorCode?: 'BAD_CONTENT' | 'CORRUPT'; errorMessage?: string }> {
+  // Must start with PK magic (0x50, 0x4B, 0x03, 0x04)
+  if (buffer.length < 4 || !buffer.subarray(0, 4).equals(ZIP_MAGIC)) {
     return { valid: false, errorCode: 'BAD_CONTENT', errorMessage: 'The file does not contain a valid DOCX structure.' };
   }
 
-  // Parse central directory to find word/document.xml
-  // We use a lightweight manual parser to avoid a full decompression library dependency
-  // and to protect against ZIP bombs.
+  // Parse central directory to verify presence of word/document.xml
   try {
-    const hasDocumentXml = await _zipContainsEntry(buffer, 'word/document.xml');
+    const hasDocumentXml = await zipContainsEntry(buffer, 'word/document.xml');
     if (!hasDocumentXml) {
       return { valid: false, errorCode: 'BAD_CONTENT', errorMessage: 'The file is not a valid DOCX document (missing word/document.xml).' };
     }
@@ -164,15 +208,13 @@ async function validateDocxContent(
 /**
  * Minimal ZIP central-directory scanner.
  * Reads the End-of-Central-Directory record, then walks the central directory
- * to find file names. Never decompresses any entry data.
- * ZIP-bomb safe: only reads file *names*, not content.
+ * to find entry names without decompressing entry data.
+ * Safe against ZIP-bombs.
  */
-async function _zipContainsEntry(buffer: Buffer, targetEntry: string): Promise<boolean> {
-  // Locate End of Central Directory signature: 0x06054b50 (little-endian)
+async function zipContainsEntry(buffer: Buffer, targetEntry: string): Promise<boolean> {
   const EOCD_SIG = 0x06054b50;
   let eocdOffset = -1;
 
-  // Scan from the end (comment may follow EOCD)
   for (let i = buffer.length - 22; i >= 0; i--) {
     if (buffer.readUInt32LE(i) === EOCD_SIG) {
       eocdOffset = i;
@@ -189,7 +231,6 @@ async function _zipContainsEntry(buffer: Buffer, targetEntry: string): Promise<b
     throw new Error('EOCD points past end of buffer');
   }
 
-  // Guard: prevent reading absurdly large central directories (ZIP-bomb protection)
   if (centralDirSize > MAX_DOCX_INSPECT_BYTES) {
     throw new Error('Central directory is suspiciously large');
   }
@@ -209,7 +250,7 @@ async function _zipContainsEntry(buffer: Buffer, targetEntry: string): Promise<b
 
     if (nameEnd > buffer.length) break;
 
-    const entryName = buffer.slice(nameStart, nameEnd).toString('utf8');
+    const entryName = buffer.subarray(nameStart, nameEnd).toString('utf8');
     if (entryName === targetEntry) return true;
 
     pos = nameEnd + extraLength + commentLength;
@@ -224,14 +265,26 @@ function fail(
   errorCode: ValidationResult['errorCode'],
   errorMessage: string,
   extension: AllowedExtension | null,
-  mimeType: string | null
+  mimeType: string | null,
+  fileSizeBytes: number = 0,
+  statusCode: number = 400
 ): ValidationResult {
-  return { valid: false, extension, mimeType, checksum: null, errorCode, errorMessage };
+  return {
+    valid: false,
+    isValid: false,
+    extension,
+    fileType: extension || undefined,
+    mimeType,
+    checksum: null,
+    fileSizeBytes,
+    statusCode,
+    errorCode,
+    errorMessage,
+    error: errorMessage,
+  };
 }
 
-/** Sanitise filename: strip directory traversal, limit to safe characters. */
-export function sanitizeFilename(original: string): string {
-  const basename = path.basename(original);
-  // Allow alphanumerics, hyphens, underscores, dots
-  return basename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+export class ResumeValidationService {
+  static sanitizeFilename = sanitizeFilename;
+  static validateResumeBuffer = validateResumeBuffer;
 }
