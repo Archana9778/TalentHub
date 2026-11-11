@@ -3,7 +3,7 @@
     {
       "id": "user-admin-1",
       "email": "admin@talenthub.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Eleanor Vance",
       "role": "admin",
       "companyRole": "admin",
@@ -15,12 +15,14 @@
       "contactNumber": "+1 (555) 019-2834",
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
       "bio": "TalentHub System Director & Governance Lead",
-      "createdAt": "2026-01-10T08:00:00Z"
+      "createdAt": "2026-01-10T08:00:00Z",
+      "lastLoginAt": "2026-11-11T08:57:09.737Z",
+      "updatedAt": "2026-11-11T08:57:09.742Z"
     },
     {
       "id": "user-recruiter-1",
       "email": "recruiter@techcorp.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Sarah Jenkins",
       "role": "recruiter",
       "companyRole": "admin",
@@ -34,12 +36,14 @@
       "contactNumber": "+1 (555) 345-6789",
       "avatarUrl": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
       "bio": "Hiring top engineering talent for cloud infrastructure and distributed systems.",
-      "createdAt": "2026-01-15T09:30:00Z"
+      "createdAt": "2026-01-15T09:30:00Z",
+      "lastLoginAt": "2026-11-11T08:57:17.143Z",
+      "updatedAt": "2026-11-11T08:57:17.143Z"
     },
     {
       "id": "user-recruiter-2",
       "email": "hiring@nexusaidata.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Michael Chang",
       "role": "recruiter",
       "companyRole": "admin",
@@ -53,12 +57,14 @@
       "contactNumber": "+1 (555) 789-0123",
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
       "bio": "Building world-class AI, ML and LLM product teams.",
-      "createdAt": "2026-01-20T10:15:00Z"
+      "createdAt": "2026-01-20T10:15:00Z",
+      "lastLoginAt": "2026-11-11T08:57:10.015Z",
+      "updatedAt": "2026-11-11T08:57:10.015Z"
     },
     {
       "id": "user-recruiter-3",
       "email": "marcus.recruiter@techcorp.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Marcus Vance",
       "role": "recruiter",
       "companyRole": "recruiter",
@@ -72,22 +78,24 @@
       "contactNumber": "+1 (555) 890-1234",
       "avatarUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
       "bio": "Focused on backend, cloud engineering, and Kubernetes talent.",
-      "createdAt": "2026-01-25T09:00:00Z"
+      "createdAt": "2026-01-25T09:00:00Z",
+      "lastLoginAt": "2026-11-11T08:57:10.139Z",
+      "updatedAt": "2026-11-11T08:57:10.139Z"
     },
     {
       "id": "user-candidate-1",
-      "email": "candidate@talenthub.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
-      "name": "Alex Morgan",
+      "email": "candidate.senior@talenthub.com",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "name": "Jane Candidate Senior",
       "role": "candidate",
       "status": "active",
-      "title": "Senior Full-Stack Cloud Engineer",
+      "title": "Lead Full Stack TypeScript Architect",
       "designation": "Senior Full-Stack Cloud Engineer",
-      "location": "Seattle, WA",
-      "phone": "+1 (555) 432-8765",
+      "location": "San Francisco, CA",
+      "phone": "+1 (555) 234-5678",
       "contactNumber": "+1 (555) 432-8765",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-      "bio": "Passionate full-stack developer with 6+ years of expertise in React, TypeScript, Spring Boot, MySQL, and Microsoft Azure Cloud.",
+      "bio": "Seasoned full stack engineer with deep expertise in cloud architectures and TypeScript ecosystems.",
       "skills": [
         "React",
         "TypeScript",
@@ -143,12 +151,16 @@
         "educationLevel": "Bachelor of Science in Computer Science",
         "extractedAt": "2026-01-22T14:30:00Z"
       },
-      "createdAt": "2026-01-22T11:00:00Z"
+      "createdAt": "2026-01-22T11:00:00Z",
+      "lastLoginAt": "2026-11-11T08:57:16.931Z",
+      "updatedAt": "2026-11-11T08:57:17.166Z",
+      "dateOfBirth": "1993-05-18",
+      "gender": "Female"
     },
     {
       "id": "user-candidate-2",
       "email": "david.chen@example.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "David Chen",
       "role": "candidate",
       "status": "active",
@@ -193,7 +205,7 @@
     {
       "id": "user-candidate-3",
       "email": "priya.patel@example.com",
-      "password": "$2a$10$krVvkfhvocac27xWrc6R6u4X5L2HSrzBDGMHCzVWoWR5rr.vQXMuy",
+      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Priya Patel",
       "role": "candidate",
       "status": "active",
@@ -235,9 +247,9 @@
       "createdAt": "2026-02-01T16:20:00Z"
     },
     {
-      "id": "user-recruiter-278cf030",
+      "id": "user-recruiter-ba96b959",
       "email": "elena.rostova@techcorp.com",
-      "password": "$2a$10$1J4vpb8//Kxk3iWnJm5OyuvON5YpvDiRhqg9tsZXGNMobooWFRqnm",
+      "password": "$2a$10$OJoAWtKPrs1us9Ai2vKM/O0wCmDHjaBPRz4mcqOWklk0z1ootIuMC",
       "name": "Elena Rostova",
       "role": "recruiter",
       "companyRole": "recruiter",
@@ -250,71 +262,8 @@
       "designation": "Lead Global Sourcing Partner",
       "location": "San Francisco, CA & Remote",
       "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Elena%20Rostova",
-      "createdAt": "2026-11-08T07:45:11.937Z",
-      "updatedAt": "2026-11-08T07:45:11.955Z"
-    },
-    {
-      "id": "user-e97157ae",
-      "email": "aravindvnair20@gmail.com",
-      "password": "$2a$10$wFEfcDEJfMMMiQ3ChGbHZO9MeAuJC/f4Bca.FwslGp5Iyy9rPdZmq",
-      "name": "Aravind v nair",
-      "role": "candidate",
-      "status": "active",
-      "title": "Full Stack Developer",
-      "location": "Remote, US",
-      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Aravind%20v%20nair",
-      "skills": [
-        "React",
-        "TypeScript",
-        "Node.js"
-      ],
-      "experience": [],
-      "education": [],
-      "createdAt": "2026-11-02T08:26:53.888Z"
-    },
-    {
-      "id": "user-973cc7ba",
-      "email": "candidate.test3143@talenthub.com",
-      "password": "$2a$10$4KGIsR9HaImJb/k4cGuyT.XWKdmwJoaTurfpTerBwBOGZMOHXLNBa",
-      "name": "Jordan Lee 3143",
-      "role": "candidate",
-      "status": "active",
-      "title": "Full-Stack Node/React Engineer",
-      "location": "Austin, TX",
-      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
-      "skills": [
-        "TypeScript",
-        "Node.js",
-        "React",
-        "MySQL",
-        "Docker"
-      ],
-      "experience": [],
-      "education": [],
-      "createdAt": "2026-11-04T07:13:47.966Z",
-      "bio": "Experienced developer passionate about modern cloud architectures."
-    },
-    {
-      "id": "user-bb15e8ef",
-      "email": "candidate.test4875@talenthub.com",
-      "password": "$2a$10$2TCj8RFq8LAdsjvCyFQz1.xgMQdcv2f56iLUxJ3HL7lZ5dKjsV4M.",
-      "name": "Jordan Lee 4875",
-      "role": "candidate",
-      "status": "active",
-      "title": "Full-Stack Node/React Engineer",
-      "location": "Austin, TX",
-      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
-      "skills": [
-        "TypeScript",
-        "Node.js",
-        "React",
-        "MySQL",
-        "Docker"
-      ],
-      "experience": [],
-      "education": [],
-      "createdAt": "2026-11-04T07:17:39.087Z",
-      "bio": "Experienced developer passionate about modern cloud architectures."
+      "createdAt": "2026-11-11T08:57:10.414Z",
+      "updatedAt": "2026-11-11T08:57:10.440Z"
     }
   ],
   "companies": [
@@ -383,7 +332,7 @@
       "createdAt": "2026-01-18T15:00:00Z"
     },
     {
-      "id": "comp-b7612c52",
+      "id": "comp-fa348325",
       "name": "Apex Quantum Cloud",
       "description": "Updated description for Apex Quantum Cloud enterprise platforms.",
       "logo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
@@ -396,8 +345,8 @@
       "industry": "Quantum Computing",
       "size": "200-500 employees",
       "verified": true,
-      "createdAt": "2026-11-08T07:45:11.848Z",
-      "updatedAt": "2026-11-08T07:45:11.857Z"
+      "createdAt": "2026-11-11T08:57:10.277Z",
+      "updatedAt": "2026-11-11T08:57:10.285Z"
     }
   ],
   "categories": [
@@ -475,11 +424,11 @@
       ],
       "status": "active",
       "isFeatured": true,
-      "applicantsCount": 8,
+      "applicantsCount": 7,
       "viewsCount": 248,
       "expiresAt": "2026-12-31T23:59:59Z",
       "createdAt": "2026-02-01T10:00:00Z",
-      "updatedAt": "2026-11-08T07:45:11.975Z"
+      "updatedAt": "2026-11-11T08:57:10.467Z"
     },
     {
       "id": "job-2",
@@ -665,126 +614,33 @@
   ],
   "applications": [
     {
-      "id": "app-d2836239",
+      "id": "app-test-invalid",
       "jobId": "job-1",
-      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
+      "jobTitle": "Senior Full Stack Engineer",
+      "companyId": "comp-1",
       "companyName": "CloudScale Technologies",
-      "candidateId": "user-bb15e8ef",
-      "candidateName": "Jordan Lee 4875",
-      "candidateEmail": "candidate.test4875@talenthub.com",
-      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
-      "candidateTitle": "Full-Stack Node/React Engineer",
-      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
-      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
-      "stage": "Interview",
-      "matchScore": 53,
-      "matchDetails": {
-        "score": 53,
-        "matchedSkills": [
-          "React",
-          "TypeScript",
-          "MySQL",
-          "Docker"
-        ],
-        "missingSkills": [
-          "Java",
-          "Spring Boot",
-          "Azure",
-          "REST API"
-        ],
-        "skillScore": 50,
-        "experienceScore": 60,
-        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
-      },
-      "recruiterNotes": "Reviewed candidate GitHub and profile.",
+      "candidateId": "user-candidate-1",
+      "candidateName": "Alex Morgan",
+      "candidateEmail": "candidate@talenthub.com",
+      "resumeUrl": "/uploads/resumes/sample.pdf",
+      "stage": "Screening",
+      "matchScore": 85,
+      "matchDetails": {},
+      "recruiterNotes": "",
       "timeline": [
         {
-          "stage": "Applied",
-          "changedBy": "user-bb15e8ef",
-          "changedByName": "Jordan Lee 4875",
-          "changedAt": "2026-11-04T07:17:39.191Z",
-          "comment": "Candidate submitted online application via TalentHub portal."
-        },
-        {
           "stage": "Screening",
+          "previousStage": "Applied",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:17:39.280Z",
-          "comment": "Strong background in Node.js and TypeScript. Moving forward."
-        },
-        {
-          "stage": "Interview",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:17:39.292Z",
-          "comment": "Scheduled technical discussion with team lead."
+          "changedAt": "2026-11-11T08:57:10.560Z",
+          "comment": "Valid move",
+          "reason": "Valid move",
+          "isAdminOverride": false
         }
       ],
-      "createdAt": "2026-11-04T07:17:39.191Z",
-      "updatedAt": "2026-11-04T07:17:39.292Z",
-      "interviewDate": "2026-11-07T12:47:39Z",
-      "interviewType": "Technical Round"
-    },
-    {
-      "id": "app-5dbc732a",
-      "jobId": "job-1",
-      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
-      "companyName": "CloudScale Technologies",
-      "candidateId": "user-973cc7ba",
-      "candidateName": "Jordan Lee 3143",
-      "candidateEmail": "candidate.test3143@talenthub.com",
-      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
-      "candidateTitle": "Full-Stack Node/React Engineer",
-      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
-      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
-      "stage": "Interview",
-      "matchScore": 53,
-      "matchDetails": {
-        "score": 53,
-        "matchedSkills": [
-          "React",
-          "TypeScript",
-          "MySQL",
-          "Docker"
-        ],
-        "missingSkills": [
-          "Java",
-          "Spring Boot",
-          "Azure",
-          "REST API"
-        ],
-        "skillScore": 50,
-        "experienceScore": 60,
-        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
-      },
-      "recruiterNotes": "Reviewed candidate GitHub and profile.",
-      "timeline": [
-        {
-          "stage": "Applied",
-          "changedBy": "user-973cc7ba",
-          "changedByName": "Jordan Lee 3143",
-          "changedAt": "2026-11-04T07:13:47.995Z",
-          "comment": "Candidate submitted online application via TalentHub portal."
-        },
-        {
-          "stage": "Screening",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:13:48.115Z",
-          "comment": "Strong background in Node.js and TypeScript. Moving forward."
-        },
-        {
-          "stage": "Interview",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:13:48.139Z",
-          "comment": "Scheduled technical discussion with team lead."
-        }
-      ],
-      "createdAt": "2026-11-04T07:13:47.995Z",
-      "updatedAt": "2026-11-04T07:13:48.139Z",
-      "interviewDate": "2026-11-07T12:43:48Z",
-      "interviewType": "Technical Round"
+      "createdAt": "2026-11-11T08:57:10.554Z",
+      "updatedAt": "2026-11-11T08:57:10.565Z"
     },
     {
       "id": "app-1",
@@ -851,7 +707,7 @@
         }
       ],
       "createdAt": "2026-02-02T11:00:00Z",
-      "updatedAt": "2026-11-08T07:45:11.978Z"
+      "updatedAt": "2026-11-11T08:57:10.474Z"
     },
     {
       "id": "app-2",
@@ -983,14 +839,14 @@
           "previousStage": "Screening",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-08T07:45:12.027Z",
+          "changedAt": "2026-11-11T08:57:10.547Z",
           "comment": "Position closed due to team budget restructuring.",
           "reason": "Position closed due to team budget restructuring.",
           "isAdminOverride": false
         }
       ],
       "createdAt": "2026-02-14T09:15:00Z",
-      "updatedAt": "2026-11-08T07:45:12.032Z"
+      "updatedAt": "2026-11-11T08:57:10.550Z"
     },
     {
       "id": "app-4",
@@ -1041,7 +897,7 @@
           "previousStage": "Applied",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-08T07:45:11.991Z",
+          "changedAt": "2026-11-11T08:57:10.500Z",
           "comment": "Candidate background checked. Moving to initial screening.",
           "reason": "Candidate background checked. Moving to initial screening.",
           "isAdminOverride": false
@@ -1051,7 +907,7 @@
           "previousStage": "Screening",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-08T07:45:12.000Z",
+          "changedAt": "2026-11-11T08:57:10.510Z",
           "comment": "Screening passed. Scheduling technical round.",
           "reason": "Screening passed. Scheduling technical round.",
           "isAdminOverride": false
@@ -1061,7 +917,7 @@
           "previousStage": "Interview",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-08T07:45:12.009Z",
+          "changedAt": "2026-11-11T08:57:10.523Z",
           "comment": "Candidate aced all rounds. Formal offer extended.",
           "reason": "Candidate aced all rounds. Formal offer extended.",
           "isAdminOverride": false
@@ -1071,144 +927,16 @@
           "previousStage": "Offer",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-08T07:45:12.019Z",
+          "changedAt": "2026-11-11T08:57:10.536Z",
           "comment": "Offer accepted! Candidate signed contract.",
           "reason": "Offer accepted! Candidate signed contract.",
           "isAdminOverride": false
         }
       ],
       "createdAt": "2026-02-05T12:00:00Z",
-      "updatedAt": "2026-11-08T07:45:12.023Z",
+      "updatedAt": "2026-11-11T08:57:10.541Z",
       "interviewDate": "2026-03-01T14:00:00Z",
       "interviewType": "Technical Round"
-    },
-    {
-      "id": "app-d2836239",
-      "jobId": "job-1",
-      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
-      "companyName": "CloudScale Technologies",
-      "candidateId": "user-bb15e8ef",
-      "candidateName": "Jordan Lee 4875",
-      "candidateEmail": "candidate.test4875@talenthub.com",
-      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%204875",
-      "candidateTitle": "Full-Stack Node/React Engineer",
-      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
-      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
-      "stage": "Interview",
-      "matchScore": 53,
-      "matchDetails": {
-        "score": 53,
-        "matchedSkills": [
-          "React",
-          "TypeScript",
-          "MySQL",
-          "Docker"
-        ],
-        "missingSkills": [
-          "Java",
-          "Spring Boot",
-          "Azure",
-          "REST API"
-        ],
-        "skillScore": 50,
-        "experienceScore": 60,
-        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
-      },
-      "recruiterNotes": "Reviewed candidate GitHub and profile.",
-      "timeline": [
-        {
-          "stage": "Applied",
-          "changedBy": "user-bb15e8ef",
-          "changedByName": "Jordan Lee 4875",
-          "changedAt": "2026-11-04T07:17:39.191Z",
-          "comment": "Candidate submitted online application via TalentHub portal."
-        },
-        {
-          "stage": "Screening",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:17:39.280Z",
-          "comment": "Strong background in Node.js and TypeScript. Moving forward."
-        },
-        {
-          "stage": "Interview",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:17:39.292Z",
-          "comment": "Scheduled technical discussion with team lead."
-        }
-      ],
-      "createdAt": "2026-11-04T07:17:39.191Z",
-      "updatedAt": "2026-11-04T07:17:39.292Z",
-      "interviewDate": "2026-11-07T12:47:39Z",
-      "interviewType": "Technical Round",
-      "companyId": "comp-1",
-      "assignedRecruiterId": "user-recruiter-1",
-      "assignedRecruiterName": "Sarah Jenkins"
-    },
-    {
-      "id": "app-5dbc732a",
-      "jobId": "job-1",
-      "jobTitle": "Senior Full Stack Engineer (React + Spring Boot)",
-      "companyName": "CloudScale Technologies",
-      "candidateId": "user-973cc7ba",
-      "candidateName": "Jordan Lee 3143",
-      "candidateEmail": "candidate.test3143@talenthub.com",
-      "candidateAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Jordan%20Lee%203143",
-      "candidateTitle": "Full-Stack Node/React Engineer",
-      "resumeUrl": "/uploads/resumes/default-profile-resume.pdf",
-      "coverLetter": "I am excited to apply for this engineering role with my Node.js and React background.",
-      "stage": "Interview",
-      "matchScore": 53,
-      "matchDetails": {
-        "score": 53,
-        "matchedSkills": [
-          "React",
-          "TypeScript",
-          "MySQL",
-          "Docker"
-        ],
-        "missingSkills": [
-          "Java",
-          "Spring Boot",
-          "Azure",
-          "REST API"
-        ],
-        "skillScore": 50,
-        "experienceScore": 60,
-        "analysisNotes": "Lower match score (53%). Lacks essential proficiencies: Java, Spring Boot, Azure, REST API."
-      },
-      "recruiterNotes": "Reviewed candidate GitHub and profile.",
-      "timeline": [
-        {
-          "stage": "Applied",
-          "changedBy": "user-973cc7ba",
-          "changedByName": "Jordan Lee 3143",
-          "changedAt": "2026-11-04T07:13:47.995Z",
-          "comment": "Candidate submitted online application via TalentHub portal."
-        },
-        {
-          "stage": "Screening",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:13:48.115Z",
-          "comment": "Strong background in Node.js and TypeScript. Moving forward."
-        },
-        {
-          "stage": "Interview",
-          "changedBy": "user-recruiter-1",
-          "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-04T07:13:48.139Z",
-          "comment": "Scheduled technical discussion with team lead."
-        }
-      ],
-      "createdAt": "2026-11-04T07:13:47.995Z",
-      "updatedAt": "2026-11-04T07:13:48.139Z",
-      "interviewDate": "2026-11-07T12:43:48Z",
-      "interviewType": "Technical Round",
-      "companyId": "comp-1",
-      "assignedRecruiterId": "user-recruiter-1",
-      "assignedRecruiterName": "Sarah Jenkins"
     }
   ],
   "reportedJobs": [
@@ -1343,25 +1071,25 @@
       "reason": "Application received."
     },
     {
-      "id": "hist-d0b9f5d0",
+      "id": "hist-d1c4ac0f",
       "applicationId": "app-4",
       "previousStatus": "Applied",
       "newStatus": "Screening",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-08T07:45:11.991Z",
+      "timestamp": "2026-11-11T08:57:10.500Z",
       "reason": "Candidate background checked. Moving to initial screening.",
       "comments": "Candidate background checked. Moving to initial screening.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-f3405998",
+      "id": "hist-e8b48429",
       "applicationId": "app-4",
       "previousStatus": "Screening",
       "newStatus": "Interview",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-08T07:45:12.000Z",
+      "timestamp": "2026-11-11T08:57:10.510Z",
       "reason": "Screening passed. Scheduling technical round.",
       "comments": "Screening passed. Scheduling technical round.",
       "isAdminOverride": false,
@@ -1369,39 +1097,100 @@
       "interviewType": "Technical Round"
     },
     {
-      "id": "hist-507fe571",
+      "id": "hist-847d1e1f",
       "applicationId": "app-4",
       "previousStatus": "Interview",
       "newStatus": "Offer",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-08T07:45:12.009Z",
+      "timestamp": "2026-11-11T08:57:10.523Z",
       "reason": "Candidate aced all rounds. Formal offer extended.",
       "comments": "Candidate aced all rounds. Formal offer extended.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-2da1022d",
+      "id": "hist-313dbe6f",
       "applicationId": "app-4",
       "previousStatus": "Offer",
       "newStatus": "Hired",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-08T07:45:12.019Z",
+      "timestamp": "2026-11-11T08:57:10.536Z",
       "reason": "Offer accepted! Candidate signed contract.",
       "comments": "Offer accepted! Candidate signed contract.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-60b36308",
+      "id": "hist-6b9209e4",
       "applicationId": "app-3",
       "previousStatus": "Screening",
       "newStatus": "Rejected",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-08T07:45:12.027Z",
+      "timestamp": "2026-11-11T08:57:10.547Z",
       "reason": "Position closed due to team budget restructuring.",
       "isAdminOverride": false
+    },
+    {
+      "id": "hist-a4feeac6",
+      "applicationId": "app-test-invalid",
+      "previousStatus": "Applied",
+      "newStatus": "Screening",
+      "changedBy": "user-recruiter-1",
+      "changedByName": "Sarah Jenkins",
+      "timestamp": "2026-11-11T08:57:10.560Z",
+      "reason": "Valid move",
+      "comments": "Valid move",
+      "isAdminOverride": false
+    }
+  ],
+  "passwordResetTokens": [],
+  "revokedTokens": [],
+  "resumeDocuments": [
+    {
+      "id": "rdoc-3f44bc0e-aa3",
+      "candidateId": "candidate-uuid-101",
+      "originalFilename": "Alice_Resume.pdf",
+      "blobName": "resumes/candidate-uuid-101/1794387457068-06758e6e-c0f8-4f6a-bb69-f5269cc5b32f-Alice_Resume.pdf",
+      "containerName": "talenthub-resumes",
+      "fileExtension": "pdf",
+      "mimeType": "application/pdf",
+      "fileSizeBytes": 83,
+      "checksumSha256": "78a89c6ac3d0fb6e94ff83c65f0bcc6e0ab50baf3ad1ff0f4c4cc47da4eab656",
+      "uploadStatus": "uploaded",
+      "isCurrent": false,
+      "uploadedAt": "2026-11-11T08:57:37.069Z",
+      "createdAt": "2026-11-11T08:57:37.069Z"
+    },
+    {
+      "id": "rdoc-01badbe1-f0c",
+      "candidateId": "candidate-uuid-101",
+      "originalFilename": "Alice_Profile.docx",
+      "blobName": "resumes/candidate-uuid-101/1794387457079-ef8628fd-12dd-45e7-b0bd-d6eedf5fe86c-Alice_Profile.docx",
+      "containerName": "talenthub-resumes",
+      "fileExtension": "docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "fileSizeBytes": 139,
+      "checksumSha256": "55b3cb599c2b037ead2b9b14a2b2d9f832d9d2d864fdeb87aa0e3e996c25224d",
+      "uploadStatus": "uploaded",
+      "isCurrent": false,
+      "uploadedAt": "2026-11-11T08:57:37.079Z",
+      "createdAt": "2026-11-11T08:57:37.079Z"
+    },
+    {
+      "id": "rdoc-1d588e87-c54",
+      "candidateId": "candidate-uuid-101",
+      "originalFilename": "Alice_Resume.pdf",
+      "blobName": "resumes/candidate-uuid-101/1794387457094-36bf57af-a4ae-481a-a621-2edbdc3336f8-Alice_Resume.pdf",
+      "containerName": "talenthub-resumes",
+      "fileExtension": "pdf",
+      "mimeType": "application/pdf",
+      "fileSizeBytes": 83,
+      "checksumSha256": "78a89c6ac3d0fb6e94ff83c65f0bcc6e0ab50baf3ad1ff0f4c4cc47da4eab656",
+      "uploadStatus": "deleted",
+      "isCurrent": false,
+      "uploadedAt": "2026-11-11T08:57:37.094Z",
+      "createdAt": "2026-11-11T08:57:37.094Z"
     }
   ]
 }

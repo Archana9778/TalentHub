@@ -300,6 +300,12 @@ export const ApplicantDetails: React.FC = () => {
                   {application.stage}
                 </span>
               </div>
+              {(candidate?.title || application.candidateTitle) && (
+                <p className="text-xs font-semibold text-indigo-700">
+                  {candidate?.title || application.candidateTitle}
+                  {candidate?.location && <span className="text-slate-400 font-normal"> &bull; {candidate.location}</span>}
+                </p>
+              )}
               <p className="text-xs text-slate-500 font-medium">
                 Applied for <strong>{application.jobTitle}</strong> at {application.companyName}
               </p>
@@ -510,16 +516,80 @@ export const ApplicantDetails: React.FC = () => {
             </div>
           )}
 
-          {/* Candidate Experience & Education */}
+          {/* Candidate Profile & Personal Information */}
           {candidate && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-600" />
-                <span>Candidate Profile & Experience</span>
-              </h3>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <User className="w-4 h-4 text-indigo-600" />
+                  <span>Candidate Personal &amp; Professional Details</span>
+                </h3>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold">
+                  Read Only
+                </span>
+              </div>
+
+              {/* Personal Details Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Full Name
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.name || application.candidateName}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Email Address
+                  </div>
+                  <div className="font-semibold text-slate-800 truncate">{candidate.email || application.candidateEmail}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Phone Number
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.phone || application.candidatePhone || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Date of Birth
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.dateOfBirth || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Gender
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.gender || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Professional Headline
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.title || application.candidateTitle || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 sm:col-span-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Current Location
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.location || 'Not provided'}</div>
+                </div>
+              </div>
 
               {candidate.bio && (
-                <p className="text-xs text-slate-600 leading-relaxed">{candidate.bio}</p>
+                <div className="pt-2">
+                  <div className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-1">
+                    Professional Summary / About Me
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-line">
+                    {candidate.bio}
+                  </p>
+                </div>
               )}
 
               {candidate.experience && candidate.experience.length > 0 && (
@@ -531,7 +601,7 @@ export const ApplicantDetails: React.FC = () => {
                     <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                       <div className="font-bold text-slate-900">{exp.title}</div>
                       <div className="text-slate-500">
-                        {exp.company} • {exp.period}
+                        {exp.company} &bull; {exp.period}
                       </div>
                       <p className="mt-1 text-slate-600 leading-relaxed">{exp.description}</p>
                     </div>
