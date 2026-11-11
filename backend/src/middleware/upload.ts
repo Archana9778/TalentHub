@@ -1,9 +1,10 @@
 /**
- * Multer middleware — memory storage only.
- * Files are held as Buffer in req.file.buffer and are never written to disk.
- * Content validation and Blob upload happen in the controller after this middleware.
+ * Multer upload middleware configuration.
+ * - uploadResume: Memory storage only. Resumes are held in req.file.buffer for validation and Azure Blob Storage streaming.
+ * - uploadLogo: Disk storage for company branding logos with safe filename generation and extension filtering.
  */
 import multer from 'multer';
+import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
 
@@ -40,4 +41,37 @@ export const uploadResume = multer({
     fileSize: config.storage.maxResumeSizeBytes,
   },
   fileFilter,
+});
+
+const logoUploadDir = path.resolve(__dirname, '../../uploads');
+
+const logoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(logoUploadDir)) {
+      fs.mkdirSync(logoUploadDir, { recursive: true });
+    }
+    cb(null, logoUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    cb(null, `${Date.now()}_${safeName}${ext}`);
+  },
+});
+
+const imageFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (allowedExtensions.includes(ext) || file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (.png, .jpg, .jpeg, .webp, .svg) are allowed!'));
+  }
+};
+
+export const uploadLogo = multer({
+  storage: logoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: imageFileFilter,
 });

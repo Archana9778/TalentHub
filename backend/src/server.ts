@@ -12,6 +12,7 @@ import authRoutes from './routes/authRoutes';
 import jobRoutes from './routes/jobRoutes';
 import applicationRoutes from './routes/applicationRoutes';
 import companyRoutes from './routes/companyRoutes';
+import recruiterRoutes from './routes/recruiterRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import jobAlertRoutes from './routes/jobAlertRoutes';
 import adminRoutes from './routes/adminRoutes';
@@ -29,7 +30,7 @@ if (config.nodeEnv === 'production') {
 app.use(cors({
   origin: Array.isArray(config.corsOrigin)
     ? (config.corsOrigin.length === 1 ? config.corsOrigin[0] : config.corsOrigin)
-    : config.corsOrigin,
+    : (config.corsOrigin || '*'),
   credentials: true,
 }));
 
@@ -42,26 +43,38 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Serve static uploaded resumes
+// Serve static uploaded resumes & company logos
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
-// Health probes for local and container orchestrator readiness checks.
+// Health probes (matches Azure Application Gateway, Spring Actuator, and container orchestrators)
 app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => {
-  const databaseHealthy = await db.checkHealth();
-  const status = databaseHealthy ? 'UP' : 'DOWN';
-  res.status(databaseHealthy ? 200 : 503).json({
-    status,
-    platform: 'TalentHub ATS API Tier (Node.js + Express + TypeScript)',
-    timestamp: new Date().toISOString(),
-    details: {
-      diskSpace: { status: 'UP' },
-      database: {
-        status: databaseHealthy ? 'UP' : 'DOWN',
-        engine: db.isMysql ? 'MySQL 8.0' : 'Embedded JSON persistence (development/test opt-in)',
+  try {
+    const databaseHealthy = await db.checkHealth();
+    const status = databaseHealthy ? 'UP' : 'DOWN';
+    res.status(databaseHealthy ? 200 : 503).json({
+      status,
+      platform: 'TalentHub ATS API Tier (Node.js + Express + TypeScript)',
+      timestamp: new Date().toISOString(),
+      details: {
+        diskSpace: { status: 'UP' },
+        database: {
+          status: databaseHealthy ? 'UP' : 'DOWN',
+          engine: db.isMysql
+            ? 'MySQL 8.0'
+            : 'Embedded JSON persistence (development/test opt-in)',
+        },
+        resumeParsing: { status: 'READY', mode: 'local-heuristic' },
+        azureDocumentIntelligence: { status: 'READY' },
       },
-      resumeParsing: { status: 'READY', mode: 'local-heuristic' },
-    },
-  });
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      status: 'DOWN',
+      platform: 'TalentHub ATS API Tier',
+      timestamp: new Date().toISOString(),
+      error: err.message,
+    });
+  }
 });
 
 // API Routes
@@ -69,6 +82,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/recruiters', recruiterRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/job-alerts', jobAlertRoutes);
 app.use('/api/admin', adminRoutes);
@@ -82,11 +96,13 @@ app.get('/api', (req: Request, res: Response) => {
     version: '1.0.0',
     backend: 'Node.js + Express + TypeScript',
     database: db.isMysql ? 'MySQL 8.0' : 'Embedded Engine',
+    documentation: '/api/docs',
     endpoints: [
       '/api/auth',
       '/api/jobs',
       '/api/applications',
       '/api/companies',
+      '/api/recruiters',
       '/api/categories',
       '/api/job-alerts',
       '/api/admin',
@@ -104,22 +120,27 @@ app.use((req: Request, res: Response) => {
 // Global error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   const uploadError = err instanceof multer.MulterError;
-  const status = uploadError && err.code === 'LIMIT_FILE_SIZE' ? 413 : (err.status || (uploadError ? 400 : 500));
-  const message = status >= 500 ? 'Internal Server Error' : (err.message || 'Invalid request.');
+  const status =
+    uploadError && err.code === 'LIMIT_FILE_SIZE'
+      ? 413
+      : err.status || (uploadError ? 400 : 500);
+  const message =
+    status >= 500 ? 'Internal Server Error' : err.message || 'Invalid request.';
   console.error('[TalentHub Backend Error]', err instanceof Error ? err.name : 'UnknownError', status);
   res.status(status).json({
     message,
-    error: config.nodeEnv === 'development' && status >= 500 ? err : undefined,
+    error: (config.nodeEnv === 'development' || process.env.NODE_ENV === 'development') && status >= 500 ? err : undefined,
   });
 });
 
 const PORT = config.port;
+let serverInstance: any = null;
 
 const startServer = async () => {
-  // Initialize Database (attempts connection & verifies readiness)
+  // Initialize Database before accepting requests
   await db.initialize();
 
-  const server = app.listen(PORT, () => {
+  serverInstance = app.listen(PORT, () => {
     console.log(`====================================================`);
     console.log(`🚀 TalentHub Backend running on http://localhost:${PORT}`);
     console.log(`🗄️  Database engine: ${db.isMysql ? 'MySQL 8.0' : 'Embedded Persistence'}`);
@@ -129,11 +150,16 @@ const startServer = async () => {
 
   const shutdown = async () => {
     console.log('\n[TalentHub Backend] Shutting down gracefully...');
-    server.close(async () => {
-      await mysqlDb.close();
-      console.log('[TalentHub Backend] Stopped.');
+    if (serverInstance) {
+      serverInstance.close(async () => {
+        await mysqlDb.close().catch(() => undefined);
+        console.log('[TalentHub Backend] Stopped.');
+        process.exit(0);
+      });
+    } else {
+      await mysqlDb.close().catch(() => undefined);
       process.exit(0);
-    });
+    }
   };
 
   process.on('SIGINT', shutdown);
@@ -141,6 +167,7 @@ const startServer = async () => {
 };
 
 export { app, startServer };
+export default app;
 
 if (process.env.NODE_ENV !== 'test' && process.env.TEST_IN_PROCESS !== 'true') {
   startServer().catch((err) => {

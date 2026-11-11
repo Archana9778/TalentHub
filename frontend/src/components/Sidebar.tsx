@@ -12,6 +12,7 @@ import {
   Building2,
   FolderTree,
   AlertTriangle,
+  UserCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -34,9 +35,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
   const recruiterLinks = [
     { to: '/recruiter/dashboard', label: 'Recruiter Dashboard', icon: LayoutDashboard },
-    { to: '/recruiter/jobs', label: 'Manage Jobs', icon: Briefcase },
+    { to: '/recruiter/company', label: 'Company Profile', icon: Building2 },
+    { to: '/recruiter/team', label: 'Recruiter Team', icon: Users },
+    { to: '/recruiter/jobs', label: 'Manage Jobs & Ownership', icon: Briefcase },
     { to: '/recruiter/jobs/create', label: 'Post a New Job', icon: PlusCircle },
-    { to: '/recruiter/applicants', label: 'Applicant Board (ATS)', icon: Users },
+    { to: '/recruiter/applicants', label: 'Application ATS Board', icon: FileCheck2 },
   ];
 
   const adminLinks = [
@@ -83,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         })}
       </nav>
 
-      {/* Azure Architecture Infrastructure Pill */}
+      {/* Infrastructure Health Pill */}
       <div className="mt-auto pt-4 border-t border-slate-100">
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
           <div className="flex items-center justify-between text-slate-700 font-semibold mb-1 text-[11px]">
@@ -105,21 +108,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
   return (
     <>
-      {/* Desktop Persistent Sidebar */}
-      <aside className="hidden lg:block w-64 shrink-0">
-        <div className="sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto">
-          {sidebarContent}
-        </div>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:block w-64 shrink-0 h-[calc(100vh-4rem)] sticky top-16">
+        {sidebarContent}
       </aside>
 
       {/* Mobile Drawer */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
             onClick={onClose}
           />
-          <div className="relative w-72 max-w-xs bg-white shadow-xl z-10">
+          <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl z-10">
             {sidebarContent}
           </div>
         </div>

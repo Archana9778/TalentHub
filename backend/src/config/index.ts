@@ -5,8 +5,11 @@ dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-// DB_MODE defaults to 'mysql'. Can be overridden with 'json' for development or testing.
-const dbMode = (process.env.DB_MODE || (process.env.DB_DRIVER === 'json' ? 'json' : 'mysql')).toLowerCase();
+
+const rawDbMode = (process.env.DB_MODE || '').toLowerCase();
+const hasMysqlEnv = Boolean(process.env.DB_USER && process.env.DB_PASSWORD && process.env.DB_NAME);
+const dbMode = rawDbMode === 'mysql' ? 'mysql' : (rawDbMode === 'json' ? 'json' : (hasMysqlEnv ? 'mysql' : 'json'));
+
 if (!['mysql', 'json'].includes(dbMode)) {
   throw new Error(`Invalid DB_MODE "${dbMode}". Use "mysql" or "json".`);
 }
@@ -17,7 +20,7 @@ if (dbMode === 'mysql' && (!process.env.DB_USER || !process.env.DB_PASSWORD || !
   throw new Error('DB_USER, DB_PASSWORD, and DB_NAME must be provided through environment variables when DB_MODE=mysql.');
 }
 
-const jwtSecret = process.env.JWT_SECRET;
+const jwtSecret = process.env.JWT_SECRET || (nodeEnv === 'development' || nodeEnv === 'test' ? 'talenthub-super-secret-azure-enterprise-key-2026-minimum-32-chars' : '');
 if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error('JWT_SECRET must be set to a random value of at least 32 characters.');
 }
@@ -42,10 +45,10 @@ const dbUser = process.env.DB_USER || 'talenthub_user';
 const dbPassword = process.env.DB_PASSWORD || '';
 const dbSsl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined;
 const dbPoolMin = parseInt(process.env.DB_POOL_MIN || '2', 10);
-const dbPoolMax = parseInt(process.env.DB_POOL_MAX || '10', 10);
+const dbPoolMax = parseInt(process.env.DB_CONNECTION_LIMIT || process.env.DB_POOL_MAX || '10', 10);
 
 export const config = {
-  port: parseInt(process.env.PORT || '5000', 10),
+  port: parseInt(String(process.env.PORT || '5000'), 10),
   nodeEnv,
   dbMode,
   jwtSecret,
@@ -66,6 +69,8 @@ export const config = {
     from: process.env.SMTP_FROM || 'TalentHub Security <no-reply@talenthub.com>',
     secure: process.env.SMTP_SECURE === 'true',
   },
+
+  // Knex / Query builder configuration
   database: {
     driver: process.env.DB_DRIVER || (dbMode === 'json' ? 'json' : 'mysql2'),
     host: dbHost,
@@ -95,15 +100,19 @@ export const config = {
   storage: {
     /** 'azurite' (local emulator) or 'azure' (production DefaultAzureCredential) */
     provider: (process.env.STORAGE_PROVIDER || 'azurite') as 'azurite' | 'azure',
-    /** Azurite / local dev connection string */
-    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    /** Azurite / local dev connection string (falls back to well-known Azurite default when azurite provider is active) */
+    connectionString:
+      process.env.AZURE_STORAGE_CONNECTION_STRING ||
+      ((process.env.STORAGE_PROVIDER || 'azurite') === 'azurite'
+        ? 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;'
+        : ''),
     /** Azure production account name (used with DefaultAzureCredential) */
     accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
     /** Private container name */
     containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
-    /** Maximum resume file size in bytes (default 10 MB) */
-    maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '10', 10) * 1024 * 1024,
-    /** Short-lived SAS URL expiry in minutes (default 15 min) */
-    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '15', 10),
+    /** Maximum resume file size in bytes (default 5 MB) */
+    maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '5', 10) * 1024 * 1024,
+    /** Short-lived SAS URL expiry in minutes (default 5 min) */
+    sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '5', 10),
   },
 };

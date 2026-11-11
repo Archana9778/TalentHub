@@ -36,4 +36,12 @@ logs/
 backend/uploads/resumes/*
 !backend/uploads/resumes/sample-alex-morgan-resume.pdf
 backend/data/*.tmp
+# Terraform generated files and local configuration
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
 

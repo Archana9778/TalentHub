@@ -1,0 +1,33 @@
+# ==============================================================================
+# TalentHub ATS: Example Terraform Configuration Variables
+# Rename this file to terraform.tfvars or <environment>.tfvars
+# ==============================================================================
+
+project_name = "talenthub"
+environment  = "prod"
+azure_region = "eastus"
+
+# Virtual Network CIDR
+vnet_address_space   = ["10.0.0.0/16"]
+
+# Subnet CIDRs (Must be non-overlapping within vnet_address_space)
+frontend_subnet_cidr = ["10.0.1.0/24"]
+backend_subnet_cidr  = ["10.0.2.0/24"]
+database_subnet_cidr = ["10.0.3.0/24"]
+
+# MySQL Flexible Server Settings
+# If mysql_admin_password is left empty, a secure random 24-character password is generated
+mysql_admin_username = "talenthub_admin"
+mysql_admin_password = ""
+mysql_sku_name       = "B_Standard_B1ms"
+mysql_version        = "8.0.21"
+mysql_storage_gb     = 20
+
+# Resource Tags
+tags = {
+  Project      = "TalentHub ATS"
+  ManagedBy    = "Terraform"
+  Environment  = "Production"
+  Compliance   = "SOC2"
+  Architecture = "3-Tier Secure IaaS/PaaS"
+}

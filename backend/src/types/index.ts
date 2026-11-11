@@ -1,5 +1,6 @@
 export type UserRole = 'candidate' | 'recruiter' | 'admin';
-export type UserStatus = 'active' | 'suspended';
+export type UserStatus = 'active' | 'inactive' | 'suspended';
+export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
   title: string;
@@ -20,6 +21,7 @@ export interface User {
   password?: string;
   name: string;
   role: UserRole;
+  companyRole?: CompanyRole;
   status: UserStatus;
   tokenVersion?: number;
   lastLoginAt?: string;
@@ -28,7 +30,9 @@ export interface User {
   companyId?: string;
   companyName?: string;
   phone?: string;
+  contactNumber?: string;
   title?: string;
+  designation?: string;
   location?: string;
   bio?: string;
   skills?: string[];
@@ -75,11 +79,16 @@ export interface Company {
   description: string;
   logo: string;
   website: string;
+  email?: string;
+  contactNumber?: string;
+  phone?: string;
+  address?: string;
   location: string;
   industry: string;
   size: string;
   verified: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface JobCategory {
@@ -129,10 +138,28 @@ export type ApplicationStage = 'Applied' | 'Screening' | 'Interview' | 'Offer' |
 
 export interface StageTimelineItem {
   stage: ApplicationStage;
+  previousStage?: ApplicationStage | 'None';
   changedBy: string;
   changedByName: string;
   changedAt: string;
   comment?: string;
+  reason?: string;
+  isAdminOverride?: boolean;
+}
+
+export interface ApplicationStatusHistory {
+  id: string;
+  applicationId: string;
+  previousStatus: ApplicationStage | 'None';
+  newStatus: ApplicationStage;
+  changedBy: string;
+  changedByName: string;
+  timestamp: string;
+  reason?: string;
+  comments?: string;
+  isAdminOverride?: boolean;
+  interviewDate?: string;
+  interviewType?: 'Video Call' | 'Technical Round' | 'On-site' | 'HR Discussion';
 }
 
 export type MatchCategory = 'Excellent Match' | 'Good Match' | 'Moderate Match' | 'Low Match';
@@ -194,6 +221,7 @@ export interface Application {
   id: string;
   jobId: string;
   jobTitle: string;
+  companyId?: string;
   companyName: string;
   candidateId: string;
   candidateName: string;
@@ -207,6 +235,8 @@ export interface Application {
   matchScore: number;
   matchDetails: MatchDetails;
   recruiterNotes: string;
+  assignedRecruiterId?: string;
+  assignedRecruiterName?: string;
   interviewDate?: string;
   interviewType?: 'Video Call' | 'Technical Round' | 'On-site' | 'HR Discussion';
   timeline: StageTimelineItem[];
@@ -253,7 +283,6 @@ export interface SystemStats {
   topSkillsInDemand: { skill: string; count: number }[];
   timeToHireDaysAverage: number;
 }
-
 
 // ─── Match Results ────────────────────────────────────────────────────────────
 

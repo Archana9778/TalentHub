@@ -630,7 +630,7 @@ export class MySqlRepository {
         'SELECT * FROM application_stage_history WHERE application_id = ? ORDER BY created_at ASC',
         [applicationId]
       );
-      return rows.map((r) => ({
+      return rows.map((r: any) => ({
         id: r.id,
         applicationId: r.application_id,
         fromStage: r.from_stage,

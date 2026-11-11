@@ -192,8 +192,8 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
     message: 'Resume uploaded successfully to private cloud storage and parsed.',
     resume: savedDoc,
     blobName,
-    resumeUrl: sasUrl,
-    downloadUrl: sasUrl,
+    resumeUrl: sasUrl || `/api/resume/${savedDoc.id}/download`,
+    downloadUrl: sasUrl || `/api/resume/${savedDoc.id}/download`,
     originalName,
     fileSizeBytes: validation.fileSizeBytes || buffer.length,
     checksumSha256: validation.checksum,
@@ -398,6 +398,83 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
 };
 
 export const getResumeDownloadUrl = downloadResume;
+
+// ─── DELETE /api/resume/:id? ─────────────────────────────────────────────────
+
+export const deleteResume = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Authentication required.' });
+    return;
+  }
+
+  const rawParam = req.params.id || req.params.candidateId;
+  const targetId = (typeof rawParam === 'string' ? rawParam : (Array.isArray(rawParam) ? rawParam[0] : undefined));
+
+  let doc: ResumeDocument | undefined;
+  let candidateId = req.user.id;
+  let blobName = '';
+
+  try {
+    if (targetId && targetId.startsWith('rdoc-')) {
+      doc = await (db as any).getResumeDocById(targetId);
+      if (doc) {
+        candidateId = doc.candidateId;
+        blobName = doc.blobName;
+      }
+    } else {
+      const cId = targetId || req.user.id;
+      doc = await (db as any).getCurrentResume(cId);
+      if (doc) {
+        candidateId = doc.candidateId;
+        blobName = doc.blobName;
+      } else {
+        const u = await db.getUserById(cId);
+        if (u && u.resumeUrl) {
+          candidateId = u.id;
+          blobName = extractBlobName(u.resumeUrl);
+        }
+      }
+    }
+
+    if (!doc && !blobName) {
+      res.status(404).json({ message: 'Resume not found.' });
+      return;
+    }
+
+    // Authorization: Candidate can only delete their own resume; Admin can delete any
+    if (req.user.role !== 'admin' && req.user.id !== candidateId) {
+      res.status(403).json({ message: 'Forbidden: You cannot delete another user’s resume.' });
+      return;
+    }
+
+    // Mark as deleted in DB
+    if (doc && typeof (db as any).markResumeDeleted === 'function') {
+      await (db as any).markResumeDeleted(doc.id, candidateId);
+    }
+
+    // Delete blob if blobName exists
+    if (blobName) {
+      await BlobStorageService.deleteBlob(blobName).catch((err) => {
+        console.warn('[resumeController] Warning: Could not delete blob from storage:', blobName, err);
+      });
+    }
+
+    // If current resume was deleted, clear user's resumeUrl
+    const currentUser = await db.getUserById(candidateId);
+    if (currentUser && (currentUser.resumeUrl === blobName || (doc && currentUser.resumeUrl?.includes(doc.id)))) {
+      await db.updateUser(candidateId, {
+        resumeUrl: undefined,
+        resumeOriginalName: undefined,
+        parsedResumeData: undefined,
+      });
+    }
+
+    res.json({ message: 'Resume deleted successfully.' });
+  } catch (err: any) {
+    console.error('[resumeController] deleteResume error:', err);
+    res.status(500).json({ message: 'Failed to delete resume.', error: err.message });
+  }
+};
 
 // ─── POST /api/resume/parse ──────────────────────────────────────────────────
 
