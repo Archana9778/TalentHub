@@ -400,8 +400,8 @@ export const api = {
   },
 
   // --- Companies ---
-  getCompanies: async () => {
-    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies');
+  getCompanies: async (params?: { search?: string; status?: string }) => {
+    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies', { params });
     return res.data;
   },
 
@@ -421,6 +421,13 @@ export const api = {
 
   updateCompany: async (id: string, updates: Partial<Company>) => {
     const res = await apiClient.put<{ message: string; company: Company }>(`/companies/${id}`, updates);
+    return res.data;
+  },
+
+  updateCompanyStatus: async (id: string, status: 'active' | 'suspended') => {
+    const res = await apiClient.patch<{ message: string; company: Company }>(`/admin/companies/${id}/status`, {
+      status,
+    });
     return res.data;
   },
 
@@ -495,8 +502,8 @@ export const api = {
   },
 
   // --- Categories ---
-  getCategories: async () => {
-    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories');
+  getCategories: async (params?: { includeInactive?: boolean }) => {
+    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories', { params });
     return res.data;
   },
 
@@ -507,6 +514,11 @@ export const api = {
 
   updateCategory: async (id: string, updates: Partial<JobCategory>) => {
     const res = await apiClient.put<{ message: string; category: JobCategory }>(`/categories/${id}`, updates);
+    return res.data;
+  },
+
+  toggleCategoryStatus: async (id: string) => {
+    const res = await apiClient.patch<{ message: string; category: JobCategory }>(`/categories/${id}/toggle`);
     return res.data;
   },
 
@@ -559,14 +571,23 @@ export const api = {
     return res.data;
   },
 
-  getReportedJobs: async () => {
-    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs');
+  getAdminRecruiters: async (params?: { search?: string; companyId?: string }) => {
+    const res = await apiClient.get<{ total: number; recruiters: User[] }>('/admin/recruiters', { params });
+    return res.data;
+  },
+
+  getReportedJobs: async (params?: { status?: string; search?: string }) => {
+    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs', { params });
     return res.data;
   },
 
   updateReportStatus: async (
     id: string,
-    payload: { status: 'pending' | 'resolved' | 'dismissed'; removeJob?: boolean }
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+      adminReason?: string;
+    }
   ) => {
     const res = await apiClient.patch<{ message: string; report: ReportedJob }>(
       `/admin/reported-jobs/${id}`,

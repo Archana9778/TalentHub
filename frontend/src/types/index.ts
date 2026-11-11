@@ -91,6 +91,7 @@ export interface Company {
   industry: string;
   size: string;
   verified: boolean;
+  status?: 'active' | 'suspended';
   createdAt: string;
   updatedAt?: string;
 }
@@ -101,6 +102,7 @@ export interface JobCategory {
   description: string;
   icon: string;
   jobCount: number;
+  isActive?: boolean;
 }
 
 export type WorkplaceType = 'Remote' | 'On-site' | 'Hybrid';
@@ -258,6 +260,12 @@ export interface ReportedJob {
   reason: string;
   details: string;
   status: 'pending' | 'resolved' | 'dismissed';
+  reviewedByUserId?: string;
+  reviewedByName?: string;
+  adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+  adminReason?: string;
+  reviewedAt?: string;
+  currentJobStatus?: JobStatus;
   createdAt: string;
 }
 

@@ -283,20 +283,51 @@ class DatabaseManager {
     return false;
   }
 
-  async getRecruiters(companyId?: string): Promise<User[]> {
+  async getRecruiters(paramsOrCompanyId?: string | { search?: string; companyId?: string }): Promise<User[]> {
+    const params = typeof paramsOrCompanyId === 'string'
+      ? { companyId: paramsOrCompanyId }
+      : (paramsOrCompanyId || {});
+
+    if (this.isMysql) return mysqlRepository.getRecruiters(params);
+
     const allUsers = await this.getUsers();
     let recruiters = allUsers.filter((u) => u.role === 'recruiter');
-    if (companyId) {
-      recruiters = recruiters.filter((u) => u.companyId === companyId);
+
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      recruiters = recruiters.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.companyName && u.companyName.toLowerCase().includes(q))
+      );
     }
+
+    if (params.companyId) {
+      recruiters = recruiters.filter((u) => u.companyId === params.companyId);
+    }
+
     return recruiters;
   }
   // ==========================================
   // COMPANIES
   // ==========================================
-  async getCompanies(): Promise<Company[]> {
-    if (this.isMysql) return mysqlRepository.getCompanies();
-    return this.data.companies;
+  async getCompanies(params?: { search?: string; status?: string }): Promise<Company[]> {
+    if (this.isMysql) return mysqlRepository.getCompanies(params);
+    let companies = this.data.companies;
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      companies = companies.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.industry.toLowerCase().includes(q) ||
+          c.location.toLowerCase().includes(q)
+      );
+    }
+    if (params?.status && params.status !== 'all') {
+      companies = companies.filter((c) => (c.status || 'active') === params.status);
+    }
+    return companies;
   }
 
   async getCompanyById(id: string): Promise<Company | undefined> {
@@ -338,14 +369,28 @@ class DatabaseManager {
   // ==========================================
   // CATEGORIES
   // ==========================================
-  async getCategories(): Promise<JobCategory[]> {
-    if (this.isMysql) return mysqlRepository.getCategories();
-    return this.data.categories;
+  async getCategories(includeInactive = false): Promise<JobCategory[]> {
+    if (this.isMysql) return mysqlRepository.getCategories(includeInactive);
+    let cats = this.data.categories;
+    if (!includeInactive) cats = cats.filter((c) => c.isActive !== false);
+    return cats;
   }
 
   async getCategoryById(id: string): Promise<JobCategory | undefined> {
     if (this.isMysql) return mysqlRepository.getCategoryById(id);
     return this.data.categories.find((c) => c.id === id);
+  }
+
+  async getCategoryByName(name: string, excludeId?: string): Promise<JobCategory | undefined> {
+    if (this.isMysql) return mysqlRepository.getCategoryByName(name, excludeId);
+    return this.data.categories.find(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && (!excludeId || c.id !== excludeId)
+    );
+  }
+
+  async getCategoryJobCount(id: string): Promise<number> {
+    if (this.isMysql) return mysqlRepository.getCategoryJobCount(id);
+    return this.data.jobs.filter((j) => j.categoryId === id).length;
   }
 
   async createCategory(category: JobCategory): Promise<JobCategory> {
@@ -582,6 +627,59 @@ class DatabaseManager {
     this.persistJson();
     return this.data.reportedJobs[idx];
   }
+
+  async updateReportedJobWithAction(
+    id: string,
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction: string;
+      adminReason: string;
+      reviewedByUserId: string;
+      reviewedByName: string;
+    }
+  ): Promise<ReportedJob | undefined> {
+    if (this.isMysql) return mysqlRepository.updateReportedJobWithAction(id, payload);
+    const idx = this.data.reportedJobs.findIndex((r) => r.id === id);
+    if (idx === -1) return undefined;
+    const rep = this.data.reportedJobs[idx];
+    rep.status = payload.status;
+    rep.adminAction = payload.adminAction as ReportedJob['adminAction'];
+    rep.adminReason = payload.adminReason;
+    rep.reviewedByUserId = payload.reviewedByUserId;
+    rep.reviewedByName = payload.reviewedByName;
+    rep.reviewedAt = new Date().toISOString();
+    // Update job status
+    const jobIdx = this.data.jobs.findIndex((j) => j.id === rep.jobId);
+    if (jobIdx !== -1) {
+      if (payload.adminAction === 'deactivate_job') {
+        this.data.jobs[jobIdx].status = 'closed';
+      } else if (payload.adminAction === 'restore_job') {
+        this.data.jobs[jobIdx].status = 'active';
+      }
+    }
+    this.persistJson();
+    return this.data.reportedJobs[idx];
+  }
+
+  async getReportedJobsFiltered(params?: { status?: string; search?: string }): Promise<ReportedJob[]> {
+    if (this.isMysql) return mysqlRepository.getReportedJobsFiltered(params);
+    let reports = this.data.reportedJobs;
+    if (params?.status && params.status !== 'all') {
+      reports = reports.filter((r) => r.status === params.status);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      reports = reports.filter(
+        (r) =>
+          r.jobTitle.toLowerCase().includes(q) ||
+          r.companyName.toLowerCase().includes(q) ||
+          r.reportedByName.toLowerCase().includes(q)
+      );
+    }
+    return reports;
+  }
+
+
 
   // ==========================================
   // JOB ALERTS

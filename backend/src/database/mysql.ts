@@ -141,6 +141,8 @@ class MySqlDatabase {
       await this.ensureProfileColumns();
       migrationStep = 'V5__auth_hardening.sql';
       await this.ensureAuthHardening();
+      migrationStep = 'V6__admin_stories.sql';
+      await this.ensureAdminStories();
       migrationStep = 'V6__candidate_personal_info.sql';
       await this.ensureCandidatePersonalInfoColumns();
     } catch (migrationErr: any) {
@@ -225,6 +227,47 @@ class MySqlDatabase {
         INDEX idx_revoked_expires (expires_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+  }
+
+  private async ensureAdminStories(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    // Check and add is_active to job_categories
+    const [catCols] = await this.pool.query<any[]>(
+      'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+      [config.db.database, 'job_categories', 'is_active']
+    );
+    if (Number(catCols?.[0]?.count || 0) === 0) {
+      await this.pool.query('ALTER TABLE job_categories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE');
+      console.log('[TalentHub MySQL] V6: Added is_active to job_categories.');
+    }
+
+    // Check and add status to companies
+    const [compCols] = await this.pool.query<any[]>(
+      'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+      [config.db.database, 'companies', 'status']
+    );
+    if (Number(compCols?.[0]?.count || 0) === 0) {
+      await this.pool.query("ALTER TABLE companies ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'active'");
+      console.log('[TalentHub MySQL] V6: Added status to companies.');
+    }
+
+    // Check and add reviewed_at to reported_jobs
+    const [repCols] = await this.pool.query<any[]>(
+      'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+      [config.db.database, 'reported_jobs', 'reviewed_at']
+    );
+    if (Number(repCols?.[0]?.count || 0) === 0) {
+      await this.pool.query(`
+        ALTER TABLE reported_jobs
+          ADD COLUMN reviewed_by_user_id VARCHAR(64) NULL,
+          ADD COLUMN reviewed_by_name VARCHAR(150) NULL,
+          ADD COLUMN admin_action VARCHAR(50) NULL,
+          ADD COLUMN admin_reason TEXT NULL,
+          ADD COLUMN reviewed_at TIMESTAMP NULL
+      `);
+      console.log('[TalentHub MySQL] V6: Added admin audit columns to reported_jobs.');
+    }
   }
 
   private async ensureCandidatePersonalInfoColumns(): Promise<void> {
