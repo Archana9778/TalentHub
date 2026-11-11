@@ -18,6 +18,7 @@ import jobAlertRoutes from './routes/jobAlertRoutes';
 import adminRoutes from './routes/adminRoutes';
 import resumeRoutes from './routes/resumeRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import candidateRoutes from './routes/candidateRoutes';
 
 const app = express();
 
@@ -88,6 +89,7 @@ app.use('/api/job-alerts', jobAlertRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/candidate', candidateRoutes);
 
 // Root greeting
 app.get('/api', (req: Request, res: Response) => {
@@ -99,6 +101,7 @@ app.get('/api', (req: Request, res: Response) => {
     documentation: '/api/docs',
     endpoints: [
       '/api/auth',
+      '/api/candidate',
       '/api/jobs',
       '/api/applications',
       '/api/companies',

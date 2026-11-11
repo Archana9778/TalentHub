@@ -42,6 +42,8 @@ export interface User {
   designation?: string;
   location?: string;
   bio?: string;
+  dateOfBirth?: string;
+  gender?: string;
   skills?: string[];
   certifications?: string[];
   experience?: UserExperience[];
@@ -51,6 +53,27 @@ export interface User {
   parsedResumeData?: ParsedResumeData;
   lastLoginAt?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CandidateProfile {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  title?: string;
+  location?: string;
+  bio?: string;
+  skills?: string[];
+  experience?: UserExperience[];
+  education?: UserEducation[];
+  resumeUrl?: string;
+  resumeOriginalName?: string;
+  avatarUrl?: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 

@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import {
   User,
+  CandidateProfile,
   Job,
   Application,
   Company,
@@ -130,6 +131,19 @@ export const api = {
   updateProfile: async (updates: Partial<User>) => {
     const res = await apiClient.put<{ message: string; user: User }>(
       '/auth/profile',
+      updates
+    );
+    return res.data;
+  },
+
+  getCandidateProfile: async () => {
+    const res = await apiClient.get<{ profile: CandidateProfile }>('/candidate/profile');
+    return res.data;
+  },
+
+  updateCandidateProfile: async (updates: Partial<CandidateProfile>) => {
+    const res = await apiClient.put<{ message: string; profile: CandidateProfile }>(
+      '/candidate/profile',
       updates
     );
     return res.data;

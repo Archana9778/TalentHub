@@ -26,7 +26,7 @@ export class MySqlRepository {
         u.parsed_resume_data_json, u.token_version, u.last_login_at, u.password_changed_at,
         u.created_at, u.updated_at,
         c.title as candidate_title, c.location as candidate_location, c.phone as candidate_phone,
-        c.bio as candidate_bio, c.resume_url, c.resume_original_name, c.skills_json,
+        c.bio as candidate_bio, c.date_of_birth, c.gender, c.resume_url, c.resume_original_name, c.skills_json,
         c.experience_json, c.education_json,
         r.title as recruiter_title, r.location as recruiter_location, r.phone as recruiter_phone,
         r.bio as recruiter_bio, r.company_id, r.company_name
@@ -80,9 +80,9 @@ export class MySqlRepository {
       if (user.role === 'candidate') {
         await conn.query(
           `INSERT INTO candidates (
-            id, user_id, title, location, phone, bio, resume_url, resume_original_name,
+            id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
             skills_json, experience_json, education_json, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
             user.id,
             user.id,
@@ -90,6 +90,8 @@ export class MySqlRepository {
             user.location || null,
             user.phone || null,
             user.bio || null,
+            user.dateOfBirth ? user.dateOfBirth : null,
+            user.gender || null,
             user.resumeUrl || null,
             user.resumeOriginalName || null,
             user.skills ? JSON.stringify(user.skills) : JSON.stringify([]),
@@ -163,6 +165,8 @@ export class MySqlRepository {
           updates.location !== undefined ||
           updates.phone !== undefined ||
           updates.bio !== undefined ||
+          updates.dateOfBirth !== undefined ||
+          updates.gender !== undefined ||
           updates.resumeUrl !== undefined ||
           updates.resumeOriginalName !== undefined ||
           updates.skills !== undefined ||
@@ -174,9 +178,9 @@ export class MySqlRepository {
           if (candRows.length === 0) {
             await conn.query(
               `INSERT INTO candidates (
-                id, user_id, title, location, phone, bio, resume_url, resume_original_name,
+                id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
                 skills_json, experience_json, education_json, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
               [
                 id,
                 id,
@@ -184,6 +188,8 @@ export class MySqlRepository {
                 updates.location || current.location || null,
                 updates.phone || current.phone || null,
                 updates.bio || current.bio || null,
+                updates.dateOfBirth !== undefined ? updates.dateOfBirth : (current.dateOfBirth || null),
+                updates.gender !== undefined ? updates.gender : (current.gender || null),
                 updates.resumeUrl || current.resumeUrl || null,
                 updates.resumeOriginalName || current.resumeOriginalName || null,
                 updates.skills !== undefined ? JSON.stringify(updates.skills) : JSON.stringify(current.skills || []),
@@ -198,6 +204,8 @@ export class MySqlRepository {
             if (updates.location !== undefined) { candFields.push('location = ?'); candValues.push(updates.location); }
             if (updates.phone !== undefined) { candFields.push('phone = ?'); candValues.push(updates.phone); }
             if (updates.bio !== undefined) { candFields.push('bio = ?'); candValues.push(updates.bio); }
+            if (updates.dateOfBirth !== undefined) { candFields.push('date_of_birth = ?'); candValues.push(updates.dateOfBirth ? updates.dateOfBirth : null); }
+            if (updates.gender !== undefined) { candFields.push('gender = ?'); candValues.push(updates.gender || null); }
             if (updates.resumeUrl !== undefined) { candFields.push('resume_url = ?'); candValues.push(updates.resumeUrl); }
             if (updates.resumeOriginalName !== undefined) { candFields.push('resume_original_name = ?'); candValues.push(updates.resumeOriginalName); }
             if (updates.skills !== undefined) { candFields.push('skills_json = ?'); candValues.push(JSON.stringify(updates.skills)); }
@@ -949,6 +957,8 @@ export class MySqlRepository {
       location: (isCandidate ? row.candidate_location : row.recruiter_location) || row.location || undefined,
       phone: (isCandidate ? row.candidate_phone : row.recruiter_phone) || row.phone || undefined,
       bio: (isCandidate ? row.candidate_bio : row.recruiter_bio) || row.bio || undefined,
+      dateOfBirth: row.date_of_birth ? (typeof row.date_of_birth === 'string' ? row.date_of_birth.substring(0, 10) : new Date(row.date_of_birth).toISOString().substring(0, 10)) : undefined,
+      gender: row.gender || undefined,
       companyId: isRecruiter ? (row.company_id || undefined) : undefined,
       companyName: isRecruiter ? (row.company_name || undefined) : undefined,
       resumeUrl: isCandidate ? (row.resume_url || undefined) : undefined,
