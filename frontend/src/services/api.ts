@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import {
   User,
+  CandidateProfile,
   Job,
   Application,
   Company,
@@ -9,6 +10,7 @@ import {
   ReportedJob,
   SystemStats,
   ApplicationStage,
+  ApplicationStatusHistory,
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
@@ -134,6 +136,19 @@ export const api = {
     return res.data;
   },
 
+  getCandidateProfile: async () => {
+    const res = await apiClient.get<{ profile: CandidateProfile }>('/candidate/profile');
+    return res.data;
+  },
+
+  updateCandidateProfile: async (updates: Partial<CandidateProfile>) => {
+    const res = await apiClient.put<{ message: string; profile: CandidateProfile }>(
+      '/candidate/profile',
+      updates
+    );
+    return res.data;
+  },
+
   uploadResume: async (file: File, onProgress?: (pct: number) => void) => {
     const formData = new FormData();
     formData.append('resume', file);
@@ -205,7 +220,7 @@ export const api = {
   },
 
   getJobById: async (id: string) => {
-    const res = await apiClient.get<{ job: Job; company?: Company }>(`/jobs/${id}`);
+    const res = await apiClient.get<{ job: Job; company?: Company; recruiter?: any }>(`/jobs/${id}`);
     return res.data;
   },
 
@@ -224,8 +239,17 @@ export const api = {
     return res.data;
   },
 
-  getRecruiterJobs: async () => {
-    const res = await apiClient.get<{ total: number; jobs: Job[] }>('/jobs/recruiter/my-jobs');
+  assignJob: async (jobId: string, recruiterId: string) => {
+    const res = await apiClient.patch<{ message: string; job: Job }>(`/jobs/${jobId}/assign`, {
+      recruiterId,
+    });
+    return res.data;
+  },
+
+  getRecruiterJobs: async (params?: { scope?: string; recruiterId?: string }) => {
+    const res = await apiClient.get<{ total: number; jobs: Job[] }>('/jobs/recruiter/my-jobs', {
+      params,
+    });
     return res.data;
   },
 
@@ -253,6 +277,13 @@ export const api = {
 
   getMyApplications: async () => {
     const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications/my-applications');
+    return res.data;
+  },
+
+  getApplications: async (params?: Record<string, string | undefined>) => {
+    const res = await apiClient.get<{ total: number; applications: Application[] }>('/applications', {
+      params,
+    });
     return res.data;
   },
 
@@ -300,12 +331,39 @@ export const api = {
   },
 
   getApplicationById: async (id: string) => {
-    const res = await apiClient.get<{ application: Application; candidate: User | null; job: Job | null }>(
-      `/applications/${id}`
-    );
+    const res = await apiClient.get<{
+      application: Application;
+      candidate: User | null;
+      job: Job | null;
+      history?: ApplicationStatusHistory[];
+    }>(`/applications/${id}`);
     return res.data;
   },
 
+  updateApplicationStatus: async (
+    id: string,
+    payload: {
+      status?: ApplicationStage;
+      stage?: ApplicationStage;
+      comment?: string;
+      reason?: string;
+      rejectionReason?: string;
+      adminOverride?: boolean;
+      adminOverrideReason?: string;
+      interviewDate?: string;
+      interviewType?: string;
+      recruiterNotes?: string;
+    }
+  ) => {
+    const res = await apiClient.patch<{
+      message: string;
+      application: Application;
+      historyEntry?: ApplicationStatusHistory;
+    }>(`/applications/${id}/status`, payload);
+    return res.data;
+  },
+
+  // Backward compatibility alias for updateApplicationStage
   updateApplicationStage: async (
     id: string,
     payload: {
@@ -314,28 +372,45 @@ export const api = {
       interviewDate?: string;
       interviewType?: string;
       recruiterNotes?: string;
+      rejectionReason?: string;
+      adminOverride?: boolean;
     }
   ) => {
     const res = await apiClient.patch<{ message: string; application: Application }>(
-      `/applications/${id}/stage`,
-      payload
+      `/applications/${id}/status`,
+      { ...payload, status: payload.stage }
     );
     return res.data;
   },
 
+  getApplicationHistory: async (id: string) => {
+    const res = await apiClient.get<{
+      total: number;
+      history: ApplicationStatusHistory[];
+      timeline: any[];
+    }>(`/applications/${id}/history`);
+    return res.data;
+  },
+
   getApplicationAuditTimeline: async (id: string) => {
-    const res = await apiClient.get<{ total: number; timeline: any[] }>(`/applications/${id}/audit`);
+    const res = await apiClient.get<{ total: number; timeline: any[]; history?: ApplicationStatusHistory[] }>(
+      `/applications/${id}/history`
+    );
     return res.data;
   },
 
   // --- Companies ---
-  getCompanies: async () => {
-    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies');
+  getCompanies: async (params?: { search?: string; status?: string }) => {
+    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies', { params });
     return res.data;
   },
 
   getCompanyById: async (id: string) => {
-    const res = await apiClient.get<{ company: Company; jobs: Job[] }>(`/companies/${id}`);
+    const res = await apiClient.get<{
+      company: Company;
+      jobs: Job[];
+      stats?: { totalJobs: number; totalRecruiters: number; activeRecruiters: number };
+    }>(`/companies/${id}`);
     return res.data;
   },
 
@@ -349,14 +424,86 @@ export const api = {
     return res.data;
   },
 
+  updateCompanyStatus: async (id: string, status: 'active' | 'suspended') => {
+    const res = await apiClient.patch<{ message: string; company: Company }>(`/admin/companies/${id}/status`, {
+      status,
+    });
+    return res.data;
+  },
+
+  uploadCompanyLogo: async (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    const res = await apiClient.post<{ message: string; logoUrl: string; company: Company }>(
+      `/companies/${id}/logo`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+    return res.data;
+  },
+
+  getCompanyRecruiters: async (companyId: string) => {
+    const res = await apiClient.get<{ total: number; recruiters: User[] }>(
+      `/companies/${companyId}/recruiters`
+    );
+    return res.data;
+  },
+
   deleteCompany: async (id: string) => {
     const res = await apiClient.delete<{ message: string }>(`/companies/${id}`);
     return res.data;
   },
 
+  // --- Recruiters ---
+  getRecruiters: async (params?: { status?: string; search?: string; companyId?: string }) => {
+    const res = await apiClient.get<{ total: number; recruiters: User[] }>('/recruiters', { params });
+    return res.data;
+  },
+
+  getRecruiterById: async (id: string) => {
+    const res = await apiClient.get<{ recruiter: User; assignedJobs: Job[] }>(`/recruiters/${id}`);
+    return res.data;
+  },
+
+  addRecruiter: async (payload: {
+    name: string;
+    email: string;
+    password: string;
+    contactNumber?: string;
+    phone?: string;
+    designation?: string;
+    title?: string;
+    role?: string;
+    companyRole?: string;
+    status?: string;
+    companyId?: string;
+  }) => {
+    const res = await apiClient.post<{ message: string; recruiter: User }>('/recruiters', payload);
+    return res.data;
+  },
+
+  updateRecruiter: async (id: string, updates: Partial<User> & { password?: string }) => {
+    const res = await apiClient.put<{ message: string; recruiter: User }>(`/recruiters/${id}`, updates);
+    return res.data;
+  },
+
+  updateRecruiterStatus: async (id: string, status: 'active' | 'inactive' | 'suspended') => {
+    const res = await apiClient.patch<{ message: string; recruiter: User }>(`/recruiters/${id}/status`, {
+      status,
+    });
+    return res.data;
+  },
+
+  getJobsByRecruiter: async (recruiterId: string) => {
+    const res = await apiClient.get<{ total: number; jobs: Job[] }>(`/recruiters/${recruiterId}/jobs`);
+    return res.data;
+  },
+
   // --- Categories ---
-  getCategories: async () => {
-    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories');
+  getCategories: async (params?: { includeInactive?: boolean }) => {
+    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories', { params });
     return res.data;
   },
 
@@ -367,6 +514,11 @@ export const api = {
 
   updateCategory: async (id: string, updates: Partial<JobCategory>) => {
     const res = await apiClient.put<{ message: string; category: JobCategory }>(`/categories/${id}`, updates);
+    return res.data;
+  },
+
+  toggleCategoryStatus: async (id: string) => {
+    const res = await apiClient.patch<{ message: string; category: JobCategory }>(`/categories/${id}/toggle`);
     return res.data;
   },
 
@@ -419,14 +571,23 @@ export const api = {
     return res.data;
   },
 
-  getReportedJobs: async () => {
-    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs');
+  getAdminRecruiters: async (params?: { search?: string; companyId?: string }) => {
+    const res = await apiClient.get<{ total: number; recruiters: User[] }>('/admin/recruiters', { params });
+    return res.data;
+  },
+
+  getReportedJobs: async (params?: { status?: string; search?: string }) => {
+    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs', { params });
     return res.data;
   },
 
   updateReportStatus: async (
     id: string,
-    payload: { status: 'pending' | 'resolved' | 'dismissed'; removeJob?: boolean }
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+      adminReason?: string;
+    }
   ) => {
     const res = await apiClient.patch<{ message: string; report: ReportedJob }>(
       `/admin/reported-jobs/${id}`,

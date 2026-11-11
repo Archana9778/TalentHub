@@ -18,6 +18,17 @@ export class MySqlRepository {
     return mysqlDb.getPool();
   }
 
+  constructor() {
+    this.mapUser = this.mapUser.bind(this);
+    this.mapCompany = this.mapCompany.bind(this);
+    this.mapCategory = this.mapCategory.bind(this);
+    this.mapJob = this.mapJob.bind(this);
+    this.mapApplication = this.mapApplication.bind(this);
+    this.mapReportedJob = this.mapReportedJob.bind(this);
+    this.mapJobAlert = this.mapJobAlert.bind(this);
+    this.parseJson = this.parseJson.bind(this);
+  }
+
   // --- Users & Profiles ---
   private get userSelectSql(): string {
     return `
@@ -26,7 +37,7 @@ export class MySqlRepository {
         u.parsed_resume_data_json, u.token_version, u.last_login_at, u.password_changed_at,
         u.created_at, u.updated_at,
         c.title as candidate_title, c.location as candidate_location, c.phone as candidate_phone,
-        c.bio as candidate_bio, c.resume_url, c.resume_original_name, c.skills_json,
+        c.bio as candidate_bio, c.date_of_birth, c.gender, c.resume_url, c.resume_original_name, c.skills_json,
         c.experience_json, c.education_json,
         r.title as recruiter_title, r.location as recruiter_location, r.phone as recruiter_phone,
         r.bio as recruiter_bio, r.company_id, r.company_name
@@ -80,9 +91,9 @@ export class MySqlRepository {
       if (user.role === 'candidate') {
         await conn.query(
           `INSERT INTO candidates (
-            id, user_id, title, location, phone, bio, resume_url, resume_original_name,
+            id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
             skills_json, experience_json, education_json, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
             user.id,
             user.id,
@@ -90,6 +101,8 @@ export class MySqlRepository {
             user.location || null,
             user.phone || null,
             user.bio || null,
+            user.dateOfBirth ? user.dateOfBirth : null,
+            user.gender || null,
             user.resumeUrl || null,
             user.resumeOriginalName || null,
             user.skills ? JSON.stringify(user.skills) : JSON.stringify([]),
@@ -163,6 +176,8 @@ export class MySqlRepository {
           updates.location !== undefined ||
           updates.phone !== undefined ||
           updates.bio !== undefined ||
+          updates.dateOfBirth !== undefined ||
+          updates.gender !== undefined ||
           updates.resumeUrl !== undefined ||
           updates.resumeOriginalName !== undefined ||
           updates.skills !== undefined ||
@@ -174,9 +189,9 @@ export class MySqlRepository {
           if (candRows.length === 0) {
             await conn.query(
               `INSERT INTO candidates (
-                id, user_id, title, location, phone, bio, resume_url, resume_original_name,
+                id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
                 skills_json, experience_json, education_json, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
               [
                 id,
                 id,
@@ -184,6 +199,8 @@ export class MySqlRepository {
                 updates.location || current.location || null,
                 updates.phone || current.phone || null,
                 updates.bio || current.bio || null,
+                updates.dateOfBirth !== undefined ? updates.dateOfBirth : (current.dateOfBirth || null),
+                updates.gender !== undefined ? updates.gender : (current.gender || null),
                 updates.resumeUrl || current.resumeUrl || null,
                 updates.resumeOriginalName || current.resumeOriginalName || null,
                 updates.skills !== undefined ? JSON.stringify(updates.skills) : JSON.stringify(current.skills || []),
@@ -198,6 +215,8 @@ export class MySqlRepository {
             if (updates.location !== undefined) { candFields.push('location = ?'); candValues.push(updates.location); }
             if (updates.phone !== undefined) { candFields.push('phone = ?'); candValues.push(updates.phone); }
             if (updates.bio !== undefined) { candFields.push('bio = ?'); candValues.push(updates.bio); }
+            if (updates.dateOfBirth !== undefined) { candFields.push('date_of_birth = ?'); candValues.push(updates.dateOfBirth ? updates.dateOfBirth : null); }
+            if (updates.gender !== undefined) { candFields.push('gender = ?'); candValues.push(updates.gender || null); }
             if (updates.resumeUrl !== undefined) { candFields.push('resume_url = ?'); candValues.push(updates.resumeUrl); }
             if (updates.resumeOriginalName !== undefined) { candFields.push('resume_original_name = ?'); candValues.push(updates.resumeOriginalName); }
             if (updates.skills !== undefined) { candFields.push('skills_json = ?'); candValues.push(JSON.stringify(updates.skills)); }
@@ -276,8 +295,20 @@ export class MySqlRepository {
   }
 
   // --- Companies ---
-  async getCompanies(): Promise<Company[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM companies ORDER BY created_at DESC');
+  async getCompanies(params?: { search?: string; status?: string }): Promise<Company[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    if (params?.search) {
+      conditions.push('(LOWER(name) LIKE ? OR LOWER(industry) LIKE ? OR LOWER(location) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    if (params?.status && params.status !== 'all') {
+      conditions.push('status = ?');
+      values.push(params.status);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [rows] = await this.pool.query<any[]>(`SELECT * FROM companies ${where} ORDER BY created_at DESC`, values);
     return rows.map(this.mapCompany);
   }
 
@@ -288,8 +319,8 @@ export class MySqlRepository {
 
   async createCompany(company: Company): Promise<Company> {
     await this.pool.query(
-      `INSERT INTO companies (id, name, description, logo, website, location, industry, company_size, verified)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO companies (id, name, description, logo, website, location, industry, company_size, verified, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         company.id,
         company.name,
@@ -300,6 +331,7 @@ export class MySqlRepository {
         company.industry || null,
         company.size || null,
         company.verified ? 1 : 0,
+        company.status || 'active',
       ]
     );
     return company;
@@ -320,6 +352,7 @@ export class MySqlRepository {
     if (updates.industry !== undefined) { fields.push('industry = ?'); values.push(updates.industry); }
     if (updates.size !== undefined) { fields.push('company_size = ?'); values.push(updates.size); }
     if (updates.verified !== undefined) { fields.push('verified = ?'); values.push(updates.verified ? 1 : 0); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
 
     if (fields.length > 0) {
       values.push(id);
@@ -335,20 +368,43 @@ export class MySqlRepository {
   }
 
   // --- Categories ---
-  async getCategories(): Promise<JobCategory[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM job_categories ORDER BY name ASC');
+  async getCategories(includeInactive = false): Promise<JobCategory[]> {
+    let sql = `
+      SELECT jc.*,
+        COUNT(j.id) AS live_job_count
+      FROM job_categories jc
+      LEFT JOIN jobs j ON j.category_id = jc.id AND j.status = 'active'
+      ${includeInactive ? '' : 'WHERE (jc.is_active IS NULL OR jc.is_active = 1)'}
+      GROUP BY jc.id
+      ORDER BY jc.name ASC
+    `;
+    const [rows] = await this.pool.query<any[]>(sql);
     return rows.map(this.mapCategory);
   }
 
   async getCategoryById(id: string): Promise<JobCategory | undefined> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM job_categories WHERE id = ?', [id]);
+    const [rows] = await this.pool.query<any[]>(`
+      SELECT jc.*, COUNT(j.id) AS live_job_count
+      FROM job_categories jc
+      LEFT JOIN jobs j ON j.category_id = jc.id AND j.status = 'active'
+      WHERE jc.id = ?
+      GROUP BY jc.id
+    `, [id]);
+    return rows.length > 0 ? this.mapCategory(rows[0]) : undefined;
+  }
+
+  async getCategoryByName(name: string, excludeId?: string): Promise<JobCategory | undefined> {
+    let sql = 'SELECT * FROM job_categories WHERE LOWER(name) = LOWER(?)';
+    const params: any[] = [name];
+    if (excludeId) { sql += ' AND id != ?'; params.push(excludeId); }
+    const [rows] = await this.pool.query<any[]>(sql, params);
     return rows.length > 0 ? this.mapCategory(rows[0]) : undefined;
   }
 
   async createCategory(category: JobCategory): Promise<JobCategory> {
     await this.pool.query(
-      `INSERT INTO job_categories (id, name, description, icon, job_count) VALUES (?, ?, ?, ?, ?)`,
-      [category.id, category.name, category.description || null, category.icon || 'Briefcase', category.jobCount || 0]
+      `INSERT INTO job_categories (id, name, description, icon, job_count, is_active) VALUES (?, ?, ?, ?, ?, ?)`,
+      [category.id, category.name, category.description || null, category.icon || 'Briefcase', category.jobCount || 0, category.isActive !== false ? 1 : 0]
     );
     return category;
   }
@@ -364,6 +420,7 @@ export class MySqlRepository {
     if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
     if (updates.icon !== undefined) { fields.push('icon = ?'); values.push(updates.icon); }
     if (updates.jobCount !== undefined) { fields.push('job_count = ?'); values.push(updates.jobCount); }
+    if (updates.isActive !== undefined) { fields.push('is_active = ?'); values.push(updates.isActive ? 1 : 0); }
 
     if (fields.length > 0) {
       values.push(id);
@@ -376,6 +433,14 @@ export class MySqlRepository {
   async deleteCategory(id: string): Promise<boolean> {
     const [result] = await this.pool.query<any>('DELETE FROM job_categories WHERE id = ?', [id]);
     return result.affectedRows > 0;
+  }
+
+  async getCategoryJobCount(id: string): Promise<number> {
+    const [rows] = await this.pool.query<any[]>(
+      "SELECT COUNT(*) AS cnt FROM jobs WHERE category_id = ?",
+      [id]
+    );
+    return Number(rows?.[0]?.cnt || 0);
   }
 
   // --- Jobs ---
@@ -630,7 +695,7 @@ export class MySqlRepository {
         'SELECT * FROM application_stage_history WHERE application_id = ? ORDER BY created_at ASC',
         [applicationId]
       );
-      return rows.map((r) => ({
+      return rows.map((r: any) => ({
         id: r.id,
         applicationId: r.application_id,
         fromStage: r.from_stage,
@@ -676,6 +741,101 @@ export class MySqlRepository {
     await this.pool.query('UPDATE reported_jobs SET status = ? WHERE id = ?', [status, id]);
     const [rows] = await this.pool.query<any[]>('SELECT * FROM reported_jobs WHERE id = ?', [id]);
     return rows.length > 0 ? this.mapReportedJob(rows[0]) : undefined;
+  }
+
+  async updateReportedJobWithAction(
+    id: string,
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction: string;
+      adminReason: string;
+      reviewedByUserId: string;
+      reviewedByName: string;
+    }
+  ): Promise<ReportedJob | undefined> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `UPDATE reported_jobs SET
+          status = ?,
+          admin_action = ?,
+          admin_reason = ?,
+          reviewed_by_user_id = ?,
+          reviewed_by_name = ?,
+          reviewed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [payload.status, payload.adminAction, payload.adminReason,
+         payload.reviewedByUserId, payload.reviewedByName, id]
+      );
+
+      // Modify the referenced job based on the admin action
+      const [repRows] = await conn.query<any[]>('SELECT job_id FROM reported_jobs WHERE id = ?', [id]);
+      if (repRows.length > 0) {
+        const jobId = repRows[0].job_id;
+        if (payload.adminAction === 'deactivate_job') {
+          await conn.query("UPDATE jobs SET status = 'closed' WHERE id = ?", [jobId]);
+        } else if (payload.adminAction === 'restore_job') {
+          await conn.query("UPDATE jobs SET status = 'active' WHERE id = ?", [jobId]);
+        }
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const [rows] = await this.pool.query<any[]>('SELECT * FROM reported_jobs WHERE id = ?', [id]);
+    return rows.length > 0 ? this.mapReportedJob(rows[0]) : undefined;
+  }
+
+  async getReportedJobsFiltered(params?: { status?: string; search?: string }): Promise<ReportedJob[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    if (params?.status && params.status !== 'all') {
+      conditions.push('rj.status = ?');
+      values.push(params.status);
+    }
+    if (params?.search) {
+      conditions.push('(LOWER(rj.job_title) LIKE ? OR LOWER(rj.company_name) LIKE ? OR LOWER(rj.reported_by_name) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT rj.*, j.status AS current_job_status
+       FROM reported_jobs rj
+       LEFT JOIN jobs j ON j.id = rj.job_id
+       ${where}
+       ORDER BY rj.created_at DESC`,
+      values
+    );
+    return rows.map((row) => ({
+      ...this.mapReportedJob(row),
+    }));
+  }
+
+  async getRecruiters(params?: { search?: string; companyId?: string }): Promise<User[]> {
+    const conditions: string[] = ["role = 'recruiter'"];
+    const values: any[] = [];
+    if (params?.search) {
+      conditions.push('(LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR LOWER(company_name) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    if (params?.companyId) {
+      conditions.push('company_id = ?');
+      values.push(params.companyId);
+    }
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT * FROM users WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
+      values
+    );
+    return rows.map((r) => this.mapUser(r));
   }
 
   // --- Job Alerts ---
@@ -949,6 +1109,8 @@ export class MySqlRepository {
       location: (isCandidate ? row.candidate_location : row.recruiter_location) || row.location || undefined,
       phone: (isCandidate ? row.candidate_phone : row.recruiter_phone) || row.phone || undefined,
       bio: (isCandidate ? row.candidate_bio : row.recruiter_bio) || row.bio || undefined,
+      dateOfBirth: row.date_of_birth ? (typeof row.date_of_birth === 'string' ? row.date_of_birth.substring(0, 10) : new Date(row.date_of_birth).toISOString().substring(0, 10)) : undefined,
+      gender: row.gender || undefined,
       companyId: isRecruiter ? (row.company_id || undefined) : undefined,
       companyName: isRecruiter ? (row.company_name || undefined) : undefined,
       resumeUrl: isCandidate ? (row.resume_url || undefined) : undefined,
@@ -976,6 +1138,7 @@ export class MySqlRepository {
       industry: row.industry || '',
       size: row.company_size || '',
       verified: Boolean(row.verified),
+      status: (row.status as 'active' | 'suspended') || 'active',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     };
   }
@@ -986,7 +1149,8 @@ export class MySqlRepository {
       name: row.name,
       description: row.description || '',
       icon: row.icon || 'Briefcase',
-      jobCount: Number(row.job_count || 0),
+      jobCount: Number(row.live_job_count ?? row.job_count ?? 0),
+      isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
     };
   }
 
@@ -1082,6 +1246,11 @@ export class MySqlRepository {
       reason: row.reason,
       details: row.details || '',
       status: row.status,
+      reviewedByUserId: row.reviewed_by_user_id || undefined,
+      reviewedByName: row.reviewed_by_name || undefined,
+      adminAction: row.admin_action || undefined,
+      adminReason: row.admin_reason || undefined,
+      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     };
   }

@@ -8,6 +8,7 @@ import {
   Application,
   ReportedJob,
   JobAlert,
+  ApplicationStatusHistory,
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
@@ -20,6 +21,7 @@ import {
   initialApplications,
   initialReportedJobs,
   initialJobAlerts,
+  initialApplicationStageHistory,
 } from './seedData';
 import { config } from '../config';
 import { mysqlDb } from './mysql';
@@ -33,6 +35,7 @@ interface DatabaseSchema {
   applications: Application[];
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
+  applicationStageHistory: ApplicationStatusHistory[];
   passwordResetTokens: PasswordResetToken[];
   revokedTokens: RevokedToken[];
   resumeDocuments: ResumeDocument[];
@@ -52,6 +55,7 @@ class DatabaseManager {
       applications: [],
       reportedJobs: [],
       jobAlerts: [],
+      applicationStageHistory: [],
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
@@ -90,14 +94,110 @@ class DatabaseManager {
       try {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         this.data = JSON.parse(raw);
-        if (!this.data.passwordResetTokens) this.data.passwordResetTokens = [];
-        if (!this.data.revokedTokens) this.data.revokedTokens = [];
+        console.log(`[TalentHub DB] Loaded existing database from ${this.filePath}`);
+        if (!Array.isArray(this.data.passwordResetTokens)) this.data.passwordResetTokens = [];
+        if (!Array.isArray(this.data.revokedTokens)) this.data.revokedTokens = [];
+        if (!Array.isArray(this.data.resumeDocuments)) this.data.resumeDocuments = [];
+        if (!Array.isArray(this.data.applicationStageHistory)) {
+          this.data.applicationStageHistory = [...initialApplicationStageHistory];
+        }
+        this.upgradeSchemaIfNeeded();
       } catch (err) {
-        console.error('[TalentHub DB] Error reading local database. Re-seeding...', err);
+        console.error('[TalentHub DB] Error reading existing database. Re-seeding...', err);
         this.seedJson();
       }
     } else {
+      console.log('[TalentHub DB] Initializing fresh database with seed data...');
       this.seedJson();
+    }
+  }
+
+  private upgradeSchemaIfNeeded() {
+    let modified = false;
+
+    if (!Array.isArray(this.data.applicationStageHistory)) {
+      this.data.applicationStageHistory = [...initialApplicationStageHistory];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.resumeDocuments)) {
+      this.data.resumeDocuments = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.passwordResetTokens)) {
+      this.data.passwordResetTokens = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.revokedTokens)) {
+      this.data.revokedTokens = [];
+      modified = true;
+    }
+
+    // Ensure all seed companies exist or have missing fields
+    for (const initComp of initialCompanies) {
+      const existing = this.data.companies.find((c) => c.id === initComp.id);
+      if (!existing) {
+        this.data.companies.push(initComp);
+        modified = true;
+      } else {
+        if (!existing.email && initComp.email) {
+          existing.email = initComp.email;
+          modified = true;
+        }
+        if (!existing.contactNumber && initComp.contactNumber) {
+          existing.contactNumber = initComp.contactNumber;
+          existing.phone = initComp.contactNumber;
+          modified = true;
+        }
+        if (!existing.address && initComp.address) {
+          existing.address = initComp.address;
+          modified = true;
+        }
+      }
+    }
+
+    // Ensure seed recruiters exist
+    for (const initUser of initialUsers) {
+      const existing = this.data.users.find((u) => u.id === initUser.id);
+      if (!existing) {
+        this.data.users.push(initUser);
+        modified = true;
+      } else {
+        if (initUser.role === 'recruiter') {
+          if (!existing.companyRole) {
+            existing.companyRole = initUser.companyRole || 'admin';
+            modified = true;
+          }
+          if (!existing.contactNumber) {
+            existing.contactNumber = initUser.contactNumber || existing.phone;
+            modified = true;
+          }
+          if (!existing.designation) {
+            existing.designation = initUser.designation || existing.title;
+            modified = true;
+          }
+        }
+      }
+    }
+
+    // Ensure applications have companyId and assignedRecruiter
+    for (const app of this.data.applications) {
+      if (!app.companyId) {
+        const job = this.data.jobs.find((j) => j.id === app.jobId);
+        if (job) {
+          app.companyId = job.companyId;
+          app.companyName = job.companyName;
+          app.assignedRecruiterId = job.recruiterId;
+          app.assignedRecruiterName = job.recruiterName;
+          modified = true;
+        }
+      }
+    }
+
+    if (modified) {
+      this.persistJson();
     }
   }
 
@@ -110,6 +210,7 @@ class DatabaseManager {
       applications: [...initialApplications],
       reportedJobs: [...initialReportedJobs],
       jobAlerts: [...initialJobAlerts],
+      applicationStageHistory: [...initialApplicationStageHistory],
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
@@ -162,7 +263,11 @@ class DatabaseManager {
     if (this.isMysql) return mysqlRepository.updateUser(id, updates);
     const idx = this.data.users.findIndex((u) => u.id === id);
     if (idx === -1) return undefined;
-    this.data.users[idx] = { ...this.data.users[idx], ...updates };
+    this.data.users[idx] = {
+      ...this.data.users[idx],
+      ...updates,
+      updatedAt: updates.updatedAt || new Date().toISOString(),
+    };
     this.persistJson();
     return this.data.users[idx];
   }
@@ -178,12 +283,51 @@ class DatabaseManager {
     return false;
   }
 
+  async getRecruiters(paramsOrCompanyId?: string | { search?: string; companyId?: string }): Promise<User[]> {
+    const params = typeof paramsOrCompanyId === 'string'
+      ? { companyId: paramsOrCompanyId }
+      : (paramsOrCompanyId || {});
+
+    if (this.isMysql) return mysqlRepository.getRecruiters(params);
+
+    const allUsers = await this.getUsers();
+    let recruiters = allUsers.filter((u) => u.role === 'recruiter');
+
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      recruiters = recruiters.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.companyName && u.companyName.toLowerCase().includes(q))
+      );
+    }
+
+    if (params.companyId) {
+      recruiters = recruiters.filter((u) => u.companyId === params.companyId);
+    }
+
+    return recruiters;
+  }
   // ==========================================
   // COMPANIES
   // ==========================================
-  async getCompanies(): Promise<Company[]> {
-    if (this.isMysql) return mysqlRepository.getCompanies();
-    return this.data.companies;
+  async getCompanies(params?: { search?: string; status?: string }): Promise<Company[]> {
+    if (this.isMysql) return mysqlRepository.getCompanies(params);
+    let companies = this.data.companies;
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      companies = companies.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.industry.toLowerCase().includes(q) ||
+          c.location.toLowerCase().includes(q)
+      );
+    }
+    if (params?.status && params.status !== 'all') {
+      companies = companies.filter((c) => (c.status || 'active') === params.status);
+    }
+    return companies;
   }
 
   async getCompanyById(id: string): Promise<Company | undefined> {
@@ -202,7 +346,11 @@ class DatabaseManager {
     if (this.isMysql) return mysqlRepository.updateCompany(id, updates);
     const idx = this.data.companies.findIndex((c) => c.id === id);
     if (idx === -1) return undefined;
-    this.data.companies[idx] = { ...this.data.companies[idx], ...updates };
+    this.data.companies[idx] = {
+      ...this.data.companies[idx],
+      ...updates,
+      updatedAt: updates.updatedAt || new Date().toISOString(),
+    };
     this.persistJson();
     return this.data.companies[idx];
   }
@@ -221,14 +369,28 @@ class DatabaseManager {
   // ==========================================
   // CATEGORIES
   // ==========================================
-  async getCategories(): Promise<JobCategory[]> {
-    if (this.isMysql) return mysqlRepository.getCategories();
-    return this.data.categories;
+  async getCategories(includeInactive = false): Promise<JobCategory[]> {
+    if (this.isMysql) return mysqlRepository.getCategories(includeInactive);
+    let cats = this.data.categories;
+    if (!includeInactive) cats = cats.filter((c) => c.isActive !== false);
+    return cats;
   }
 
   async getCategoryById(id: string): Promise<JobCategory | undefined> {
     if (this.isMysql) return mysqlRepository.getCategoryById(id);
     return this.data.categories.find((c) => c.id === id);
+  }
+
+  async getCategoryByName(name: string, excludeId?: string): Promise<JobCategory | undefined> {
+    if (this.isMysql) return mysqlRepository.getCategoryByName(name, excludeId);
+    return this.data.categories.find(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && (!excludeId || c.id !== excludeId)
+    );
+  }
+
+  async getCategoryJobCount(id: string): Promise<number> {
+    if (this.isMysql) return mysqlRepository.getCategoryJobCount(id);
+    return this.data.jobs.filter((j) => j.categoryId === id).length;
   }
 
   async createCategory(category: JobCategory): Promise<JobCategory> {
@@ -284,7 +446,11 @@ class DatabaseManager {
     if (this.isMysql) return mysqlRepository.updateJob(id, updates);
     const idx = this.data.jobs.findIndex((j) => j.id === id);
     if (idx === -1) return undefined;
-    this.data.jobs[idx] = { ...this.data.jobs[idx], ...updates, updatedAt: new Date().toISOString() };
+    this.data.jobs[idx] = {
+      ...this.data.jobs[idx],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
     this.persistJson();
     return this.data.jobs[idx];
   }
@@ -312,6 +478,15 @@ class DatabaseManager {
     }
   }
 
+  async getJobsByCompanyId(companyId: string): Promise<Job[]> {
+    const allJobs = await this.getJobs();
+    return allJobs.filter((j) => j.companyId === companyId);
+  }
+
+  async getJobsByRecruiterId(recruiterId: string): Promise<Job[]> {
+    const allJobs = await this.getJobs();
+    return allJobs.filter((j) => j.recruiterId === recruiterId);
+  }
   // ==========================================
   // APPLICATIONS
   // ==========================================
@@ -335,6 +510,11 @@ class DatabaseManager {
     return this.data.applications.filter((a) => a.jobId === jobId);
   }
 
+  async getApplicationsByCompanyId(companyId: string): Promise<Application[]> {
+    const allApps = await this.getApplications();
+    return allApps.filter((a) => a.companyId === companyId);
+  }
+
   async createApplication(app: Application): Promise<Application> {
     if (this.isMysql) return mysqlRepository.createApplication(app);
     this.data.applications.unshift(app);
@@ -349,15 +529,7 @@ class DatabaseManager {
   async updateApplication(
     id: string,
     updates: Partial<Application>,
-    stageAudit?: {
-      fromStage?: string;
-      toStage?: string;
-      changedByUserId?: string;
-      changedByName?: string;
-      comment?: string;
-      interviewType?: string;
-      interviewDate?: string;
-    }
+    stageAudit?: any
   ): Promise<Application | undefined> {
     if (this.isMysql) return mysqlRepository.updateApplication(id, updates, stageAudit);
     const idx = this.data.applications.findIndex((a) => a.id === id);
@@ -371,12 +543,67 @@ class DatabaseManager {
     return this.data.applications[idx];
   }
 
+  async deleteApplication(id: string): Promise<boolean> {
+    if (this.isMysql) {
+      return false;
+    }
+    const initLen = this.data.applications.length;
+    this.data.applications = this.data.applications.filter((a) => a.id !== id);
+    if (this.data.applications.length !== initLen) {
+      this.persistJson();
+      return true;
+    }
+    return false;
+  }
+
+  // ==========================================
+  // APPLICATION AUDIT TRAIL / STATUS HISTORY
+  // ==========================================
   async getApplicationStageHistory(applicationId: string): Promise<any[]> {
     if (this.isMysql) return mysqlRepository.getApplicationStageHistory(applicationId);
+    const history = this.data.applicationStageHistory || [];
+    const appHistory = history.filter((h) => h.applicationId === applicationId);
+    if (appHistory.length > 0) return appHistory;
     const app = this.data.applications.find((a) => a.id === applicationId);
     return app?.timeline || [];
   }
 
+  async getApplicationHistory(applicationId: string): Promise<ApplicationStatusHistory[]> {
+    if (this.isMysql) {
+      const rows = await mysqlRepository.getApplicationStageHistory(applicationId);
+      return rows.map((r: any) => ({
+        id: r.id,
+        applicationId: r.applicationId || r.application_id,
+        previousStatus: r.fromStage || r.from_stage || 'None',
+        newStatus: r.toStage || r.to_stage,
+        changedBy: r.changedByUserId || r.changed_by_user_id,
+        changedByName: r.changedByName || r.changed_by_name,
+        timestamp: r.createdAt || r.created_at || new Date().toISOString(),
+        comments: r.comment,
+        reason: r.reason || r.comment,
+        isAdminOverride: Boolean(r.isAdminOverride || r.is_admin_override),
+        interviewType: r.interviewType || r.interview_type,
+        interviewDate: r.interviewDate || r.interview_date,
+      }));
+    }
+    if (!Array.isArray(this.data.applicationStageHistory)) {
+      this.data.applicationStageHistory = [];
+    }
+    return this.data.applicationStageHistory.filter((h) => h.applicationId === applicationId);
+  }
+
+  async createApplicationHistory(entry: ApplicationStatusHistory): Promise<ApplicationStatusHistory> {
+    if (this.isMysql) {
+      // Avoid duplicate MySQL audit inserts because the repository already records initial applications and stage transitions
+      return entry;
+    }
+    if (!Array.isArray(this.data.applicationStageHistory)) {
+      this.data.applicationStageHistory = [];
+    }
+    this.data.applicationStageHistory.push(entry);
+    this.persistJson();
+    return entry;
+  }
   // ==========================================
   // REPORTED JOBS
   // ==========================================
@@ -400,6 +627,59 @@ class DatabaseManager {
     this.persistJson();
     return this.data.reportedJobs[idx];
   }
+
+  async updateReportedJobWithAction(
+    id: string,
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction: string;
+      adminReason: string;
+      reviewedByUserId: string;
+      reviewedByName: string;
+    }
+  ): Promise<ReportedJob | undefined> {
+    if (this.isMysql) return mysqlRepository.updateReportedJobWithAction(id, payload);
+    const idx = this.data.reportedJobs.findIndex((r) => r.id === id);
+    if (idx === -1) return undefined;
+    const rep = this.data.reportedJobs[idx];
+    rep.status = payload.status;
+    rep.adminAction = payload.adminAction as ReportedJob['adminAction'];
+    rep.adminReason = payload.adminReason;
+    rep.reviewedByUserId = payload.reviewedByUserId;
+    rep.reviewedByName = payload.reviewedByName;
+    rep.reviewedAt = new Date().toISOString();
+    // Update job status
+    const jobIdx = this.data.jobs.findIndex((j) => j.id === rep.jobId);
+    if (jobIdx !== -1) {
+      if (payload.adminAction === 'deactivate_job') {
+        this.data.jobs[jobIdx].status = 'closed';
+      } else if (payload.adminAction === 'restore_job') {
+        this.data.jobs[jobIdx].status = 'active';
+      }
+    }
+    this.persistJson();
+    return this.data.reportedJobs[idx];
+  }
+
+  async getReportedJobsFiltered(params?: { status?: string; search?: string }): Promise<ReportedJob[]> {
+    if (this.isMysql) return mysqlRepository.getReportedJobsFiltered(params);
+    let reports = this.data.reportedJobs;
+    if (params?.status && params.status !== 'all') {
+      reports = reports.filter((r) => r.status === params.status);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      reports = reports.filter(
+        (r) =>
+          r.jobTitle.toLowerCase().includes(q) ||
+          r.companyName.toLowerCase().includes(q) ||
+          r.reportedByName.toLowerCase().includes(q)
+      );
+    }
+    return reports;
+  }
+
+
 
   // ==========================================
   // JOB ALERTS
@@ -555,10 +835,10 @@ class DatabaseManager {
     return newDoc;
   }
 
-  async markResumeDeleted(id: string): Promise<void> {
+  async markResumeDeleted(id: string, candidateId?: string): Promise<void> {
     if (this.isMysql) return mysqlRepository.markResumeDeleted(id);
     this.data.resumeDocuments = this.data.resumeDocuments || [];
-    const doc = this.data.resumeDocuments.find((r) => r.id === id);
+    const doc = this.data.resumeDocuments.find((r) => r.id === id && (!candidateId || r.candidateId === candidateId));
     if (doc) {
       doc.uploadStatus = 'deleted';
       doc.isCurrent = false;

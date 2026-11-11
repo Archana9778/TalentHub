@@ -5,6 +5,7 @@ import {
   createJob,
   updateJob,
   deleteJob,
+  assignJob,
   getRecruiterJobs,
   reportJob,
 } from '../controllers/jobController';
@@ -31,9 +32,9 @@ router.get('/:id', getJobById);
 router.post('/', authenticateToken, requireRoles('recruiter', 'admin'), createJob);
 router.put('/:id', authenticateToken, requireRoles('recruiter', 'admin'), updateJob);
 router.delete('/:id', authenticateToken, requireRoles('recruiter', 'admin'), deleteJob);
+router.patch('/:id/assign', authenticateToken, requireRoles('recruiter', 'admin'), assignJob);
 
 // Reporting jobs
 router.post('/report', authenticateToken, reportJob);
 
 export default router;
-

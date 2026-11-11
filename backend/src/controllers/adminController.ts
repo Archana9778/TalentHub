@@ -61,9 +61,9 @@ export const getSystemStatistics = async (req: Request, res: Response): Promise<
     };
 
     res.json({ stats });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getSystemStatistics error:', err);
-    res.status(500).json({ message: 'Failed to retrieve system statistics.' });
+    res.status(500).json({ message: 'Error retrieving system statistics', error: err.message });
   }
 };
 
@@ -92,9 +92,9 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
 
     const safeUsers = users.map(({ password, ...rest }) => rest);
     res.json({ total: safeUsers.length, users: safeUsers });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getAllUsers error:', err);
-    res.status(500).json({ message: 'Failed to retrieve users.' });
+    res.status(500).json({ message: 'Error retrieving users', error: err.message });
   }
 };
 
@@ -102,6 +102,11 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
   try {
     const id = req.params.id as string;
     const { status, role } = req.body;
+    if ((status !== undefined && !['active', 'suspended'].includes(status)) ||
+        (role !== undefined && !['candidate', 'recruiter', 'admin'].includes(role))) {
+      res.status(400).json({ message: 'Status or role is invalid.' });
+      return;
+    }
 
     const target = await db.getUserById(id);
     if (!target) {
@@ -122,9 +127,9 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
 
     const { password: _, ...safeUser } = updated!;
     res.json({ message: 'User state updated successfully.', user: safeUser });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] updateUserStatus error:', err);
-    res.status(500).json({ message: 'Failed to update user status.' });
+    res.status(500).json({ message: 'Error updating user status', error: err.message });
   }
 };
 
@@ -150,38 +155,107 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
       });
       return;
     }
-    res.status(500).json({ message: 'Failed to delete user.' });
+    res.status(500).json({ message: 'Failed to delete user.', error: err.message });
   }
 };
 
 export const getReportedJobs = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const reports = await db.getReportedJobs();
+    const { status, search } = req.query;
+    const reports = await db.getReportedJobsFiltered({
+      status: typeof status === 'string' ? status : undefined,
+      search: typeof search === 'string' ? search : undefined,
+    });
     res.json({ total: reports.length, reports });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getReportedJobs error:', err);
-    res.status(500).json({ message: 'Failed to retrieve reported jobs.' });
+    res.status(500).json({ message: 'Error retrieving reported jobs', error: err.message });
   }
 };
 
 export const updateReportStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const { status, removeJob } = req.body;
+    const { status, adminAction, adminReason, removeJob } = req.body;
 
-    const updated = await db.updateReportedJob(id, status);
+    if (!status || !['pending', 'resolved', 'dismissed'].includes(status)) {
+      res.status(400).json({ message: "Status must be 'pending', 'resolved', or 'dismissed'." });
+      return;
+    }
+
+    if (removeJob !== undefined && typeof removeJob !== 'boolean') {
+      res.status(400).json({ message: 'removeJob value is invalid.' });
+      return;
+    }
+
+    // Fetch the existing report
+    const reports = await db.getReportedJobsFiltered();
+    const existing = reports.find((r) => r.id === id);
+    if (!existing) {
+      res.status(404).json({ message: 'Report not found.' });
+      return;
+    }
+    if (existing.status !== 'pending' && status !== 'pending') {
+      res.status(409).json({ message: 'This report has already been reviewed.' });
+      return;
+    }
+
+    const reviewedByUserId = req.user?.id || '';
+    const reviewedByName = req.user?.name || 'Admin';
+    // If removeJob is true (legacy payload), map to 'deactivate_job'
+    const resolvedAction = adminAction || (removeJob ? 'deactivate_job' : status === 'resolved' ? 'resolve' : 'dismiss');
+
+    const updated = await db.updateReportedJobWithAction(id, {
+      status: status === 'pending' ? 'dismissed' : status,
+      adminAction: resolvedAction,
+      adminReason: adminReason || (removeJob ? 'Removed by administrator' : ''),
+      reviewedByUserId,
+      reviewedByName,
+    });
+
     if (!updated) {
       res.status(404).json({ message: 'Report not found.' });
       return;
     }
 
-    if (removeJob && updated.jobId) {
-      await db.deleteJob(updated.jobId);
-    }
-
     res.json({ message: 'Report status updated.', report: updated });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] updateReportStatus error:', err);
-    res.status(500).json({ message: 'Failed to update report status.' });
+    res.status(500).json({ message: 'Error updating report status', error: err.message });
+  }
+};
+
+export const getRecruiters = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { search, companyId } = req.query;
+    const recruiters = await db.getRecruiters({
+      search: typeof search === 'string' ? search : undefined,
+      companyId: typeof companyId === 'string' ? companyId : undefined,
+    });
+    const safeRecruiters = recruiters.map(({ password, ...rest }) => rest);
+    res.json({ total: safeRecruiters.length, recruiters: safeRecruiters });
+  } catch (err) {
+    console.error('[adminController] getRecruiters error:', err);
+    res.status(500).json({ message: 'Failed to retrieve recruiters.' });
+  }
+};
+
+export const updateCompanyStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { status } = req.body;
+    if (!status || !['active', 'suspended'].includes(status)) {
+      res.status(400).json({ message: "Status must be 'active' or 'suspended'." });
+      return;
+    }
+    const updated = await db.updateCompany(id, { status });
+    if (!updated) {
+      res.status(404).json({ message: 'Company not found.' });
+      return;
+    }
+    res.json({ message: `Company ${status === 'suspended' ? 'suspended' : 'activated'} successfully.`, company: updated });
+  } catch (err) {
+    console.error('[adminController] updateCompanyStatus error:', err);
+    res.status(500).json({ message: 'Failed to update company status.' });
   }
 };
