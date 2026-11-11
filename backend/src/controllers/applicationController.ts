@@ -197,6 +197,13 @@ export const getAllApplications = async (req: AuthRequest, res: Response): Promi
     if (jobId && typeof jobId === 'string' && jobId !== 'all') {
       applications = applications.filter((a) => a.jobId === jobId);
     }
+    if (req.user.role === 'recruiter' && !req.user.companyId) {
+      // When recruiter has no company affiliation, restrict strictly to their own posted jobs
+      const allJobs = await db.getJobs();
+      const recruiterJobs = allJobs.filter((j) => j.recruiterId === req.user!.id);
+      const recruiterJobIds = new Set(recruiterJobs.map((j) => j.id));
+      applications = applications.filter((a) => recruiterJobIds.has(a.jobId));
+    }
 
     // Status Filter
     const statusFilter = status || stage;
@@ -237,23 +244,55 @@ export const getAllApplications = async (req: AuthRequest, res: Response): Promi
       }
     }
 
-    // Sorting
-    const order = sortOrder === 'asc' ? 1 : -1;
-    const sort = (sortBy as string) || 'date';
+    // Enrich applications with fresh dynamic matching score
+    const enrichedApplications = await Promise.all(
+      applications.map(async (app) => {
+        try {
+          const candidateUser = await db.getUserById(app.candidateId);
+          const targetJob = await db.getJobById(app.jobId);
+          if (candidateUser && targetJob) {
+            const freshMatch = MatchingService.computeCandidateJobMatch(candidateUser, targetJob);
+            return {
+              ...app,
+              matchScore: freshMatch.score,
+              matchDetails: freshMatch,
+            };
+          }
+        } catch {
+          // fallback to stored application match score
+        }
+        return app;
+      })
+    );
 
-    if (sort === 'date') {
-      applications.sort(
+    // Sorting (supports main's sort=lowest|recent|highest as well as feature/login's sortBy & sortOrder)
+    const rawSort = (req.query.sort as string) || (sortBy as string);
+    const order = sortOrder === 'asc' ? 1 : -1;
+    const sort = (sortBy as string) || rawSort || 'date';
+
+    if (rawSort === 'lowest') {
+      enrichedApplications.sort((a, b) => a.matchScore - b.matchScore);
+    } else if (rawSort === 'recent') {
+      enrichedApplications.sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+    } else if (rawSort === 'highest') {
+      enrichedApplications.sort((a, b) => b.matchScore - a.matchScore);
+    } else if (sort === 'date') {
+      enrichedApplications.sort(
         (a, b) => order * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       );
     } else if (sort === 'status') {
-      applications.sort((a, b) => order * a.stage.localeCompare(b.stage));
+      enrichedApplications.sort((a, b) => order * a.stage.localeCompare(b.stage));
     } else if (sort === 'matchScore') {
-      applications.sort((a, b) => order * (a.matchScore - b.matchScore));
+      enrichedApplications.sort((a, b) => order * (a.matchScore - b.matchScore));
     } else if (sort === 'name') {
-      applications.sort((a, b) => order * a.candidateName.localeCompare(b.candidateName));
+      enrichedApplications.sort((a, b) => order * a.candidateName.localeCompare(b.candidateName));
     }
 
-    res.json({ total: applications.length, applications });
+    res.json({ total: enrichedApplications.length, sort: rawSort || sort, applications: enrichedApplications });
   } catch (err: any) {
     res.status(500).json({ message: 'Error retrieving applications', error: err.message });
   }
@@ -302,8 +341,23 @@ export const getApplicationById = async (req: AuthRequest, res: Response): Promi
     const candidateProfile = await db.getUserById(application.candidateId);
     const history = await db.getApplicationHistory(application.id);
 
+    // Compute fresh match details if profile and job exist
+    let freshApp = application;
+    if (candidateProfile && targetJob) {
+      try {
+        const freshMatch = MatchingService.computeCandidateJobMatch(candidateProfile, targetJob);
+        freshApp = {
+          ...application,
+          matchScore: freshMatch.score,
+          matchDetails: freshMatch,
+        };
+      } catch {
+        // preserve existing matchDetails on error
+      }
+    }
+
     res.json({
-      application,
+      application: freshApp,
       candidate: candidateProfile
         ? {
             id: candidateProfile.id,
@@ -548,11 +602,13 @@ export const getApplicationAuditTimeline = async (req: AuthRequest, res: Respons
     }
 
     const persistentHistory = await db.getApplicationHistory(id);
+    const stageHistory = persistentHistory.length === 0 ? await db.getApplicationStageHistory(id) : [];
+    const sourceHistory = persistentHistory.length > 0 ? persistentHistory : stageHistory;
 
-    // If persistent history exists, return it; otherwise return structured timeline
+    // If persistent or stage history exists, return it; otherwise return structured timeline
     const resultHistory =
-      persistentHistory.length > 0
-        ? persistentHistory
+      sourceHistory.length > 0
+        ? sourceHistory
         : (application.timeline || []).map((item, idx) => ({
             id: `timeline-${idx}`,
             applicationId: application.id,

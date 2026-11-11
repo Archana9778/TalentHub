@@ -15,6 +15,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { PasswordStrengthIndicator } from '../../components/PasswordStrengthIndicator';
+import { evaluatePasswordStrength } from '../../utils/passwordStrength';
 
 export const Register: React.FC = () => {
   const { register } = useAuth();
@@ -33,39 +35,62 @@ export const Register: React.FC = () => {
   const [companyName, setCompanyName] = useState('');
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
-  const [error, setError] = useState<string | null>(null);
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const strengthResult = evaluatePasswordStrength(password);
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!name.trim()) {
+      errors.name = 'Please provide your full name.';
+    } else if (name.trim().length < 2) {
+      errors.name = 'Full name must contain at least 2 characters.';
+    }
+
+    if (!email.trim()) {
+      errors.email = 'Please provide your email address.';
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        errors.email = 'Please provide a valid work email address.';
+      }
+    }
+
+    if (role === 'recruiter' && !companyName.trim()) {
+      errors.companyName = 'Company / organization name is required for recruiter accounts.';
+    }
+
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (!strengthResult.isValid) {
+      errors.password = 'Password must meet all 5 requirements listed below.';
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = 'Please confirm your password.';
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match.';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (!validate()) return;
 
-    if (!name.trim()) {
-      setError('Please provide your full name.');
-      return;
-    }
-    if (!email.trim()) {
-      setError('Please provide a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must contain at least 6 characters.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match. Please re-enter.');
-      return;
-    }
-    if (role === 'recruiter' && !companyName.trim()) {
-      setError('Please enter your company or organization name.');
-      return;
-    }
-
+    setServerError(null);
     setLoading(true);
     try {
       const newUser = await register({
         email: email.trim().toLowerCase(),
         password,
+        confirmPassword,
         name: name.trim(),
         role,
         companyName: role === 'recruiter' ? companyName.trim() : undefined,
@@ -79,7 +104,7 @@ export const Register: React.FC = () => {
         navigate('/candidate/dashboard');
       }
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please check your information and retry.');
+      setServerError(err.message || 'Registration failed. Please review your information and try again.');
     } finally {
       setLoading(false);
     }
@@ -117,7 +142,7 @@ export const Register: React.FC = () => {
           <div className="mt-8 pt-8 border-t border-slate-800 space-y-3">
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Free Candidate Profile &amp; Resume Skill Parsing</span>
+              <span>Candidate Profile &amp; Resume Skill Parsing</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -125,7 +150,7 @@ export const Register: React.FC = () => {
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-300">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Kanban &amp; Table ATS Workspace for Recruiters</span>
+              <span>Strict Password Complexity &amp; Session Invalidation</span>
             </div>
           </div>
         </div>
@@ -158,7 +183,14 @@ export const Register: React.FC = () => {
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs">
             <button
               type="button"
-              onClick={() => setRole('candidate')}
+              onClick={() => {
+                setRole('candidate');
+                if (fieldErrors.companyName) {
+                  const copy = { ...fieldErrors };
+                  delete copy.companyName;
+                  setFieldErrors(copy);
+                }
+              }}
               className={`py-2 rounded-md font-semibold transition-all ${
                 role === 'candidate'
                   ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
@@ -180,77 +212,126 @@ export const Register: React.FC = () => {
             </button>
           </div>
 
-          {error && (
+          {serverError && (
             <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <span>{serverError}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
+            {/* Full Name */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Full Name
+                Full Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (fieldErrors.name) {
+                      const copy = { ...fieldErrors };
+                      delete copy.name;
+                      setFieldErrors(copy);
+                    }
+                  }}
                   placeholder="e.g. Alex Morgan"
                   required
-                  className="saas-input pl-9 text-xs"
+                  aria-invalid={!!fieldErrors.name}
+                  aria-describedby={fieldErrors.name ? 'name-error' : undefined}
+                  className={`saas-input pl-9 text-xs ${fieldErrors.name ? 'border-rose-400 focus:border-rose-500' : ''}`}
                 />
               </div>
+              {fieldErrors.name && (
+                <p id="name-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{fieldErrors.name}</span>
+                </p>
+              )}
             </div>
 
+            {/* Email Address */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Work Email Address
+                Work Email Address <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (fieldErrors.email) {
+                      const copy = { ...fieldErrors };
+                      delete copy.email;
+                      setFieldErrors(copy);
+                    }
+                  }}
                   placeholder="name@example.com"
                   required
-                  className="saas-input pl-9 text-xs"
+                  aria-invalid={!!fieldErrors.email}
+                  aria-describedby={fieldErrors.email ? 'reg-email-error' : undefined}
+                  className={`saas-input pl-9 text-xs ${fieldErrors.email ? 'border-rose-400 focus:border-rose-500' : ''}`}
                 />
               </div>
+              {fieldErrors.email && (
+                <p id="reg-email-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{fieldErrors.email}</span>
+                </p>
+              )}
             </div>
 
+            {/* Recruiter-specific Company field */}
             {role === 'recruiter' && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Company / Organization
+                  Company / Organization <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                   <input
                     type="text"
                     value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
+                    onChange={(e) => {
+                      setCompanyName(e.target.value);
+                      if (fieldErrors.companyName) {
+                        const copy = { ...fieldErrors };
+                        delete copy.companyName;
+                        setFieldErrors(copy);
+                      }
+                    }}
                     placeholder="e.g. CloudScale Technologies"
                     required
-                    className="saas-input pl-9 text-xs"
+                    aria-invalid={!!fieldErrors.companyName}
+                    aria-describedby={fieldErrors.companyName ? 'comp-error' : undefined}
+                    className={`saas-input pl-9 text-xs ${fieldErrors.companyName ? 'border-rose-400 focus:border-rose-500' : ''}`}
                   />
                 </div>
+                {fieldErrors.companyName && (
+                  <p id="comp-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{fieldErrors.companyName}</span>
+                  </p>
+                )}
               </div>
             )}
 
+            {/* Title & Location fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {role === 'recruiter' ? 'Recruiting Title' : 'Current / Desired Title'}
+                  {role === 'recruiter' ? 'Recruiting Title' : 'Professional Title'}
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder={role === 'recruiter' ? 'Technical Recruiter' : 'Full Stack Engineer'}
+                  placeholder={role === 'recruiter' ? 'Talent Acquisition' : 'Full Stack Engineer'}
                   className="saas-input text-xs"
                 />
               </div>
@@ -272,62 +353,95 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 characters"
-                    required
-                    className="saas-input pl-9 pr-9 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+            {/* Password */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password) {
+                      const copy = { ...fieldErrors };
+                      delete copy.password;
+                      setFieldErrors(copy);
+                    }
+                  }}
+                  placeholder="Min 12 characters"
+                  required
+                  aria-invalid={!!fieldErrors.password}
+                  aria-describedby={fieldErrors.password ? 'reg-pass-error' : undefined}
+                  className={`saas-input pl-9 pr-9 text-xs ${fieldErrors.password ? 'border-rose-400 focus:border-rose-500' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+              {fieldErrors.password && (
+                <p id="reg-pass-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{fieldErrors.password}</span>
+                </p>
+              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-type password"
-                    required
-                    className="saas-input pl-9 pr-9 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+              {/* Real-time Password Strength and Requirements Checklist */}
+              <PasswordStrengthIndicator password={password} showRequirements={true} />
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Confirm Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (fieldErrors.confirmPassword) {
+                      const copy = { ...fieldErrors };
+                      delete copy.confirmPassword;
+                      setFieldErrors(copy);
+                    }
+                  }}
+                  placeholder="Re-type password"
+                  required
+                  aria-invalid={!!fieldErrors.confirmPassword}
+                  aria-describedby={fieldErrors.confirmPassword ? 'reg-confirm-error' : undefined}
+                  className={`saas-input pl-9 pr-9 text-xs ${fieldErrors.confirmPassword ? 'border-rose-400 focus:border-rose-500' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+              {fieldErrors.confirmPassword && (
+                <p id="reg-confirm-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{fieldErrors.confirmPassword}</span>
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full saas-btn-primary justify-center text-xs py-2.5 mt-3"
+              disabled={loading || !strengthResult.isValid}
+              className="w-full saas-btn-primary justify-center text-xs py-2.5 mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>{loading ? 'Creating Account...' : 'Complete Registration'}</span>
               <ArrowRight className="w-3.5 h-3.5" />

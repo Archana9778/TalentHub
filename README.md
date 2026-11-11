@@ -132,20 +132,28 @@ npm run dev
 
 ---
 
-### Option B: Docker Compose (Node.js REST API + MySQL 8.0 + React NGINX)
+### Option B: Docker Compose (Node.js REST API + MySQL 8.0 + Azurite + React NGINX)
 
-To launch the fully containerized 3-tier production stack:
+To launch the fully containerized 3-tier production stack with Azure Blob Storage emulator:
 
 ```powershell
 Copy-Item .env.example .env
-# Edit .env before starting. Use unique local passwords and a random JWT_SECRET.
-docker compose up --build
+# Edit .env before starting. Set secure passwords, JWT_SECRET, and port configurations.
+docker compose up --build -d
 ```
 
 This starts:
-1. `database`: MySQL 8.0 on port 3306 with a persistent volume and health check.
-2. `backend`: Node.js + Express + TypeScript on port 5000, waiting for healthy MySQL and running migrations before serving.
-3. `frontend`: React 18 behind NGINX on ports 5173 and 80, proxying `/api` and `/uploads` to the backend.
+1. `database`: MySQL 8.0 on host port 3308 (internal port 3306) with a persistent volume (`mysql_data`) and health check.
+2. `azurite`: Azure Blob Storage emulator on port 10000 with persistent volume (`azurite_data`) for enterprise resume storage.
+3. `backend`: Node.js + Express + TypeScript on port 5000, waiting for healthy MySQL and Azurite, running migrations on startup before serving requests.
+4. `frontend`: React 18 production build behind NGINX on host port 5173, internally proxying `/api/` and `/uploads/` to `http://backend:5000`.
+
+Check service health:
+```powershell
+docker compose ps
+curl http://localhost:5000/health
+curl http://localhost:5173
+```
 
 ---
 

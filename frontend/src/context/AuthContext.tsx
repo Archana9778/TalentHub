@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
+import { User } from '../types';
 import { api, getToken, setToken, clearToken } from '../services/api';
 
 interface AuthContextType {
@@ -11,15 +11,17 @@ interface AuthContextType {
   register: (payload: {
     email: string;
     password: string;
+    confirmPassword?: string;
     name: string;
     role: string;
     companyName?: string;
     title?: string;
     location?: string;
   }) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (payload: { token: string; newPassword: string; confirmPassword?: string }) => Promise<void>;
   updateCurrentUser: (updates: Partial<User>) => void;
-  switchDemoRole: (role: UserRole) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,17 +33,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const storedToken = getToken();
-      if (!storedToken) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
+        // Attempt to fetch current user (works via HttpOnly cookie or in-memory token)
         const { user: fetchedUser } = await api.getMe();
         setUser(fetchedUser);
-      } catch (err) {
-        console.warn('[TalentHub Auth] Failed to restore session from token:', err);
+      } catch {
+        // No active or valid session
         clearToken();
         setTokenState(null);
         setUser(null);
@@ -69,6 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (payload: {
     email: string;
     password: string;
+    confirmPassword?: string;
     name: string;
     role: string;
     companyName?: string;
@@ -87,28 +85,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    clearToken();
-    setTokenState(null);
-    setUser(null);
+  const logout = async (): Promise<void> => {
+    try {
+      await api.logout();
+    } catch {
+      // Continue client cleanup even if network fails
+    } finally {
+      clearToken();
+      setTokenState(null);
+      setUser(null);
+    }
+  };
+
+  const forgotPassword = async (email: string): Promise<void> => {
+    await api.forgotPassword(email);
+  };
+
+  const resetPassword = async (payload: {
+    token: string;
+    newPassword: string;
+    confirmPassword?: string;
+  }): Promise<void> => {
+    await api.resetPassword(payload);
   };
 
   const updateCurrentUser = (updates: Partial<User>) => {
     if (user) {
       setUser({ ...user, ...updates });
-    }
-  };
-
-  const switchDemoRole = async (role: UserRole) => {
-    const credentialsMap: Record<UserRole, { email: string; pass: string }> = {
-      candidate: { email: 'candidate@talenthub.com', pass: 'password123' },
-      recruiter: { email: 'recruiter@techcorp.com', pass: 'password123' },
-      admin: { email: 'admin@talenthub.com', pass: 'password123' },
-    };
-
-    const target = credentialsMap[role];
-    if (target) {
-      await login(target.email, target.pass);
     }
   };
 
@@ -122,8 +125,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        forgotPassword,
+        resetPassword,
         updateCurrentUser,
-        switchDemoRole,
       }}
     >
       {children}
@@ -138,4 +142,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

@@ -20,13 +20,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const LandingPage: React.FC = () => {
-  const { isAuthenticated, user, switchDemoRole } = useAuth();
-  const navigate = useNavigate();
-
-  const handleQuickDemo = async (role: 'candidate' | 'recruiter') => {
-    await switchDemoRole(role);
-    navigate(role === 'candidate' ? '/candidate/dashboard' : '/recruiter/dashboard');
-  };
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
@@ -108,31 +102,31 @@ export const LandingPage: React.FC = () => {
               <Search className="w-4 h-4 text-blue-400" />
               <span>Explore Open Positions</span>
             </Link>
-            <button
-              onClick={() => handleQuickDemo('recruiter')}
+            <Link
+              to={isAuthenticated && user?.role === 'recruiter' ? '/recruiter/dashboard' : '/register?role=recruiter'}
               className="w-full sm:w-auto saas-btn-secondary text-sm px-6 py-2.5 justify-center"
             >
               <Briefcase className="w-4 h-4 text-slate-600" />
               <span>Launch Recruiter Workspace</span>
-            </button>
+            </Link>
           </div>
 
-          {/* Quick Demo Selector */}
+          {/* Quick Portal Navigation */}
           <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <span>Instant Access:</span>
-            <button
-              onClick={() => handleQuickDemo('candidate')}
+            <span>Access Portals:</span>
+            <Link
+              to={isAuthenticated && user?.role === 'candidate' ? '/candidate/dashboard' : '/candidate/jobs'}
               className="text-blue-600 font-semibold hover:underline"
             >
               Candidate Portal
-            </button>
+            </Link>
             <span>•</span>
-            <button
-              onClick={() => handleQuickDemo('recruiter')}
+            <Link
+              to={isAuthenticated && user?.role === 'recruiter' ? '/recruiter/dashboard' : '/login'}
               className="text-indigo-600 font-semibold hover:underline"
             >
               Recruiter ATS
-            </button>
+            </Link>
           </div>
 
           {/* Platform Preview Mockup */}

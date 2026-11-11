@@ -17,28 +17,35 @@ import {
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
 
+// In-memory token management (prevents sensitive JWT storage in persistent localStorage)
+let inMemoryToken: string | null = null;
+
 export const getToken = (): string | null => {
-  return localStorage.getItem('talenthub_token');
+  return inMemoryToken;
 };
 
 export const setToken = (token: string): void => {
-  localStorage.setItem('talenthub_token', token);
+  inMemoryToken = token;
 };
 
 export const clearToken = (): void => {
-  localStorage.removeItem('talenthub_token');
+  inMemoryToken = null;
+  try {
+    localStorage.removeItem('talenthub_token');
+  } catch {}
 };
 
-// Create Centralized Axios Instance
+// Create Centralized Axios Instance with cookie credential transport
 export const apiClient = axios.create({
   baseURL: API_BASE,
   headers: {
     'Accept': 'application/json',
   },
+  withCredentials: true,
   timeout: 30000,
 });
 
-// Request Interceptor: Attach JWT Bearer Token
+// Request Interceptor: Attach JWT Bearer Token if present in memory
 apiClient.interceptors.request.use(
   (config) => {
     const token = getToken();
@@ -53,11 +60,11 @@ apiClient.interceptors.request.use(
 // Response Interceptor: Standardize API responses & errors
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  (error: AxiosError<{ message?: string; errors?: string[] }>) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      // Do not clear token during login attempts
-      if (!error.config?.url?.includes('/auth/login')) {
+      // Do not clear during login or reset attempts
+      const url = error.config?.url || '';
+      if (!url.includes('/auth/login') && !url.includes('/auth/reset-password')) {
         clearToken();
       }
     }
@@ -82,6 +89,7 @@ export const api = {
   register: async (payload: {
     email: string;
     password: string;
+    confirmPassword?: string;
     name: string;
     role: string;
     companyName?: string;
@@ -92,6 +100,25 @@ export const api = {
       '/auth/register',
       payload
     );
+    return res.data;
+  },
+
+  logout: async () => {
+    const res = await apiClient.post<{ message: string }>('/auth/logout');
+    return res.data;
+  },
+
+  forgotPassword: async (email: string) => {
+    const res = await apiClient.post<{ message: string }>('/auth/forgot-password', { email });
+    return res.data;
+  },
+
+  resetPassword: async (payload: {
+    token: string;
+    newPassword: string;
+    confirmPassword?: string;
+  }) => {
+    const res = await apiClient.post<{ message: string }>('/auth/reset-password', payload);
     return res.data;
   },
 
@@ -138,13 +165,16 @@ export const api = {
     return res.data;
   },
 
-  getResumeDownloadUrl: async (resumeDocId: string) => {
+  getResumeDownloadUrl: async (idOrCandidateId?: string) => {
+    const url = idOrCandidateId ? `/resume/download/${idOrCandidateId}` : '/resume/download';
     const res = await apiClient.get<{
-      message: string;
+      message?: string;
+      candidateId?: string;
+      originalName?: string;
+      filename?: string;
       downloadUrl: string;
       expiresInMinutes: number;
-      filename: string;
-    }>('/resume/download/' + resumeDocId);
+    }>(url);
     return res.data;
   },
 

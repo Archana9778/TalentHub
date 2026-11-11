@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Sparkles,
-  Layers,
   FileText,
   Calendar,
   CheckCircle2,
@@ -21,11 +20,12 @@ import {
   Shield,
   UserCheck,
   X,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { SkillMatchModal } from '../../components/SkillMatchModal';
 import { MatchDetailsModal } from '../../components/MatchDetailsModal';
+import { SkillMatchModal } from '../../components/SkillMatchModal';
 import { Application, User as UserType, Job, ApplicationStage, ApplicationStatusHistory } from '../../types';
 import { Loading } from '../../components/Loading';
 
@@ -76,6 +76,26 @@ export const ApplicantDetails: React.FC = () => {
   const [updatingStage, setUpdatingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [stageSuccess, setStageSuccess] = useState<string | null>(null);
+
+  // Modals & Resume
+  const [loadingResume, setLoadingResume] = useState(false);
+  const [matchModalOpen, setMatchModalOpen] = useState(false);
+  const [skillModalOpen, setSkillModalOpen] = useState(false);
+
+  const handleViewResume = async () => {
+    if (!application?.candidateId) return;
+    try {
+      setLoadingResume(true);
+      const res = await api.getResumeDownloadUrl(application.candidateId);
+      if (res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Unable to load candidate resume.');
+    } finally {
+      setLoadingResume(false);
+    }
+  };
 
   const isCompanyAdmin =
     user?.role === 'admin' ||
@@ -185,6 +205,13 @@ export const ApplicantDetails: React.FC = () => {
     }
   };
 
+  const getCategoryStyle = (score: number) => {
+    if (score >= 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', bar: 'bg-emerald-500', label: 'Excellent Match' };
+    if (score >= 60) return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', bar: 'bg-blue-500', label: 'Good Match' };
+    if (score >= 40) return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', bar: 'bg-amber-500', label: 'Moderate Match' };
+    return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', bar: 'bg-rose-500', label: 'Low Match' };
+  };
+
   if (loading) return <Loading message="Loading candidate application review..." />;
   if (!application) {
     return (
@@ -199,6 +226,7 @@ export const ApplicantDetails: React.FC = () => {
 
   const validTransitions = ALLOWED_TRANSITIONS[application.stage] || [];
   const stageColor = STAGE_COLORS[application.stage] || STAGE_COLORS.Applied;
+  const catStyle = getCategoryStyle(application.matchScore || application.matchDetails?.score || 0);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -298,14 +326,49 @@ export const ApplicantDetails: React.FC = () => {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900 text-white text-center md:w-48 shrink-0">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Azure AI Match Score
-            </div>
-            <div className="mt-1 text-3xl font-extrabold text-indigo-400">
-              {application.matchScore}%
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Automated document rating</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setMatchModalOpen(true)}
+              className={`p-3.5 ${catStyle.bg} border ${catStyle.border} rounded-2xl text-center shrink-0 hover:shadow-md transition-all group cursor-pointer text-left`}
+              title="Click to view detailed scoring breakdown"
+            >
+              <div className="flex items-center gap-2">
+                <span className={`text-2xl font-black ${catStyle.text}`}>{application.matchScore}%</span>
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${catStyle.bg} ${catStyle.text} border ${catStyle.border}`}>
+                  {application.matchDetails?.category || catStyle.label}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden mt-1.5">
+                <div
+                  className={`h-full ${catStyle.bar} rounded-full transition-all`}
+                  style={{ width: `${application.matchScore}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-slate-500 font-medium mt-1 flex items-center justify-between gap-2">
+                <span>Azure AI Match</span>
+                <span className="text-purple-600 font-bold group-hover:underline">Details →</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSkillModalOpen(true)}
+              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+              title="Compare skills with job requisition"
+            >
+              <Layers className="w-4 h-4 text-indigo-600" />
+              <span>Skill Matrix</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleViewResume}
+              disabled={loadingResume}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              <span>{loadingResume ? 'Opening Resume...' : 'View Resume File'}</span>
+            </button>
           </div>
         </div>
 
@@ -361,9 +424,18 @@ export const ApplicantDetails: React.FC = () => {
                   <Sparkles className="w-4 h-4 text-indigo-600" />
                   <span>AI Skill & Experience Breakdown</span>
                 </h3>
-                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">
-                  {application.matchScore ?? application.matchDetails.score ?? 0}% Overall Fit
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSkillModalOpen(true)}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>View Matrix Details</span>
+                  </button>
+                  <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">
+                    {application.matchScore ?? application.matchDetails.score ?? 0}% Overall Fit
+                  </span>
+                </div>
               </div>
 
               {application.matchDetails.analysisNotes && (
@@ -703,6 +775,32 @@ export const ApplicantDetails: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Match Details Modal */}
+      {application && application.matchDetails && (
+        <MatchDetailsModal
+          isOpen={matchModalOpen}
+          onClose={() => setMatchModalOpen(false)}
+          candidateName={application.candidateName}
+          candidateTitle={application.candidateTitle}
+          jobTitle={application.jobTitle}
+          matchScore={application.matchScore}
+          matchCategory={application.matchDetails.category}
+          matchDetails={application.matchDetails}
+        />
+      )}
+
+      {/* Candidate Skills vs Job Requirements Comparison Modal */}
+      {application && (
+        <SkillMatchModal
+          isOpen={skillModalOpen}
+          onClose={() => setSkillModalOpen(false)}
+          jobId={application.jobId}
+          candidateId={application.candidateId}
+          candidateName={application.candidateName}
+          jobTitle={application.jobTitle}
+        />
       )}
     </div>
   );

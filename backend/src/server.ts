@@ -5,6 +5,7 @@ import path from 'path';
 import { config } from './config';
 import { db } from './database/db';
 import { mysqlDb } from './database/mysql';
+import { parseCookies } from './middleware/auth';
 
 // Import route modules
 import authRoutes from './routes/authRoutes';
@@ -20,16 +21,27 @@ import analyticsRoutes from './routes/analyticsRoutes';
 
 const app = express();
 
+// Trust reverse proxy (e.g. Azure Container Apps, NGINX, Cloudflare) when configured
+if (config.nodeEnv === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Middlewares
-app.use(
-  cors({
-    origin: config.corsOrigin || '*',
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: Array.isArray(config.corsOrigin)
+    ? (config.corsOrigin.length === 1 ? config.corsOrigin[0] : config.corsOrigin)
+    : (config.corsOrigin || '*'),
+  credentials: true,
+}));
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Parse incoming Cookie header
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  (req as any).cookies = parseCookies(req.headers['cookie']);
+  next();
+});
 
 // Serve static uploaded resumes & company logos
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
@@ -125,10 +137,6 @@ const PORT = config.port;
 let serverInstance: any = null;
 
 const startServer = async () => {
-  if (process.env.NODE_ENV === 'test') {
-    return;
-  }
-
   // Initialize Database before accepting requests
   await db.initialize();
 
@@ -158,12 +166,12 @@ const startServer = async () => {
   process.on('SIGTERM', shutdown);
 };
 
-if (process.env.NODE_ENV !== 'test') {
+export { app, startServer };
+export default app;
+
+if (process.env.NODE_ENV !== 'test' && process.env.TEST_IN_PROCESS !== 'true') {
   startServer().catch((err) => {
     console.error('[TalentHub Backend] Failed to start server:', err);
     process.exit(1);
   });
 }
-
-export default app;
-export { app, startServer };

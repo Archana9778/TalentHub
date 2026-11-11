@@ -9,6 +9,8 @@ import {
   ReportedJob,
   JobAlert,
   ApplicationStatusHistory,
+  PasswordResetToken,
+  RevokedToken,
   ResumeDocument,
 } from '../types';
 import {
@@ -34,7 +36,9 @@ interface DatabaseSchema {
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
   applicationStageHistory: ApplicationStatusHistory[];
-  resumeDocuments?: ResumeDocument[];
+  passwordResetTokens: PasswordResetToken[];
+  revokedTokens: RevokedToken[];
+  resumeDocuments: ResumeDocument[];
 }
 
 class DatabaseManager {
@@ -52,8 +56,11 @@ class DatabaseManager {
       reportedJobs: [],
       jobAlerts: [],
       applicationStageHistory: [],
+      passwordResetTokens: [],
+      revokedTokens: [],
+      resumeDocuments: [],
     };
-    this.initJson();
+    if (config.dbMode === 'json') this.initJson();
   }
 
   async initialize(): Promise<void> {
@@ -88,6 +95,12 @@ class DatabaseManager {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         this.data = JSON.parse(raw);
         console.log(`[TalentHub DB] Loaded existing database from ${this.filePath}`);
+        if (!Array.isArray(this.data.passwordResetTokens)) this.data.passwordResetTokens = [];
+        if (!Array.isArray(this.data.revokedTokens)) this.data.revokedTokens = [];
+        if (!Array.isArray(this.data.resumeDocuments)) this.data.resumeDocuments = [];
+        if (!Array.isArray(this.data.applicationStageHistory)) {
+          this.data.applicationStageHistory = [...initialApplicationStageHistory];
+        }
         this.upgradeSchemaIfNeeded();
       } catch (err) {
         console.error('[TalentHub DB] Error reading existing database. Re-seeding...', err);
@@ -102,8 +115,23 @@ class DatabaseManager {
   private upgradeSchemaIfNeeded() {
     let modified = false;
 
-    if (!Array.isArray(this.data.applicationStageHistory) || this.data.applicationStageHistory.length === 0) {
+    if (!Array.isArray(this.data.applicationStageHistory)) {
       this.data.applicationStageHistory = [...initialApplicationStageHistory];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.resumeDocuments)) {
+      this.data.resumeDocuments = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.passwordResetTokens)) {
+      this.data.passwordResetTokens = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.revokedTokens)) {
+      this.data.revokedTokens = [];
       modified = true;
     }
 
@@ -183,18 +211,24 @@ class DatabaseManager {
       reportedJobs: [...initialReportedJobs],
       jobAlerts: [...initialJobAlerts],
       applicationStageHistory: [...initialApplicationStageHistory],
+      passwordResetTokens: [],
+      revokedTokens: [],
+      resumeDocuments: [],
     };
     this.persistJson();
   }
 
   private persistJson() {
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
     try {
+      const payload = JSON.stringify(this.data, null, 2);
       const tempPath = `${this.filePath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(this.data, null, 2), 'utf-8');
-      fs.renameSync(tempPath, this.filePath);
+      try {
+        fs.writeFileSync(tempPath, payload, 'utf-8');
+        fs.copyFileSync(tempPath, this.filePath);
+        try { fs.unlinkSync(tempPath); } catch {}
+      } catch {
+        fs.writeFileSync(this.filePath, payload, 'utf-8');
+      }
     } catch (err) {
       console.error('[TalentHub DB] Failed to persist data to disk:', err);
     }
@@ -232,7 +266,7 @@ class DatabaseManager {
     this.data.users[idx] = {
       ...this.data.users[idx],
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: updates.updatedAt || new Date().toISOString(),
     };
     this.persistJson();
     return this.data.users[idx];
@@ -257,7 +291,6 @@ class DatabaseManager {
     }
     return recruiters;
   }
-
   // ==========================================
   // COMPANIES
   // ==========================================
@@ -285,7 +318,7 @@ class DatabaseManager {
     this.data.companies[idx] = {
       ...this.data.companies[idx],
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: updates.updatedAt || new Date().toISOString(),
     };
     this.persistJson();
     return this.data.companies[idx];
@@ -357,7 +390,9 @@ class DatabaseManager {
 
   async createJob(job: Job): Promise<Job> {
     if (this.isMysql) return mysqlRepository.createJob(job);
-    this.data.jobs.push(job);
+    this.data.jobs.unshift(job);
+    const cat = this.data.categories.find((c) => c.id === job.categoryId);
+    if (cat) cat.jobCount = (cat.jobCount || 0) + 1;
     this.persistJson();
     return job;
   }
@@ -377,13 +412,13 @@ class DatabaseManager {
 
   async deleteJob(id: string): Promise<boolean> {
     if (this.isMysql) return mysqlRepository.deleteJob(id);
-    const initLen = this.data.jobs.length;
+    const job = this.data.jobs.find((j) => j.id === id);
+    if (!job) return false;
+    const cat = this.data.categories.find((c) => c.id === job.categoryId);
+    if (cat && cat.jobCount > 0) cat.jobCount -= 1;
     this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
-    if (this.data.jobs.length !== initLen) {
-      this.persistJson();
-      return true;
-    }
-    return false;
+    this.persistJson();
+    return true;
   }
 
   async incrementJobViews(id: string): Promise<void> {
@@ -407,7 +442,6 @@ class DatabaseManager {
     const allJobs = await this.getJobs();
     return allJobs.filter((j) => j.recruiterId === recruiterId);
   }
-
   // ==========================================
   // APPLICATIONS
   // ==========================================
@@ -438,7 +472,7 @@ class DatabaseManager {
 
   async createApplication(app: Application): Promise<Application> {
     if (this.isMysql) return mysqlRepository.createApplication(app);
-    this.data.applications.push(app);
+    this.data.applications.unshift(app);
     const job = this.data.jobs.find((j) => j.id === app.jobId);
     if (job) {
       job.applicantsCount = (job.applicantsCount || 0) + 1;
@@ -450,9 +484,9 @@ class DatabaseManager {
   async updateApplication(
     id: string,
     updates: Partial<Application>,
-    auditEntry?: any
+    stageAudit?: any
   ): Promise<Application | undefined> {
-    if (this.isMysql) return mysqlRepository.updateApplication(id, updates, auditEntry);
+    if (this.isMysql) return mysqlRepository.updateApplication(id, updates, stageAudit);
     const idx = this.data.applications.findIndex((a) => a.id === id);
     if (idx === -1) return undefined;
     this.data.applications[idx] = {
@@ -494,33 +528,37 @@ class DatabaseManager {
       const rows = await mysqlRepository.getApplicationStageHistory(applicationId);
       return rows.map((r: any) => ({
         id: r.id,
-        applicationId: r.applicationId,
-        previousStatus: r.fromStage || 'None',
-        newStatus: r.toStage,
-        changedBy: r.changedByUserId,
-        changedByName: r.changedByName,
-        timestamp: r.createdAt || new Date().toISOString(),
+        applicationId: r.applicationId || r.application_id,
+        previousStatus: r.fromStage || r.from_stage || 'None',
+        newStatus: r.toStage || r.to_stage,
+        changedBy: r.changedByUserId || r.changed_by_user_id,
+        changedByName: r.changedByName || r.changed_by_name,
+        timestamp: r.createdAt || r.created_at || new Date().toISOString(),
         comments: r.comment,
-        reason: r.comment,
-        interviewType: r.interviewType,
-        interviewDate: r.interviewDate,
+        reason: r.reason || r.comment,
+        isAdminOverride: Boolean(r.isAdminOverride || r.is_admin_override),
+        interviewType: r.interviewType || r.interview_type,
+        interviewDate: r.interviewDate || r.interview_date,
       }));
     }
-    if (!this.data.applicationStageHistory) {
+    if (!Array.isArray(this.data.applicationStageHistory)) {
       this.data.applicationStageHistory = [];
     }
     return this.data.applicationStageHistory.filter((h) => h.applicationId === applicationId);
   }
 
   async createApplicationHistory(entry: ApplicationStatusHistory): Promise<ApplicationStatusHistory> {
-    if (!this.data.applicationStageHistory) {
+    if (this.isMysql) {
+      // Avoid duplicate MySQL audit inserts because the repository already records initial applications and stage transitions
+      return entry;
+    }
+    if (!Array.isArray(this.data.applicationStageHistory)) {
       this.data.applicationStageHistory = [];
     }
     this.data.applicationStageHistory.push(entry);
     this.persistJson();
     return entry;
   }
-
   // ==========================================
   // REPORTED JOBS
   // ==========================================
@@ -531,7 +569,7 @@ class DatabaseManager {
 
   async createReportedJob(rep: ReportedJob): Promise<ReportedJob> {
     if (this.isMysql) return mysqlRepository.createReportedJob(rep);
-    this.data.reportedJobs.push(rep);
+    this.data.reportedJobs.unshift(rep);
     this.persistJson();
     return rep;
   }
@@ -550,30 +588,38 @@ class DatabaseManager {
   // ==========================================
   async getJobAlerts(userId?: string): Promise<JobAlert[]> {
     if (this.isMysql) return mysqlRepository.getJobAlerts(userId);
-    if (userId) return this.data.jobAlerts.filter((a) => a.userId === userId);
+    if (userId) {
+      return this.data.jobAlerts.filter((a) => a.userId === userId);
+    }
     return this.data.jobAlerts;
   }
 
   async createJobAlert(alert: JobAlert): Promise<JobAlert> {
     if (this.isMysql) return mysqlRepository.createJobAlert(alert);
-    this.data.jobAlerts.push(alert);
+    this.data.jobAlerts.unshift(alert);
     this.persistJson();
     return alert;
   }
 
-  async updateJobAlert(id: string, userId: string, updates: Partial<JobAlert>): Promise<JobAlert | undefined> {
-    if (this.isMysql) return mysqlRepository.updateJobAlert(id, userId, updates);
-    const idx = this.data.jobAlerts.findIndex((a) => a.id === id && a.userId === userId);
+  async updateJobAlert(id: string, updatesOrUserId: string | Partial<JobAlert>, maybeUpdates?: Partial<JobAlert>): Promise<JobAlert | undefined> {
+    const userId = typeof updatesOrUserId === 'string' ? updatesOrUserId : undefined;
+    const updates = typeof updatesOrUserId === 'string' ? maybeUpdates || {} : updatesOrUserId;
+
+    if (this.isMysql) {
+      if (userId) return mysqlRepository.updateJobAlert(id, userId, updates);
+      return mysqlRepository.updateJobAlert(id, updates as any, updates);
+    }
+    const idx = this.data.jobAlerts.findIndex((a) => a.id === id && (!userId || a.userId === userId));
     if (idx === -1) return undefined;
     this.data.jobAlerts[idx] = { ...this.data.jobAlerts[idx], ...updates };
     this.persistJson();
     return this.data.jobAlerts[idx];
   }
 
-  async deleteJobAlert(id: string, userId: string): Promise<boolean> {
-    if (this.isMysql) return mysqlRepository.deleteJobAlert(id, userId);
+  async deleteJobAlert(id: string, userId?: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobAlert(id, userId || '');
     const initLen = this.data.jobAlerts.length;
-    this.data.jobAlerts = this.data.jobAlerts.filter((a) => !(a.id === id && a.userId === userId));
+    this.data.jobAlerts = this.data.jobAlerts.filter((a) => !(a.id === id && (!userId || a.userId === userId)));
     if (this.data.jobAlerts.length !== initLen) {
       this.persistJson();
       return true;
@@ -582,61 +628,124 @@ class DatabaseManager {
   }
 
   // ==========================================
-  // RESUME DOCUMENTS (BLOB STORAGE)
+  // PASSWORD RESET TOKENS
+  // ==========================================
+  async createPasswordResetToken(token: PasswordResetToken): Promise<PasswordResetToken> {
+    if (this.isMysql) return mysqlRepository.createPasswordResetToken(token);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    this.data.passwordResetTokens.push(token);
+    this.persistJson();
+    return token;
+  }
+
+  async getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    if (this.isMysql) return mysqlRepository.getPasswordResetTokenByHash(tokenHash);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    return this.data.passwordResetTokens
+      .filter((t) => t.tokenHash === tokenHash)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    if (this.isMysql) return mysqlRepository.markPasswordResetTokenUsed(id);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    const target = this.data.passwordResetTokens.find((t) => t.id === id);
+    if (target) {
+      target.usedAt = new Date().toISOString();
+      this.persistJson();
+    }
+  }
+
+  async invalidateUserResetTokens(userId: string): Promise<void> {
+    if (this.isMysql) return mysqlRepository.invalidateUserResetTokens(userId);
+    this.data.passwordResetTokens = this.data.passwordResetTokens || [];
+    let changed = false;
+    this.data.passwordResetTokens.forEach((t) => {
+      if (t.userId === userId && !t.usedAt) {
+        t.usedAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) this.persistJson();
+  }
+
+  // ==========================================
+  // REVOKED TOKENS (LOGOUT INVALIDATION)
+  // ==========================================
+  async revokeToken(token: RevokedToken): Promise<RevokedToken> {
+    if (this.isMysql) return mysqlRepository.revokeToken(token);
+    this.data.revokedTokens = this.data.revokedTokens || [];
+    this.data.revokedTokens.push(token);
+    this.persistJson();
+    return token;
+  }
+
+  async isTokenRevoked(tokenJti: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.isTokenRevoked(tokenJti);
+    this.data.revokedTokens = this.data.revokedTokens || [];
+    const now = Date.now();
+    return this.data.revokedTokens.some(
+      (t) => t.tokenJti === tokenJti && new Date(t.expiresAt).getTime() > now
+    );
+  }
+
+  resetToSeed(): void {
+    this.seedJson();
+  }
+
+  // ==========================================
+  // RESUME DOCUMENTS (Blob Storage support)
   // ==========================================
   async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
-    const list = this.data.resumeDocuments || [];
-    return list.find((d) => d.candidateId === candidateId && d.isCurrent);
+    if (this.isMysql) return mysqlRepository.getCurrentResume(candidateId);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments.find(
+      (r) => r.candidateId === candidateId && r.isCurrent && r.uploadStatus === 'uploaded'
+    );
   }
 
   async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
-    const list = this.data.resumeDocuments || [];
-    return list.filter((d) => d.candidateId === candidateId);
+    if (this.isMysql) return mysqlRepository.getResumeHistory(candidateId);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments
+      .filter((r) => r.candidateId === candidateId && r.uploadStatus !== 'failed')
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   }
 
   async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
-    const list = this.data.resumeDocuments || [];
-    return list.find((d) => d.id === id);
+    if (this.isMysql) return mysqlRepository.getResumeDocById(id);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    return this.data.resumeDocuments.find((r) => r.id === id);
   }
 
   async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
-    if (!this.data.resumeDocuments) {
-      this.data.resumeDocuments = [];
-    }
-    this.data.resumeDocuments.forEach((d) => {
-      if (d.candidateId === doc.candidateId) d.isCurrent = false;
+    if (this.isMysql) return mysqlRepository.createResumeDocument(doc);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    this.data.resumeDocuments.forEach((r) => {
+      if (r.candidateId === doc.candidateId && r.isCurrent) {
+        r.isCurrent = false;
+      }
     });
-    this.data.resumeDocuments.push(doc);
+    const newDoc: ResumeDocument = { ...doc, isCurrent: true };
+    this.data.resumeDocuments.push(newDoc);
+    const user = this.data.users.find((u) => u.id === doc.candidateId);
+    if (user) {
+      user.resumeUrl = `blob://${doc.containerName || 'talenthub-resumes'}/${doc.blobName}`;
+      user.resumeOriginalName = doc.originalFilename;
+    }
     this.persistJson();
-    return doc;
+    return newDoc;
   }
 
   async markResumeDeleted(id: string, candidateId?: string): Promise<void> {
-    if (!this.data.resumeDocuments) return;
-    const doc = this.data.resumeDocuments.find((d) => d.id === id && (!candidateId || d.candidateId === candidateId));
+    if (this.isMysql) return mysqlRepository.markResumeDeleted(id);
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((r) => r.id === id && (!candidateId || r.candidateId === candidateId));
     if (doc) {
       doc.uploadStatus = 'deleted';
       doc.isCurrent = false;
       this.persistJson();
     }
-  }
-
-  // ==========================================
-  // TEST UTILITIES
-  // ==========================================
-  resetToSeed(): void {
-    this.data = {
-      users: [...initialUsers],
-      companies: [...initialCompanies],
-      categories: [...initialCategories],
-      jobs: [...initialJobs],
-      applications: [...initialApplications],
-      reportedJobs: [...initialReportedJobs],
-      jobAlerts: [...initialJobAlerts],
-      applicationStageHistory: [...initialApplicationStageHistory],
-      resumeDocuments: [],
-    };
-    this.persistJson();
   }
 }
 

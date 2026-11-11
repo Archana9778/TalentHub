@@ -12,6 +12,8 @@ import { AdminLayout } from './layouts/AdminLayout';
 import { LandingPage } from './pages/public/LandingPage';
 import { Login } from './pages/auth/Login';
 import { Register } from './pages/auth/Register';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ResetPassword } from './pages/auth/ResetPassword';
 
 // Candidate Pages
 import { CandidateDashboard } from './pages/candidate/CandidateDashboard';
@@ -48,6 +50,8 @@ export const App: React.FC = () => {
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Candidate Portal Routes */}
           <Route element={<ProtectedRoute allowedRoles={['candidate', 'admin']} />}>

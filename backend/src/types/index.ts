@@ -23,6 +23,9 @@ export interface User {
   role: UserRole;
   companyRole?: CompanyRole;
   status: UserStatus;
+  tokenVersion?: number;
+  lastLoginAt?: string;
+  passwordChangedAt?: string;
   avatarUrl?: string;
   companyId?: string;
   companyName?: string;
@@ -41,6 +44,22 @@ export interface User {
   parsedResumeData?: ParsedResumeData;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt?: string | null;
+  createdAt: string;
+}
+
+export interface RevokedToken {
+  id: string;
+  tokenJti: string;
+  expiresAt: string;
+  createdAt: string;
 }
 
 export interface ParsedResumeData {

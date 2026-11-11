@@ -50,7 +50,7 @@ try {
     Write-Host "`n[3/10] Registering New Candidate ($newEmail)..." -ForegroundColor Yellow
     $regBody = @{
         email = $newEmail
-        password = "password123"
+        password = "SecurePass123!#"
         name = "Jordan Lee $randomId"
         role = "candidate"
         title = "Full-Stack Node/React Engineer"

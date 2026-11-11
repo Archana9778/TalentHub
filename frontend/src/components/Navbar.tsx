@@ -16,14 +16,12 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
-  const { user, logout, switchDemoRole } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleRoleSwitch = async (role: UserRole) => {
-    await switchDemoRole(role);
-    if (role === 'candidate') navigate('/candidate/dashboard');
-    if (role === 'recruiter') navigate('/recruiter/dashboard');
-    if (role === 'admin') navigate('/admin/dashboard');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   const roleColors: Record<UserRole, { badge: string; text: string; icon: any }> = {
@@ -64,40 +62,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
           </Link>
         </div>
 
-        {/* Center: Demo Role Switcher */}
-        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-          <span className="px-2 font-medium text-slate-500 text-[11px]">Role Switcher:</span>
-          <button
-            onClick={() => handleRoleSwitch('candidate')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
-              user?.role === 'candidate'
-                ? 'bg-white text-blue-700 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Candidate
-          </button>
-          <button
-            onClick={() => handleRoleSwitch('recruiter')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
-              user?.role === 'recruiter'
-                ? 'bg-white text-indigo-700 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Recruiter
-          </button>
-          <button
-            onClick={() => handleRoleSwitch('admin')}
-            className={`px-2.5 py-1 rounded-md font-medium transition-all text-xs ${
-              user?.role === 'admin'
-                ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Admin
-          </button>
-        </div>
+        {/* Center: Contextual Role Portal Indicator */}
+        {user && currentRoleInfo && (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+            <span className="font-medium text-slate-500 text-[11px]">Active Portal:</span>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${currentRoleInfo.badge}`}>
+              <currentRoleInfo.icon className="w-3 h-3" />
+              <span>{currentRoleInfo.text}</span>
+            </span>
+          </div>
+        )}
 
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-3">
@@ -127,11 +101,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
               />
 
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 title="Log out"
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1"
+                aria-label="Log out of TalentHub"
               >
                 <LogOut className="w-4 h-4" />
+                <span className="text-xs font-medium hidden md:inline">Sign Out</span>
               </button>
             </div>
           ) : (
