@@ -19,6 +19,7 @@
     "test": "tsx src/tests/resumeValidation.test.ts",
     "test:resume": "tsx src/tests/resumeValidation.test.ts",
     "test:features": "tsx src/tests/resumeFeatures.test.ts",
+    "test:security": "tsx src/tests/resumeSecurity.test.ts",
     "test:validation": "tsx src/tests/resumeValidation.test.ts",
     "test:integration": "tsx src/tests/integration.test.ts",
     "test:unit": "SKIP_INTEGRATION=true tsx src/tests/integration.test.ts",

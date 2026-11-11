@@ -33,10 +33,13 @@ router.post(
 router.get('/my', requireRoles('candidate'), getMyResume);
 
 /**
- * GET /api/resume/history
- * All resume version records for authenticated candidate
+ * GET /api/resume/history/:candidateId?
+ * Resume version records:
+ * - Candidates: own history only
+ * - Recruiters: history of candidates who applied to their jobs
+ * - Admins: any candidate history
  */
-router.get('/history', requireRoles('candidate'), getResumeHistory);
+router.get('/history/:candidateId?', getResumeHistory);
 
 /**
  * GET /api/resume/download
