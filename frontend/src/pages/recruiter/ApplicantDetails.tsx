@@ -18,9 +18,13 @@ import {
   AlertTriangle,
   ArrowRight,
   Shield,
+  ShieldCheck,
   UserCheck,
   X,
   Layers,
+  Download,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -79,19 +83,36 @@ export const ApplicantDetails: React.FC = () => {
 
   // Modals & Resume
   const [loadingResume, setLoadingResume] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
 
-  const handleViewResume = async () => {
+  const handleAccessResume = async (action: 'view' | 'download' = 'view') => {
     if (!application?.candidateId) return;
+    setResumeError(null);
     try {
       setLoadingResume(true);
+      // Generate a fresh short-lived SAS URL on demand
       const res = await api.getResumeDownloadUrl(application.candidateId);
       if (res.downloadUrl) {
-        window.open(res.downloadUrl, '_blank');
+        if (action === 'download') {
+          const link = document.createElement('a');
+          link.href = res.downloadUrl;
+          link.download = res.filename || res.originalName || 'Candidate_Resume.pdf';
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        setResumeError('No download URL returned by server.');
       }
     } catch (err: any) {
-      alert(err.message || 'Unable to load candidate resume.');
+      const msg = err?.response?.data?.message || err.message || 'Unable to load candidate resume.';
+      setResumeError(msg);
     } finally {
       setLoadingResume(false);
     }
@@ -359,24 +380,58 @@ export const ApplicantDetails: React.FC = () => {
             <button
               type="button"
               onClick={() => setSkillModalOpen(true)}
-              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
               title="Compare skills with job requisition"
             >
               <Layers className="w-4 h-4 text-indigo-600" />
               <span>Skill Matrix</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleViewResume}
-              disabled={loadingResume}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              <span>{loadingResume ? 'Opening Resume...' : 'View Resume File'}</span>
-            </button>
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAccessResume('view')}
+                  disabled={loadingResume}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                  title="Generate a temporary secure link to preview this resume"
+                >
+                  {loadingResume ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  <span>{loadingResume ? 'Securing Link...' : 'View Resume'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAccessResume('download')}
+                  disabled={loadingResume}
+                  className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
+                  title="Download resume using a temporary read-only link"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                Temporary read-only link
+              </span>
+            </div>
           </div>
         </div>
+
+        {resumeError && (
+          <div className="mt-4 bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{resumeError}</span>
+            </div>
+            <button
+              onClick={() => setResumeError(null)}
+              className="text-rose-600 hover:text-rose-800 font-bold text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Visual Lifecycle Progress Stepper (Requirement 2.A) */}
         <div className="mt-6 pt-6 border-t border-slate-100">
