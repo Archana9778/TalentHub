@@ -61,9 +61,9 @@ export const getSystemStatistics = async (req: Request, res: Response): Promise<
     };
 
     res.json({ stats });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getSystemStatistics error:', err);
-    res.status(500).json({ message: 'Failed to retrieve system statistics.' });
+    res.status(500).json({ message: 'Error retrieving system statistics', error: err.message });
   }
 };
 
@@ -92,9 +92,9 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
 
     const safeUsers = users.map(({ password, ...rest }) => rest);
     res.json({ total: safeUsers.length, users: safeUsers });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getAllUsers error:', err);
-    res.status(500).json({ message: 'Failed to retrieve users.' });
+    res.status(500).json({ message: 'Error retrieving users', error: err.message });
   }
 };
 
@@ -102,6 +102,11 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
   try {
     const id = req.params.id as string;
     const { status, role } = req.body;
+    if ((status !== undefined && !['active', 'suspended'].includes(status)) ||
+        (role !== undefined && !['candidate', 'recruiter', 'admin'].includes(role))) {
+      res.status(400).json({ message: 'Status or role is invalid.' });
+      return;
+    }
 
     const target = await db.getUserById(id);
     if (!target) {
@@ -122,9 +127,9 @@ export const updateUserStatus = async (req: AuthRequest, res: Response): Promise
 
     const { password: _, ...safeUser } = updated!;
     res.json({ message: 'User state updated successfully.', user: safeUser });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] updateUserStatus error:', err);
-    res.status(500).json({ message: 'Failed to update user status.' });
+    res.status(500).json({ message: 'Error updating user status', error: err.message });
   }
 };
 
@@ -150,7 +155,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
       });
       return;
     }
-    res.status(500).json({ message: 'Failed to delete user.' });
+    res.status(500).json({ message: 'Failed to delete user.', error: err.message });
   }
 };
 
@@ -162,19 +167,24 @@ export const getReportedJobs = async (req: AuthRequest, res: Response): Promise<
       search: typeof search === 'string' ? search : undefined,
     });
     res.json({ total: reports.length, reports });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[adminController] getReportedJobs error:', err);
-    res.status(500).json({ message: 'Failed to retrieve reported jobs.' });
+    res.status(500).json({ message: 'Error retrieving reported jobs', error: err.message });
   }
 };
 
 export const updateReportStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const { status, adminAction, adminReason } = req.body;
+    const { status, adminAction, adminReason, removeJob } = req.body;
 
-    if (!status || !['resolved', 'dismissed'].includes(status)) {
-      res.status(400).json({ message: "Status must be 'resolved' or 'dismissed'." });
+    if (!status || !['pending', 'resolved', 'dismissed'].includes(status)) {
+      res.status(400).json({ message: "Status must be 'pending', 'resolved', or 'dismissed'." });
+      return;
+    }
+
+    if (removeJob !== undefined && typeof removeJob !== 'boolean') {
+      res.status(400).json({ message: 'removeJob value is invalid.' });
       return;
     }
 
@@ -185,19 +195,20 @@ export const updateReportStatus = async (req: AuthRequest, res: Response): Promi
       res.status(404).json({ message: 'Report not found.' });
       return;
     }
-    if (existing.status !== 'pending') {
+    if (existing.status !== 'pending' && status !== 'pending') {
       res.status(409).json({ message: 'This report has already been reviewed.' });
       return;
     }
 
     const reviewedByUserId = req.user?.id || '';
     const reviewedByName = req.user?.name || 'Admin';
-    const resolvedAction = adminAction || (status === 'resolved' ? 'resolve' : 'dismiss');
+    // If removeJob is true (legacy payload), map to 'deactivate_job'
+    const resolvedAction = adminAction || (removeJob ? 'deactivate_job' : status === 'resolved' ? 'resolve' : 'dismiss');
 
     const updated = await db.updateReportedJobWithAction(id, {
-      status,
+      status: status === 'pending' ? 'dismissed' : status,
       adminAction: resolvedAction,
-      adminReason: adminReason || '',
+      adminReason: adminReason || (removeJob ? 'Removed by administrator' : ''),
       reviewedByUserId,
       reviewedByName,
     });
@@ -207,10 +218,10 @@ export const updateReportStatus = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    res.json({ message: 'Report reviewed successfully.', report: updated });
-  } catch (err) {
+    res.json({ message: 'Report status updated.', report: updated });
+  } catch (err: any) {
     console.error('[adminController] updateReportStatus error:', err);
-    res.status(500).json({ message: 'Failed to update report status.' });
+    res.status(500).json({ message: 'Error updating report status', error: err.message });
   }
 };
 

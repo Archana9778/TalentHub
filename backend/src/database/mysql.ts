@@ -143,6 +143,8 @@ class MySqlDatabase {
       await this.ensureAuthHardening();
       migrationStep = 'V6__admin_stories.sql';
       await this.ensureAdminStories();
+      migrationStep = 'V6__candidate_personal_info.sql';
+      await this.ensureCandidatePersonalInfoColumns();
     } catch (migrationErr: any) {
       const code = typeof migrationErr?.code === 'string' ? ` (${migrationErr.code})` : '';
       throw new Error(`MySQL migration step ${migrationStep} failed${code}. Check database permissions, existing schema compatibility, and migration files; existing data was not intentionally deleted.`);
@@ -265,6 +267,42 @@ class MySqlDatabase {
           ADD COLUMN reviewed_at TIMESTAMP NULL
       `);
       console.log('[TalentHub MySQL] V6: Added admin audit columns to reported_jobs.');
+    }
+  }
+
+  private async ensureCandidatePersonalInfoColumns(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    // Ensure columns on candidates table
+    const candColumns: Array<[string, string]> = [
+      ['date_of_birth', 'DATE NULL'],
+      ['gender', 'VARCHAR(32) NULL'],
+    ];
+
+    for (const [column, definition] of candColumns) {
+      const [rows] = await this.pool.query<any[]>(
+        'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+        [config.db.database, 'candidates', column]
+      );
+      if (Number(rows?.[0]?.count || 0) === 0) {
+        await this.pool.query(`ALTER TABLE candidates ADD COLUMN ${column} ${definition}`);
+      }
+    }
+
+    // Ensure columns on users table
+    const userColumns: Array<[string, string]> = [
+      ['date_of_birth', 'DATE NULL'],
+      ['gender', 'VARCHAR(32) NULL'],
+    ];
+
+    for (const [column, definition] of userColumns) {
+      const [rows] = await this.pool.query<any[]>(
+        'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+        [config.db.database, 'users', column]
+      );
+      if (Number(rows?.[0]?.count || 0) === 0) {
+        await this.pool.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+      }
     }
   }
 

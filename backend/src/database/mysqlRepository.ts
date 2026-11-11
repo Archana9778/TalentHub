@@ -10,6 +10,7 @@ import {
   JobAlert,
   PasswordResetToken,
   RevokedToken,
+  ResumeDocument,
 } from '../types';
 
 export class MySqlRepository {
@@ -28,89 +29,261 @@ export class MySqlRepository {
     this.parseJson = this.parseJson.bind(this);
   }
 
-  // --- Users ---
+  // --- Users & Profiles ---
+  private get userSelectSql(): string {
+    return `
+      SELECT
+        u.id, u.email, u.password_hash, u.name, u.role, u.status, u.avatar_url,
+        u.parsed_resume_data_json, u.token_version, u.last_login_at, u.password_changed_at,
+        u.created_at, u.updated_at,
+        c.title as candidate_title, c.location as candidate_location, c.phone as candidate_phone,
+        c.bio as candidate_bio, c.date_of_birth, c.gender, c.resume_url, c.resume_original_name, c.skills_json,
+        c.experience_json, c.education_json,
+        r.title as recruiter_title, r.location as recruiter_location, r.phone as recruiter_phone,
+        r.bio as recruiter_bio, r.company_id, r.company_name
+      FROM users u
+      LEFT JOIN candidates c ON u.id = c.user_id
+      LEFT JOIN recruiters r ON u.id = r.user_id
+    `;
+  }
+
   async getUsers(): Promise<User[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM users ORDER BY created_at DESC');
+    const [rows] = await this.pool.query<any[]>(`${this.userSelectSql} ORDER BY u.created_at DESC`);
     return rows.map((r) => this.mapUser(r));
   }
 
   async getUserById(id: string): Promise<User | undefined> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM users WHERE id = ?', [id]);
+    const [rows] = await this.pool.query<any[]>(`${this.userSelectSql} WHERE u.id = ?`, [id]);
     return rows.length > 0 ? this.mapUser(rows[0]) : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+    const [rows] = await this.pool.query<any[]>(`${this.userSelectSql} WHERE LOWER(u.email) = LOWER(?)`, [email.trim()]);
     return rows.length > 0 ? this.mapUser(rows[0]) : undefined;
   }
 
   async createUser(user: User): Promise<User> {
-    await this.pool.query(
-      `INSERT INTO users (
-        id, email, password_hash, name, role, status, title, location, phone,
-        avatar_url, bio, company_id, company_name, resume_url, resume_original_name, skills_json,
-        experience_json, education_json, parsed_resume_data_json, token_version, last_login_at, password_changed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        user.id,
-        user.email,
-        user.password || '',
-        user.name,
-        user.role,
-        user.status,
-        user.title || null,
-        user.location || null,
-        user.phone || null,
-        user.avatarUrl || null,
-        user.bio || null,
-        user.companyId || null,
-        user.companyName || null,
-        user.resumeUrl || null,
-        user.resumeOriginalName || null,
-        user.skills ? JSON.stringify(user.skills) : JSON.stringify([]),
-        JSON.stringify(user.experience || []),
-        JSON.stringify(user.education || []),
-        user.parsedResumeData ? JSON.stringify(user.parsedResumeData) : null,
-        user.tokenVersion || 1,
-        user.lastLoginAt ? new Date(user.lastLoginAt) : null,
-        user.passwordChangedAt ? new Date(user.passwordChangedAt) : null,
-      ]
-    );
-    return user;
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO users (
+          id, email, password_hash, name, role, status, avatar_url,
+          parsed_resume_data_json, token_version, last_login_at, password_changed_at,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          user.id,
+          user.email.trim().toLowerCase(),
+          user.password || '',
+          user.name,
+          user.role,
+          user.status || 'active',
+          user.avatarUrl || null,
+          user.parsedResumeData ? JSON.stringify(user.parsedResumeData) : null,
+          user.tokenVersion || 1,
+          user.lastLoginAt ? new Date(user.lastLoginAt) : null,
+          user.passwordChangedAt ? new Date(user.passwordChangedAt) : null,
+        ]
+      );
+
+      if (user.role === 'candidate') {
+        await conn.query(
+          `INSERT INTO candidates (
+            id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
+            skills_json, experience_json, education_json, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            user.id,
+            user.id,
+            user.title || null,
+            user.location || null,
+            user.phone || null,
+            user.bio || null,
+            user.dateOfBirth ? user.dateOfBirth : null,
+            user.gender || null,
+            user.resumeUrl || null,
+            user.resumeOriginalName || null,
+            user.skills ? JSON.stringify(user.skills) : JSON.stringify([]),
+            JSON.stringify(user.experience || []),
+            JSON.stringify(user.education || []),
+          ]
+        );
+      } else if (user.role === 'recruiter') {
+        await conn.query(
+          `INSERT INTO recruiters (
+            id, user_id, company_id, company_name, title, location, phone, bio,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            user.id,
+            user.id,
+            user.companyId || null,
+            user.companyName || null,
+            user.title || null,
+            user.location || null,
+            user.phone || null,
+            user.bio || null,
+          ]
+        );
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const created = await this.getUserById(user.id);
+    return created || user;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
     const current = await this.getUserById(id);
     if (!current) return undefined;
 
-    const fields: string[] = [];
-    const values: any[] = [];
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
-    if (updates.email !== undefined) { fields.push('email = ?'); values.push(updates.email); }
-    if (updates.password !== undefined) { fields.push('password_hash = ?'); values.push(updates.password); }
-    if (updates.role !== undefined) { fields.push('role = ?'); values.push(updates.role); }
-    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
-    if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
-    if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
-    if (updates.phone !== undefined) { fields.push('phone = ?'); values.push(updates.phone); }
-    if (updates.avatarUrl !== undefined) { fields.push('avatar_url = ?'); values.push(updates.avatarUrl); }
-    if (updates.bio !== undefined) { fields.push('bio = ?'); values.push(updates.bio); }
-    if (updates.companyId !== undefined) { fields.push('company_id = ?'); values.push(updates.companyId); }
-    if (updates.companyName !== undefined) { fields.push('company_name = ?'); values.push(updates.companyName); }
-    if (updates.resumeUrl !== undefined) { fields.push('resume_url = ?'); values.push(updates.resumeUrl); }
-    if (updates.resumeOriginalName !== undefined) { fields.push('resume_original_name = ?'); values.push(updates.resumeOriginalName); }
-    if (updates.skills !== undefined) { fields.push('skills_json = ?'); values.push(JSON.stringify(updates.skills)); }
-    if (updates.experience !== undefined) { fields.push('experience_json = ?'); values.push(JSON.stringify(updates.experience)); }
-    if (updates.education !== undefined) { fields.push('education_json = ?'); values.push(JSON.stringify(updates.education)); }
-    if (updates.parsedResumeData !== undefined) { fields.push('parsed_resume_data_json = ?'); values.push(JSON.stringify(updates.parsedResumeData)); }
-    if (updates.tokenVersion !== undefined) { fields.push('token_version = ?'); values.push(updates.tokenVersion); }
-    if (updates.lastLoginAt !== undefined) { fields.push('last_login_at = ?'); values.push(updates.lastLoginAt ? new Date(updates.lastLoginAt) : null); }
-    if (updates.passwordChangedAt !== undefined) { fields.push('password_changed_at = ?'); values.push(updates.passwordChangedAt ? new Date(updates.passwordChangedAt) : null); }
+      // 1. Account updates on `users` table
+      const userFields: string[] = [];
+      const userValues: any[] = [];
 
-    if (fields.length > 0) {
-      values.push(id);
-      await this.pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+      if (updates.name !== undefined) { userFields.push('name = ?'); userValues.push(updates.name); }
+      if (updates.email !== undefined) { userFields.push('email = ?'); userValues.push(updates.email.trim().toLowerCase()); }
+      if (updates.password !== undefined) { userFields.push('password_hash = ?'); userValues.push(updates.password); }
+      if (updates.role !== undefined) { userFields.push('role = ?'); userValues.push(updates.role); }
+      if (updates.status !== undefined) { userFields.push('status = ?'); userValues.push(updates.status); }
+      if (updates.avatarUrl !== undefined) { userFields.push('avatar_url = ?'); userValues.push(updates.avatarUrl); }
+      if (updates.parsedResumeData !== undefined) { userFields.push('parsed_resume_data_json = ?'); userValues.push(JSON.stringify(updates.parsedResumeData)); }
+      if (updates.tokenVersion !== undefined) { userFields.push('token_version = ?'); userValues.push(updates.tokenVersion); }
+      if (updates.lastLoginAt !== undefined) { userFields.push('last_login_at = ?'); userValues.push(updates.lastLoginAt ? new Date(updates.lastLoginAt) : null); }
+      if (updates.passwordChangedAt !== undefined) { userFields.push('password_changed_at = ?'); userValues.push(updates.passwordChangedAt ? new Date(updates.passwordChangedAt) : null); }
+
+      if (userFields.length > 0) {
+        userValues.push(id);
+        await conn.query(`UPDATE users SET ${userFields.join(', ')} WHERE id = ?`, userValues);
+      }
+
+      // 2. Candidate profile updates on `candidates` table
+      if (current.role === 'candidate') {
+        const hasCandidateFields =
+          updates.title !== undefined ||
+          updates.location !== undefined ||
+          updates.phone !== undefined ||
+          updates.bio !== undefined ||
+          updates.dateOfBirth !== undefined ||
+          updates.gender !== undefined ||
+          updates.resumeUrl !== undefined ||
+          updates.resumeOriginalName !== undefined ||
+          updates.skills !== undefined ||
+          updates.experience !== undefined ||
+          updates.education !== undefined;
+
+        if (hasCandidateFields) {
+          const [candRows] = await conn.query<any[]>('SELECT id FROM candidates WHERE user_id = ?', [id]);
+          if (candRows.length === 0) {
+            await conn.query(
+              `INSERT INTO candidates (
+                id, user_id, title, location, phone, bio, date_of_birth, gender, resume_url, resume_original_name,
+                skills_json, experience_json, education_json, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              [
+                id,
+                id,
+                updates.title || current.title || null,
+                updates.location || current.location || null,
+                updates.phone || current.phone || null,
+                updates.bio || current.bio || null,
+                updates.dateOfBirth !== undefined ? updates.dateOfBirth : (current.dateOfBirth || null),
+                updates.gender !== undefined ? updates.gender : (current.gender || null),
+                updates.resumeUrl || current.resumeUrl || null,
+                updates.resumeOriginalName || current.resumeOriginalName || null,
+                updates.skills !== undefined ? JSON.stringify(updates.skills) : JSON.stringify(current.skills || []),
+                updates.experience !== undefined ? JSON.stringify(updates.experience) : JSON.stringify(current.experience || []),
+                updates.education !== undefined ? JSON.stringify(updates.education) : JSON.stringify(current.education || []),
+              ]
+            );
+          } else {
+            const candFields: string[] = [];
+            const candValues: any[] = [];
+            if (updates.title !== undefined) { candFields.push('title = ?'); candValues.push(updates.title); }
+            if (updates.location !== undefined) { candFields.push('location = ?'); candValues.push(updates.location); }
+            if (updates.phone !== undefined) { candFields.push('phone = ?'); candValues.push(updates.phone); }
+            if (updates.bio !== undefined) { candFields.push('bio = ?'); candValues.push(updates.bio); }
+            if (updates.dateOfBirth !== undefined) { candFields.push('date_of_birth = ?'); candValues.push(updates.dateOfBirth ? updates.dateOfBirth : null); }
+            if (updates.gender !== undefined) { candFields.push('gender = ?'); candValues.push(updates.gender || null); }
+            if (updates.resumeUrl !== undefined) { candFields.push('resume_url = ?'); candValues.push(updates.resumeUrl); }
+            if (updates.resumeOriginalName !== undefined) { candFields.push('resume_original_name = ?'); candValues.push(updates.resumeOriginalName); }
+            if (updates.skills !== undefined) { candFields.push('skills_json = ?'); candValues.push(JSON.stringify(updates.skills)); }
+            if (updates.experience !== undefined) { candFields.push('experience_json = ?'); candValues.push(JSON.stringify(updates.experience)); }
+            if (updates.education !== undefined) { candFields.push('education_json = ?'); candValues.push(JSON.stringify(updates.education)); }
+
+            if (candFields.length > 0) {
+              candValues.push(id);
+              await conn.query(`UPDATE candidates SET ${candFields.join(', ')} WHERE user_id = ?`, candValues);
+            }
+          }
+        }
+      }
+
+      // 3. Recruiter profile updates on `recruiters` table
+      if (current.role === 'recruiter') {
+        const hasRecruiterFields =
+          updates.title !== undefined ||
+          updates.location !== undefined ||
+          updates.phone !== undefined ||
+          updates.bio !== undefined ||
+          updates.companyId !== undefined ||
+          updates.companyName !== undefined;
+
+        if (hasRecruiterFields) {
+          const [recRows] = await conn.query<any[]>('SELECT id FROM recruiters WHERE user_id = ?', [id]);
+          if (recRows.length === 0) {
+            await conn.query(
+              `INSERT INTO recruiters (
+                id, user_id, company_id, company_name, title, location, phone, bio,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              [
+                id,
+                id,
+                updates.companyId || current.companyId || null,
+                updates.companyName || current.companyName || null,
+                updates.title || current.title || null,
+                updates.location || current.location || null,
+                updates.phone || current.phone || null,
+                updates.bio || current.bio || null,
+              ]
+            );
+          } else {
+            const recFields: string[] = [];
+            const recValues: any[] = [];
+            if (updates.title !== undefined) { recFields.push('title = ?'); recValues.push(updates.title); }
+            if (updates.location !== undefined) { recFields.push('location = ?'); recValues.push(updates.location); }
+            if (updates.phone !== undefined) { recFields.push('phone = ?'); recValues.push(updates.phone); }
+            if (updates.bio !== undefined) { recFields.push('bio = ?'); recValues.push(updates.bio); }
+            if (updates.companyId !== undefined) { recFields.push('company_id = ?'); recValues.push(updates.companyId); }
+            if (updates.companyName !== undefined) { recFields.push('company_name = ?'); recValues.push(updates.companyName); }
+
+            if (recFields.length > 0) {
+              recValues.push(id);
+              await conn.query(`UPDATE recruiters SET ${recFields.join(', ')} WHERE user_id = ?`, recValues);
+            }
+          }
+        }
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
     }
 
     return this.getUserById(id);
@@ -522,7 +695,7 @@ export class MySqlRepository {
         'SELECT * FROM application_stage_history WHERE application_id = ? ORDER BY created_at ASC',
         [applicationId]
       );
-      return rows.map((r) => ({
+      return rows.map((r: any) => ({
         id: r.id,
         applicationId: r.application_id,
         fromStage: r.from_stage,
@@ -786,6 +959,104 @@ export class MySqlRepository {
     return rows && rows[0] && Number(rows[0].count) > 0;
   }
 
+  // --- Resume Documents (Blob Storage support) ---
+  async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT * FROM resume_documents
+       WHERE candidate_id = ? AND is_current = 1 AND upload_status = 'uploaded'
+       ORDER BY uploaded_at DESC LIMIT 1`,
+      [candidateId]
+    );
+    return rows.length > 0 ? this.mapResumeDoc(rows[0]) : undefined;
+  }
+
+  async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT * FROM resume_documents
+       WHERE candidate_id = ? AND upload_status != 'failed'
+       ORDER BY uploaded_at DESC`,
+      [candidateId]
+    );
+    return rows.map((r) => this.mapResumeDoc(r));
+  }
+
+  async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM resume_documents WHERE id = ? LIMIT 1',
+      [id]
+    );
+    return rows.length > 0 ? this.mapResumeDoc(rows[0]) : undefined;
+  }
+
+  async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 1. Demote previous current resume for this candidate
+      await conn.query(
+        'UPDATE resume_documents SET is_current = 0 WHERE candidate_id = ? AND is_current = 1',
+        [doc.candidateId]
+      );
+
+      // 2. Insert new resume document
+      await conn.query(
+        `INSERT INTO resume_documents (
+          id, candidate_id, original_filename, blob_name, container_name,
+          file_extension, mime_type, file_size_bytes, checksum_sha256,
+          upload_status, is_current, uploaded_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW(), NOW())`,
+        [
+          doc.id,
+          doc.candidateId,
+          doc.originalFilename,
+          doc.blobName,
+          doc.containerName || 'talenthub-resumes',
+          doc.fileExtension,
+          doc.mimeType,
+          doc.fileSizeBytes,
+          doc.checksumSha256,
+          doc.uploadStatus || 'uploaded',
+        ]
+      );
+
+      // 3. Back-fill candidates profile with resume details
+      const [candRows] = await conn.query<any[]>(
+        'SELECT id FROM candidates WHERE user_id = ?',
+        [doc.candidateId]
+      );
+      if (candRows.length > 0) {
+        await conn.query(
+          'UPDATE candidates SET resume_url = ?, resume_original_name = ? WHERE user_id = ?',
+          [`blob://${doc.containerName || 'talenthub-resumes'}/${doc.blobName}`, doc.originalFilename, doc.candidateId]
+        );
+      } else {
+        await conn.query(
+          `INSERT INTO candidates (id, user_id, resume_url, resume_original_name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NOW(), NOW())`,
+          [doc.candidateId, doc.candidateId, `blob://${doc.containerName || 'talenthub-resumes'}/${doc.blobName}`, doc.originalFilename]
+        );
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const created = await this.getResumeDocById(doc.id);
+    return created || doc;
+  }
+
+  async markResumeDeleted(id: string): Promise<void> {
+    await this.pool.query(
+      "UPDATE resume_documents SET upload_status = 'deleted', is_current = 0 WHERE id = ?",
+      [id]
+    );
+  }
+
   // --- Mappers ---
   private parseJson<T>(value: any, fallback: T): T {
     if (value === null || value === undefined) return fallback;
@@ -796,12 +1067,34 @@ export class MySqlRepository {
     return fallback;
   }
 
+  private mapResumeDoc(r: any): ResumeDocument {
+    return {
+      id: r.id,
+      candidateId: r.candidate_id,
+      originalFilename: r.original_filename,
+      blobName: r.blob_name,
+      containerName: r.container_name,
+      fileExtension: r.file_extension,
+      mimeType: r.mime_type,
+      fileSizeBytes: Number(r.file_size_bytes),
+      checksumSha256: r.checksum_sha256,
+      uploadStatus: r.upload_status,
+      isCurrent: Boolean(r.is_current),
+      uploadedAt: r.uploaded_at ? new Date(r.uploaded_at).toISOString() : new Date().toISOString(),
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
   private mapUser(row: any): User {
+    const isCandidate = row.role === 'candidate';
+    const isRecruiter = row.role === 'recruiter';
+
     let skills: string[] = [];
-    if (Array.isArray(row.skills_json)) {
-      skills = row.skills_json;
-    } else if (typeof row.skills_json === 'string') {
-      try { skills = JSON.parse(row.skills_json); } catch { skills = []; }
+    const rawSkills = isCandidate ? (row.skills_json !== undefined ? row.skills_json : row.skills) : row.skills_json;
+    if (Array.isArray(rawSkills)) {
+      skills = rawSkills;
+    } else if (typeof rawSkills === 'string') {
+      try { skills = JSON.parse(rawSkills); } catch { skills = []; }
     }
 
     return {
@@ -811,18 +1104,20 @@ export class MySqlRepository {
       name: row.name,
       role: row.role,
       status: row.status,
-      title: row.title || undefined,
-      location: row.location || undefined,
-      phone: row.phone || undefined,
       avatarUrl: row.avatar_url || undefined,
-      bio: row.bio || undefined,
-      companyId: row.company_id || undefined,
-      companyName: row.company_name || undefined,
-      resumeUrl: row.resume_url || undefined,
-      resumeOriginalName: row.resume_original_name || undefined,
-      skills,
-      experience: this.parseJson(row.experience_json, []),
-      education: this.parseJson(row.education_json, []),
+      title: (isCandidate ? row.candidate_title : row.recruiter_title) || row.title || undefined,
+      location: (isCandidate ? row.candidate_location : row.recruiter_location) || row.location || undefined,
+      phone: (isCandidate ? row.candidate_phone : row.recruiter_phone) || row.phone || undefined,
+      bio: (isCandidate ? row.candidate_bio : row.recruiter_bio) || row.bio || undefined,
+      dateOfBirth: row.date_of_birth ? (typeof row.date_of_birth === 'string' ? row.date_of_birth.substring(0, 10) : new Date(row.date_of_birth).toISOString().substring(0, 10)) : undefined,
+      gender: row.gender || undefined,
+      companyId: isRecruiter ? (row.company_id || undefined) : undefined,
+      companyName: isRecruiter ? (row.company_name || undefined) : undefined,
+      resumeUrl: isCandidate ? (row.resume_url || undefined) : undefined,
+      resumeOriginalName: isCandidate ? (row.resume_original_name || undefined) : undefined,
+      skills: isCandidate ? skills : undefined,
+      experience: isCandidate ? this.parseJson(row.experience_json, []) : undefined,
+      education: isCandidate ? this.parseJson(row.education_json, []) : undefined,
       parsedResumeData: this.parseJson(row.parsed_resume_data_json, undefined),
       tokenVersion: row.token_version !== undefined && row.token_version !== null ? Number(row.token_version) : 1,
       lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : undefined,

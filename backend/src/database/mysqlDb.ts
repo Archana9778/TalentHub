@@ -76,6 +76,8 @@ export class MySqlDatabase {
       location: (isCandidate ? row.candidate_location : row.recruiter_location) || row.location || undefined,
       phone: (isCandidate ? row.candidate_phone : row.recruiter_phone) || row.phone || undefined,
       bio: (isCandidate ? row.candidate_bio : row.recruiter_bio) || row.bio || undefined,
+      dateOfBirth: row.date_of_birth ? (typeof row.date_of_birth === 'string' ? row.date_of_birth.substring(0, 10) : new Date(row.date_of_birth).toISOString().substring(0, 10)) : undefined,
+      gender: row.gender || undefined,
       companyId: isRecruiter ? (row.company_id || undefined) : undefined,
       companyName: isRecruiter ? (row.company_name || undefined) : undefined,
       resumeUrl: isCandidate ? (row.resume_url || undefined) : undefined,
@@ -105,6 +107,8 @@ export class MySqlDatabase {
         'c.location as candidate_location',
         'c.phone as candidate_phone',
         'c.bio as candidate_bio',
+        'c.date_of_birth',
+        'c.gender',
         'c.resume_url',
         'c.resume_original_name',
         'c.skills_json',
@@ -155,6 +159,8 @@ export class MySqlDatabase {
           location: user.location || null,
           phone: user.phone || null,
           bio: user.bio || null,
+          date_of_birth: user.dateOfBirth ? user.dateOfBirth : null,
+          gender: user.gender || null,
           resume_url: user.resumeUrl || null,
           resume_original_name: user.resumeOriginalName || null,
           skills_json: JSON.stringify(user.skills || []),
@@ -204,6 +210,8 @@ export class MySqlDatabase {
         if (updates.location !== undefined) candidateUpdates.location = updates.location;
         if (updates.phone !== undefined) candidateUpdates.phone = updates.phone;
         if (updates.bio !== undefined) candidateUpdates.bio = updates.bio;
+        if (updates.dateOfBirth !== undefined) candidateUpdates.date_of_birth = updates.dateOfBirth ? updates.dateOfBirth : null;
+        if (updates.gender !== undefined) candidateUpdates.gender = updates.gender || null;
         if (updates.resumeUrl !== undefined) candidateUpdates.resume_url = updates.resumeUrl;
         if (updates.resumeOriginalName !== undefined) candidateUpdates.resume_original_name = updates.resumeOriginalName;
         if (updates.skills !== undefined) candidateUpdates.skills_json = JSON.stringify(updates.skills);

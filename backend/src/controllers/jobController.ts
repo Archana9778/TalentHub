@@ -20,6 +20,8 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       status,
       featuredOnly,
       skills,
+      companyId,
+      recruiterId,
     } = req.query;
 
     // Status filter (defaults to active unless specified)
@@ -29,76 +31,68 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       jobs = jobs.filter((j) => j.status === 'active');
     }
 
-    // ── Reusable safe-match helpers (used only inside this filter pipeline) ──
-    //
-    // matchStr: returns true when `val` is a non-empty string that contains `q`.
-    //   Guards against null / undefined / non-string values without throwing.
+    // Company filter
+    if (companyId && typeof companyId === 'string' && companyId !== 'all') {
+      jobs = jobs.filter((j) => j.companyId === companyId);
+    }
+
+    // Recruiter filter
+    if (recruiterId && typeof recruiterId === 'string' && recruiterId !== 'all') {
+      jobs = jobs.filter((j) => j.recruiterId === recruiterId);
+    }
+
+    // Safe match helpers
     const matchStr = (val: unknown, q: string): boolean =>
       typeof val === 'string' && val.toLowerCase().includes(q);
 
-    // matchArr: returns true when at least one element of `arr` is a string
-    //   that contains `q`.  Safe against null, undefined, non-array, and
-    //   array elements that are not strings (numbers, objects, etc.).
     const matchArr = (arr: unknown, q: string): boolean =>
       Array.isArray(arr) &&
       (arr as unknown[]).some((el) => matchStr(el, q));
 
-    // Keyword search — case-insensitive partial match.
-    // Fields searched (all that exist on the Job model as text):
-    //   • title          (string, required)
-    //   • companyName    (string, required)
-    //   • description    (string, required)
-    //   • categoryName   (string, required)
-    //   • location       (string, required) ← added; also used by the
-    //                       dedicated location filter below for exact scoping
-    //   • skills[]       (string[], required)
-    //   • requirements[] (string[], required)
-    //   • benefits[]     (string[], required)
-    //
-    // Note: 'responsibilities' is not a field in the Job data model and is
-    // therefore not included. Add it here if the model is extended later.
-    //
-    // Empty or whitespace-only queries are ignored — no jobs are filtered out.
+    // Keyword search over title, description, skills, company name, location, requirements, benefits
     if (search && typeof search === 'string') {
       const q = search.toLowerCase().trim();
       if (q.length > 0) {
-        jobs = jobs.filter((j) =>
-          matchStr(j.title,        q) ||
-          matchStr(j.companyName,  q) ||
-          matchStr(j.description,  q) ||
-          matchStr(j.categoryName, q) ||
-          matchStr(j.location,     q) ||
-          matchArr(j.skills,       q) ||
-          matchArr(j.requirements, q) ||
-          matchArr(j.benefits,     q)
+        jobs = jobs.filter(
+          (j) =>
+            matchStr(j.title, q) ||
+            matchStr(j.companyName, q) ||
+            matchStr(j.description, q) ||
+            matchStr(j.categoryName, q) ||
+            matchStr(j.location, q) ||
+            matchArr(j.skills, q) ||
+            matchArr(j.requirements, q) ||
+            matchArr(j.benefits, q)
         );
       }
     }
 
     // Category
     if (category && typeof category === 'string' && category !== 'all') {
-      jobs = jobs.filter((j) => j.categoryId === category || j.categoryName.toLowerCase() === category.toLowerCase());
+      jobs = jobs.filter(
+        (j) => j.categoryId === category || matchStr(j.categoryName, category.toLowerCase())
+      );
     }
 
     // Location
     if (location && typeof location === 'string') {
       const loc = location.toLowerCase().trim();
-      jobs = jobs.filter((j) => j.location.toLowerCase().includes(loc));
+      jobs = jobs.filter((j) => matchStr(j.location, loc));
     }
 
     // Workplace type (Remote, On-site, Hybrid)
     if (workplaceType && typeof workplaceType === 'string' && workplaceType !== 'all') {
-      jobs = jobs.filter((j) => j.workplaceType.toLowerCase() === workplaceType.toLowerCase());
+      jobs = jobs.filter((j) => matchStr(j.workplaceType, workplaceType.toLowerCase()));
     }
 
     // Job type (Full-time, Part-time, Contract, Internship)
     if (jobType && typeof jobType === 'string' && jobType !== 'all') {
-      jobs = jobs.filter((j) => j.jobType.toLowerCase() === jobType.toLowerCase());
+      jobs = jobs.filter((j) => matchStr(j.jobType, jobType.toLowerCase()));
     }
 
     // Experience level
     if (experienceLevel && typeof experienceLevel === 'string' && experienceLevel !== 'all') {
-      jobs = jobs.filter((j) => j.experienceLevel.toLowerCase() === experienceLevel.toLowerCase());
+      jobs = jobs.filter((j) => matchStr(j.experienceLevel, experienceLevel.toLowerCase()));
     }
 
     // Salary range
@@ -111,16 +105,16 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       if (!isNaN(max)) jobs = jobs.filter((j) => j.salaryMin <= max);
     }
 
+    // Featured only
     if (featuredOnly === 'true') {
       jobs = jobs.filter((j) => j.isFeatured);
     }
 
-    // Skills filter — comma-separated list; job matches when it contains ANY selected skill (OR logic)
-    // Uses the same matchArr helper defined in the search block above for safe element-level checking.
+    // Skills filter (comma-separated list; matches when job contains ANY selected skill)
     if (skills && typeof skills === 'string') {
       const skillList = skills
         .split(',')
-        .map((s) => s.toLowerCase().trim())
+        .map((s) => s.trim().toLowerCase())
         .filter(Boolean);
       if (skillList.length > 0) {
         jobs = jobs.filter((j) =>
@@ -129,11 +123,9 @@ export const getAllJobs = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
-    res.json({
-      total: jobs.length,
-      jobs,
-    });
+    res.json({ total: jobs.length, jobs });
   } catch (err: any) {
+    console.error('[jobController] getAllJobs error:', err);
     res.status(500).json({ message: 'Error retrieving jobs', error: err.message });
   }
 };
@@ -144,16 +136,31 @@ export const getJobById = async (req: Request, res: Response): Promise<void> => 
     const job = await db.getJobById(id);
 
     if (!job) {
-      res.status(404).json({ message: 'Job posting not found.' });
+      res.status(404).json({ message: 'Job not found.' });
       return;
     }
 
-    // Increment view counter
+    // Increment views
     await db.incrementJobViews(id);
 
     const company = await db.getCompanyById(job.companyId);
-    res.json({ job, company });
+    const recruiter = await db.getUserById(job.recruiterId);
+
+    res.json({
+      job,
+      company,
+      recruiter: recruiter
+        ? {
+            id: recruiter.id,
+            name: recruiter.name,
+            email: recruiter.email,
+            title: recruiter.title || recruiter.designation,
+            phone: recruiter.phone || recruiter.contactNumber,
+          }
+        : null,
+    });
   } catch (err: any) {
+    console.error('[jobController] getJobById error:', err);
     res.status(500).json({ message: 'Error retrieving job details', error: err.message });
   }
 };
@@ -167,8 +174,7 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
 
     const {
       title,
-      companyId,
-      companyName,
+      companyId: rawCompanyId,
       categoryId,
       categoryName,
       location,
@@ -184,11 +190,58 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
       benefits,
       isFeatured,
       expiresAt,
+      assignedRecruiterId,
     } = req.body;
 
     if (!title || !description || !location) {
       res.status(400).json({ message: 'Title, description, and location are required.' });
       return;
+    }
+
+    // Determine target company:
+    // If caller is recruiter, target company is strictly caller's company!
+    let resolvedCompanyId = req.user.companyId;
+    if (req.user.role === 'admin' && rawCompanyId) {
+      resolvedCompanyId = rawCompanyId;
+    }
+
+    if (!resolvedCompanyId) {
+      res.status(400).json({ message: 'Company must be associated with the job posting.' });
+      return;
+    }
+
+    const company = await db.getCompanyById(resolvedCompanyId);
+    if (!company) {
+      res.status(404).json({ message: 'Associated company profile does not exist.' });
+      return;
+    }
+
+    // Determine assigned recruiter:
+    let targetRecruiter = req.user;
+    if (assignedRecruiterId && assignedRecruiterId !== req.user.id) {
+      // Only company admin or platform admin can assign to another recruiter initially
+      if (req.user.role === 'recruiter' && req.user.companyRole !== 'admin') {
+        res.status(403).json({
+          message: 'Only company administrators can assign jobs to other recruiters.',
+        });
+        return;
+      }
+      const foundRecruiter = await db.getUserById(assignedRecruiterId);
+      if (!foundRecruiter || foundRecruiter.role !== 'recruiter') {
+        res.status(400).json({ message: 'Selected assigned recruiter does not exist.' });
+        return;
+      }
+      if (foundRecruiter.status !== 'active') {
+        res.status(400).json({ message: 'Cannot assign job to an inactive recruiter.' });
+        return;
+      }
+      if (foundRecruiter.companyId !== resolvedCompanyId) {
+        res.status(400).json({
+          message: 'Assigned recruiter must belong to the same company.',
+        });
+        return;
+      }
+      targetRecruiter = foundRecruiter;
     }
 
     const category = categoryId ? await db.getCategoryById(categoryId) : undefined;
@@ -197,24 +250,24 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
 
     const newJob: Job = {
       id: `job-${uuidv4().substring(0, 8)}`,
-      title,
-      companyId: companyId || req.user.companyId || 'comp-1',
-      companyName: companyName || req.user.companyName || 'CloudScale Technologies',
-      companyLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120',
-      recruiterId: req.user.id,
-      recruiterName: req.user.name,
+      title: title.trim(),
+      companyId: company.id,
+      companyName: company.name,
+      companyLogo: company.logo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120',
+      recruiterId: targetRecruiter.id,
+      recruiterName: targetRecruiter.name,
       categoryId: resolvedCategoryId,
       categoryName: resolvedCategoryName,
-      location,
+      location: location.trim(),
       workplaceType: workplaceType || 'Hybrid',
       jobType: jobType || 'Full-time',
       experienceLevel: experienceLevel || 'Mid-level',
       salaryMin: Number(salaryMin) || 100000,
       salaryMax: Number(salaryMax) || 140000,
       salaryCurrency: salaryCurrency || 'USD',
-      description,
+      description: description.trim(),
       requirements: Array.isArray(requirements) ? requirements : requirements ? [requirements] : [],
-      skills: Array.isArray(skills) ? skills : skills ? skills.split(',').map((s: string) => s.trim()) : [],
+      skills: Array.isArray(skills) ? skills : skills ? (skills as string).split(',').map((s: string) => s.trim()) : [],
       benefits: Array.isArray(benefits) ? benefits : benefits ? [benefits] : [],
       status: 'active',
       isFeatured: Boolean(isFeatured),
@@ -232,6 +285,7 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
       job: newJob,
     });
   } catch (err: any) {
+    console.error('[jobController] createJob error:', err);
     res.status(500).json({ message: 'Error creating job posting', error: err.message });
   }
 };
@@ -251,8 +305,22 @@ export const updateJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    // Recruiter can only edit their own jobs, Admin can edit any
-    if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
+    // Cross-company isolation & RBAC:
+    if (req.user.role === 'recruiter') {
+      if (existing.companyId !== req.user.companyId) {
+        res.status(403).json({
+          message: 'Forbidden: You cannot modify jobs belonging to other companies.',
+        });
+        return;
+      }
+      // Recruiter can edit if assigned or if company admin
+      if (existing.recruiterId !== req.user.id && req.user.companyRole !== 'admin') {
+        res.status(403).json({
+          message: 'Forbidden: You do not have permission to edit this job posting.',
+        });
+        return;
+      }
+    } else if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
       res.status(403).json({ message: 'You do not have permission to edit this job posting.' });
       return;
     }
@@ -260,6 +328,7 @@ export const updateJob = async (req: AuthRequest, res: Response): Promise<void> 
     const updated = await db.updateJob(id, req.body);
     res.json({ message: 'Job updated successfully.', job: updated });
   } catch (err: any) {
+    console.error('[jobController] updateJob error:', err);
     res.status(500).json({ message: 'Error updating job posting', error: err.message });
   }
 };
@@ -279,7 +348,21 @@ export const deleteJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
+    // Cross-company isolation & RBAC:
+    if (req.user.role === 'recruiter') {
+      if (existing.companyId !== req.user.companyId) {
+        res.status(403).json({
+          message: 'Forbidden: You cannot delete jobs belonging to other companies.',
+        });
+        return;
+      }
+      if (existing.recruiterId !== req.user.id && req.user.companyRole !== 'admin') {
+        res.status(403).json({
+          message: 'Forbidden: You do not have permission to delete this job posting.',
+        });
+        return;
+      }
+    } else if (req.user.role !== 'admin' && existing.recruiterId !== req.user.id) {
       res.status(403).json({ message: 'You do not have permission to delete this job posting.' });
       return;
     }
@@ -287,7 +370,91 @@ export const deleteJob = async (req: AuthRequest, res: Response): Promise<void> 
     await db.deleteJob(id);
     res.json({ message: 'Job posting deleted successfully.' });
   } catch (err: any) {
+    console.error('[jobController] deleteJob error:', err);
     res.status(500).json({ message: 'Error deleting job posting', error: err.message });
+  }
+};
+
+export const assignJob = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const id = req.params.id as string;
+    const { recruiterId } = req.body;
+
+    if (!recruiterId || typeof recruiterId !== 'string') {
+      res.status(400).json({ message: 'Target recruiterId is required.' });
+      return;
+    }
+
+    const job = await db.getJobById(id);
+    if (!job) {
+      res.status(404).json({ message: 'Job not found.' });
+      return;
+    }
+
+    // Authorization check:
+    if (req.user.role === 'recruiter') {
+      // Must belong to the job's company
+      if (job.companyId !== req.user.companyId) {
+        res.status(403).json({
+          message: 'Forbidden: You cannot manage jobs belonging to other companies.',
+        });
+        return;
+      }
+      // Must be company admin or the current assigned recruiter
+      if (req.user.companyRole !== 'admin' && job.recruiterId !== req.user.id) {
+        res.status(403).json({
+          message: 'Forbidden: Only company administrators can reassign jobs.',
+        });
+        return;
+      }
+    }
+
+    // Target recruiter validation:
+    const targetRecruiter = await db.getUserById(recruiterId);
+    if (!targetRecruiter || targetRecruiter.role !== 'recruiter') {
+      res.status(404).json({ message: 'Target recruiter account not found.' });
+      return;
+    }
+
+    if (targetRecruiter.status !== 'active') {
+      res.status(400).json({ message: 'Cannot assign job to an inactive recruiter.' });
+      return;
+    }
+
+    // CRITICAL: Prevent cross-company assignment!
+    if (targetRecruiter.companyId !== job.companyId) {
+      res.status(400).json({
+        message: 'Cannot reassign job: The target recruiter belongs to another company.',
+      });
+      return;
+    }
+
+    const updatedJob = await db.updateJob(id, {
+      recruiterId: targetRecruiter.id,
+      recruiterName: targetRecruiter.name,
+    });
+
+    // Update applications for this job with the newly assigned recruiter
+    const jobApplications = await db.getApplicationsByJobId(id);
+    for (const app of jobApplications) {
+      await db.updateApplication(app.id, {
+        assignedRecruiterId: targetRecruiter.id,
+        assignedRecruiterName: targetRecruiter.name,
+      });
+    }
+
+    res.json({
+      message: `Job posting successfully reassigned to ${targetRecruiter.name}.`,
+      job: updatedJob,
+    });
+  } catch (err: any) {
+    console.error('[jobController] assignJob error:', err);
+    res.status(500).json({ message: 'Error assigning job', error: err.message });
   }
 };
 
@@ -298,13 +465,32 @@ export const getRecruiterJobs = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const { scope, companyId, recruiterId } = req.query;
+
     let jobs = await db.getJobs();
-    if (req.user.role !== 'admin') {
-      jobs = jobs.filter((j) => j.recruiterId === req.user!.id);
+
+    if (req.user.role === 'recruiter') {
+      // Isolate to company
+      jobs = jobs.filter((j) => j.companyId === req.user!.companyId);
+
+      if (recruiterId && typeof recruiterId === 'string') {
+        jobs = jobs.filter((j) => j.recruiterId === recruiterId);
+      } else if (scope !== 'company') {
+        // By default, return jobs assigned to the logged-in recruiter
+        jobs = jobs.filter((j) => j.recruiterId === req.user!.id);
+      }
+    } else if (req.user.role === 'admin') {
+      if (companyId && typeof companyId === 'string') {
+        jobs = jobs.filter((j) => j.companyId === companyId);
+      }
+      if (recruiterId && typeof recruiterId === 'string') {
+        jobs = jobs.filter((j) => j.recruiterId === recruiterId);
+      }
     }
 
     res.json({ total: jobs.length, jobs });
   } catch (err: any) {
+    console.error('[jobController] getRecruiterJobs error:', err);
     res.status(500).json({ message: 'Error retrieving recruiter jobs', error: err.message });
   }
 };
@@ -316,30 +502,41 @@ export const reportJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const { jobId, reason, details } = req.body;
-    const targetJob = await db.getJobById(jobId);
+    const id = req.params.id as string;
+    const { reason, details } = req.body;
 
-    if (!targetJob) {
-      res.status(404).json({ message: 'Job to report does not exist.' });
+    if (!reason) {
+      res.status(400).json({ message: 'Reason for report is required.' });
       return;
     }
 
-    const report: ReportedJob = {
+    const targetJob = await db.getJobById(id);
+    if (!targetJob) {
+      res.status(404).json({ message: 'Job posting not found.' });
+      return;
+    }
+
+    const newReport: ReportedJob = {
       id: `rep-${uuidv4().substring(0, 8)}`,
-      jobId,
+      jobId: id,
       jobTitle: targetJob.title,
       companyName: targetJob.companyName,
       reportedByUserId: req.user.id,
       reportedByName: req.user.name,
-      reason: reason || 'Suspicious or inaccurate information',
-      details: details || 'Reported by candidate for admin review.',
+      reason,
+      details: details || '',
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
 
-    await db.createReportedJob(report);
-    res.status(201).json({ message: 'Job has been reported for administrator moderation.', report });
+    await db.createReportedJob(newReport);
+
+    res.status(201).json({
+      message: 'Job report filed. Our compliance team will review.',
+      report: newReport,
+    });
   } catch (err: any) {
+    console.error('[jobController] reportJob error:', err);
     res.status(500).json({ message: 'Error reporting job', error: err.message });
   }
 };
