@@ -156,7 +156,11 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
 export const getReportedJobs = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const reports = await db.getReportedJobs();
+    const { status, search } = req.query;
+    const reports = await db.getReportedJobsFiltered({
+      status: typeof status === 'string' ? status : undefined,
+      search: typeof search === 'string' ? search : undefined,
+    });
     res.json({ total: reports.length, reports });
   } catch (err) {
     console.error('[adminController] getReportedJobs error:', err);
@@ -167,21 +171,80 @@ export const getReportedJobs = async (req: AuthRequest, res: Response): Promise<
 export const updateReportStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const { status, removeJob } = req.body;
+    const { status, adminAction, adminReason } = req.body;
 
-    const updated = await db.updateReportedJob(id, status);
+    if (!status || !['resolved', 'dismissed'].includes(status)) {
+      res.status(400).json({ message: "Status must be 'resolved' or 'dismissed'." });
+      return;
+    }
+
+    // Fetch the existing report
+    const reports = await db.getReportedJobsFiltered();
+    const existing = reports.find((r) => r.id === id);
+    if (!existing) {
+      res.status(404).json({ message: 'Report not found.' });
+      return;
+    }
+    if (existing.status !== 'pending') {
+      res.status(409).json({ message: 'This report has already been reviewed.' });
+      return;
+    }
+
+    const reviewedByUserId = req.user?.id || '';
+    const reviewedByName = req.user?.name || 'Admin';
+    const resolvedAction = adminAction || (status === 'resolved' ? 'resolve' : 'dismiss');
+
+    const updated = await db.updateReportedJobWithAction(id, {
+      status,
+      adminAction: resolvedAction,
+      adminReason: adminReason || '',
+      reviewedByUserId,
+      reviewedByName,
+    });
+
     if (!updated) {
       res.status(404).json({ message: 'Report not found.' });
       return;
     }
 
-    if (removeJob && updated.jobId) {
-      await db.deleteJob(updated.jobId);
-    }
-
-    res.json({ message: 'Report status updated.', report: updated });
+    res.json({ message: 'Report reviewed successfully.', report: updated });
   } catch (err) {
     console.error('[adminController] updateReportStatus error:', err);
     res.status(500).json({ message: 'Failed to update report status.' });
+  }
+};
+
+export const getRecruiters = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { search, companyId } = req.query;
+    const recruiters = await db.getRecruiters({
+      search: typeof search === 'string' ? search : undefined,
+      companyId: typeof companyId === 'string' ? companyId : undefined,
+    });
+    const safeRecruiters = recruiters.map(({ password, ...rest }) => rest);
+    res.json({ total: safeRecruiters.length, recruiters: safeRecruiters });
+  } catch (err) {
+    console.error('[adminController] getRecruiters error:', err);
+    res.status(500).json({ message: 'Failed to retrieve recruiters.' });
+  }
+};
+
+export const updateCompanyStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { status } = req.body;
+    if (!status || !['active', 'suspended'].includes(status)) {
+      res.status(400).json({ message: "Status must be 'active' or 'suspended'." });
+      return;
+    }
+    const updated = await db.updateCompany(id, { status });
+    if (!updated) {
+      res.status(404).json({ message: 'Company not found.' });
+      return;
+    }
+    res.json({ message: `Company ${status === 'suspended' ? 'suspended' : 'activated'} successfully.`, company: updated });
+  } catch (err) {
+    console.error('[adminController] updateCompanyStatus error:', err);
+    res.status(500).json({ message: 'Failed to update company status.' });
   }
 };
