@@ -12,6 +12,8 @@ import {
   StageTimelineItem,
   ResumeDocument,
   MatchResult,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 
 function safeJsonParse<T>(val: any, fallback: T): T {
@@ -804,6 +806,13 @@ export class MySqlDatabase {
       checksumSha256: r.checksum_sha256,
       uploadStatus: r.upload_status,
       isCurrent: Boolean(r.is_current),
+      extractionStatus: r.extraction_status || 'completed',
+      extractedData: safeJsonParse(r.extracted_data_json, undefined),
+      extractionError: r.extraction_error || undefined,
+      isVerified: Boolean(r.is_verified),
+      verifiedById: r.verified_by_id || undefined,
+      verifiedByName: r.verified_by_name || undefined,
+      verifiedAt: r.verified_at ? new Date(r.verified_at).toISOString() : undefined,
       uploadedAt: r.uploaded_at ? new Date(r.uploaded_at).toISOString() : new Date().toISOString(),
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
     };
@@ -843,7 +852,7 @@ export class MySqlDatabase {
         .where({ candidate_id: doc.candidateId, is_current: true })
         .update({ is_current: false });
 
-      await trx('resume_documents').insert({
+      const insertData: any = {
         id: doc.id,
         candidate_id: doc.candidateId,
         original_filename: doc.originalFilename,
@@ -857,7 +866,14 @@ export class MySqlDatabase {
         is_current: true,
         uploaded_at: new Date(),
         created_at: new Date(),
-      });
+      };
+
+      if (doc.extractionStatus) insertData.extraction_status = doc.extractionStatus;
+      if (doc.extractedData) insertData.extracted_data_json = JSON.stringify(doc.extractedData);
+      if (doc.extractionError) insertData.extraction_error = doc.extractionError;
+      if (doc.isVerified !== undefined) insertData.is_verified = doc.isVerified;
+
+      await trx('resume_documents').insert(insertData);
 
       // Back-fill legacy columns for backward-compat
       await trx('candidates')
@@ -870,6 +886,84 @@ export class MySqlDatabase {
 
     const created = await this.getResumeDocById(doc.id);
     return created || doc;
+  }
+
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    const updatePayload: any = {
+      extraction_status: status,
+      extraction_error: error || null,
+    };
+    if (extractedData) {
+      updatePayload.extracted_data_json = JSON.stringify(extractedData);
+    }
+    await this.db('resume_documents').where('id', docId).update(updatePayload);
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    await this.db('resume_documents').where('id', docId).update({
+      extracted_data_json: JSON.stringify(extractedData),
+    });
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteCandidateProfile: boolean = true
+  ): Promise<void> {
+    const now = new Date();
+    await this.db.transaction(async (trx) => {
+      // Mark resume doc as verified
+      await trx('resume_documents').where('id', docId).update({
+        is_verified: true,
+        verified_by_id: recruiterId,
+        verified_by_name: recruiterName,
+        verified_at: now,
+        extracted_data_json: JSON.stringify(verifiedData),
+      });
+
+      if (overwriteCandidateProfile) {
+        // Map extracted details to candidate fields
+        const candidateUpdates: any = {
+          title: verifiedData.experience?.[0]?.title || undefined,
+          location: verifiedData.location || undefined,
+          phone: verifiedData.phone || undefined,
+          bio: verifiedData.summary || undefined,
+          skills_json: JSON.stringify(verifiedData.skills || []),
+          experience_json: JSON.stringify(
+            (verifiedData.experience || []).map((exp) => ({
+              title: exp.title,
+              company: exp.company,
+              period: exp.duration,
+              description: exp.description || '',
+            }))
+          ),
+          education_json: JSON.stringify(
+            (verifiedData.education || []).map((edu) => ({
+              degree: edu.degree,
+              school: edu.institution,
+              year: edu.year,
+            }))
+          ),
+        };
+        // Clean undefined
+        Object.keys(candidateUpdates).forEach(
+          (k) => candidateUpdates[k] === undefined && delete candidateUpdates[k]
+        );
+
+        await trx('candidates').where('user_id', candidateId).update(candidateUpdates);
+      }
+    });
   }
 
   async markResumeDeleted(id: string): Promise<void> {

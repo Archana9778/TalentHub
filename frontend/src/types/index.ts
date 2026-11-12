@@ -15,6 +15,50 @@ export interface UserEducation {
   year: string;
 }
 
+export interface ExtractedExperienceItem {
+  company: string;
+  title: string;
+  duration: string;
+  description?: string;
+}
+
+export interface ExtractedEducationItem {
+  degree: string;
+  institution: string;
+  year: string;
+}
+
+export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ExtractedCandidateProfile {
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  summary: string;
+  skills: string[];
+  experience: ExtractedExperienceItem[];
+  education: ExtractedEducationItem[];
+  certifications: string[];
+  extractedAt: string;
+  rawTextPreview?: string;
+  confidence?: number;
+  modelUsed?: string;
+}
+
+export interface CandidateExtractionResponse {
+  candidateId: string;
+  resumeId: string | null;
+  filename: string;
+  status: ExtractionStatus;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
+  extractedData: ExtractedCandidateProfile;
+  error?: string;
+}
+
 export interface ParsedResumeData {
   fullName: string;
   email: string;
@@ -49,6 +93,11 @@ export interface User {
   resumeUrl?: string;
   resumeOriginalName?: string;
   parsedResumeData?: ParsedResumeData;
+  extractedProfile?: ExtractedCandidateProfile;
+  isProfileVerified?: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
   lastLoginAt?: string;
   createdAt: string;
   updatedAt?: string;

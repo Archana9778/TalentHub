@@ -9,6 +9,8 @@ import {
   ReportedJob,
   JobAlert,
   ResumeDocument,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 import {
   initialUsers,
@@ -29,6 +31,7 @@ interface DatabaseSchema {
   applications: Application[];
   reportedJobs: ReportedJob[];
   jobAlerts: JobAlert[];
+  resumeDocuments?: ResumeDocument[];
 }
 
 export class JsonDatabase {
@@ -358,27 +361,163 @@ export class JsonDatabase {
   }
 
   // ==========================================
-  // RESUME DOCUMENTS (stub — JSON driver does not support Blob Storage)
+  // RESUME DOCUMENTS & AZURE EXTRACTIONS
   // ==========================================
 
-  async getCurrentResume(_candidateId: string): Promise<ResumeDocument | undefined> {
-    return undefined;
+  private ensureResumeDocumentsArray(): ResumeDocument[] {
+    if (!this.data.resumeDocuments) {
+      this.data.resumeDocuments = [];
+    }
+    return this.data.resumeDocuments;
   }
 
-  async getResumeHistory(_candidateId: string): Promise<ResumeDocument[]> {
-    return [];
+  async getCurrentResume(candidateId: string): Promise<ResumeDocument | undefined> {
+    const docs = this.ensureResumeDocumentsArray();
+    return docs
+      .filter((d) => d.candidateId === candidateId && d.isCurrent && d.uploadStatus === 'uploaded')
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
   }
 
-  async getResumeDocById(_id: string): Promise<ResumeDocument | undefined> {
-    return undefined;
+  async getResumeHistory(candidateId: string): Promise<ResumeDocument[]> {
+    const docs = this.ensureResumeDocumentsArray();
+    return docs
+      .filter((d) => d.candidateId === candidateId && d.uploadStatus !== 'failed')
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  }
+
+  async getResumeDocById(id: string): Promise<ResumeDocument | undefined> {
+    const docs = this.ensureResumeDocumentsArray();
+    return docs.find((d) => d.id === id);
   }
 
   async createResumeDocument(doc: ResumeDocument): Promise<ResumeDocument> {
-    console.warn('[JsonDatabase] createResumeDocument is a no-op; switch to mysql2 driver for Blob Storage support.');
-    return doc;
+    const docs = this.ensureResumeDocumentsArray();
+    // Demote existing current resumes for this candidate
+    docs.forEach((d) => {
+      if (d.candidateId === doc.candidateId) {
+        d.isCurrent = false;
+      }
+    });
+
+    const newDoc: ResumeDocument = {
+      ...doc,
+      isCurrent: true,
+      uploadedAt: doc.uploadedAt || new Date().toISOString(),
+      createdAt: doc.createdAt || new Date().toISOString(),
+    };
+    docs.push(newDoc);
+
+    // Update candidate's resume reference
+    const uIdx = this.data.users.findIndex((u) => u.id === doc.candidateId);
+    if (uIdx !== -1) {
+      this.data.users[uIdx].resumeUrl = `blob://${doc.containerName}/${doc.blobName}`;
+      this.data.users[uIdx].resumeOriginalName = doc.originalFilename;
+    }
+
+    this.persist();
+    return newDoc;
   }
 
-  async markResumeDeleted(_id: string): Promise<void> {
-    // no-op
+  async markResumeDeleted(id: string): Promise<void> {
+    const docs = this.ensureResumeDocumentsArray();
+    const doc = docs.find((d) => d.id === id);
+    if (doc) {
+      doc.uploadStatus = 'deleted';
+      doc.isCurrent = false;
+      this.persist();
+    }
+  }
+
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    const docs = this.ensureResumeDocumentsArray();
+    const doc = docs.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractionStatus = status;
+      if (extractedData) doc.extractedData = extractedData;
+      if (error !== undefined) doc.extractionError = error;
+      this.persist();
+    }
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    const docs = this.ensureResumeDocumentsArray();
+    const doc = docs.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractedData = extractedData;
+      this.persist();
+    }
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteCandidateProfile: boolean = true
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const docs = this.ensureResumeDocumentsArray();
+    const doc = docs.find((d) => d.id === docId);
+    if (doc) {
+      doc.isVerified = true;
+      doc.verifiedById = recruiterId;
+      doc.verifiedByName = recruiterName;
+      doc.verifiedAt = now;
+      doc.extractedData = verifiedData;
+    }
+
+    const uIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (uIdx !== -1) {
+      this.data.users[uIdx].isProfileVerified = true;
+      this.data.users[uIdx].verifiedById = recruiterId;
+      this.data.users[uIdx].verifiedByName = recruiterName;
+      this.data.users[uIdx].verifiedAt = now;
+      this.data.users[uIdx].extractedProfile = verifiedData;
+
+      if (overwriteCandidateProfile) {
+        if (verifiedData.skills && verifiedData.skills.length > 0) {
+          this.data.users[uIdx].skills = verifiedData.skills;
+        }
+        if (verifiedData.summary) {
+          this.data.users[uIdx].bio = verifiedData.summary;
+        }
+        if (verifiedData.phone) {
+          this.data.users[uIdx].phone = verifiedData.phone;
+        }
+        if (verifiedData.location) {
+          this.data.users[uIdx].location = verifiedData.location;
+        }
+        if (verifiedData.experience && verifiedData.experience.length > 0) {
+          this.data.users[uIdx].experience = verifiedData.experience.map((e) => ({
+            title: e.title,
+            company: e.company,
+            period: e.duration,
+            description: e.description || '',
+          }));
+          this.data.users[uIdx].title = verifiedData.experience[0].title;
+        }
+        if (verifiedData.education && verifiedData.education.length > 0) {
+          this.data.users[uIdx].education = verifiedData.education.map((e) => ({
+            degree: e.degree,
+            school: e.institution,
+            year: e.year,
+          }));
+        }
+        if (verifiedData.certifications) {
+          this.data.users[uIdx].certifications = verifiedData.certifications;
+        }
+      }
+    }
+
+    this.persist();
   }
 }

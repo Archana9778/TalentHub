@@ -12,6 +12,8 @@ import {
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 import {
   initialUsers,
@@ -746,6 +748,114 @@ class DatabaseManager {
       doc.isCurrent = false;
       this.persistJson();
     }
+  }
+
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.updateResumeExtraction(docId, status, extractedData, error);
+    }
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractionStatus = status;
+      if (extractedData) doc.extractedData = extractedData;
+      if (error !== undefined) doc.extractionError = error;
+      this.persistJson();
+    }
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.updateResumeExtractedData(docId, extractedData);
+    }
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractedData = extractedData;
+      this.persistJson();
+    }
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.verifyResumeExtraction(
+        docId,
+        candidateId,
+        recruiterId,
+        recruiterName,
+        verifiedData,
+        overwriteProfile
+      );
+    }
+    const now = new Date().toISOString();
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.isVerified = true;
+      doc.verifiedById = recruiterId;
+      doc.verifiedByName = recruiterName;
+      doc.verifiedAt = now;
+      doc.extractedData = verifiedData;
+    }
+
+    const uIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (uIdx !== -1) {
+      this.data.users[uIdx].isProfileVerified = true;
+      this.data.users[uIdx].verifiedById = recruiterId;
+      this.data.users[uIdx].verifiedByName = recruiterName;
+      this.data.users[uIdx].verifiedAt = now;
+      this.data.users[uIdx].extractedProfile = verifiedData;
+
+      if (overwriteProfile) {
+        if (verifiedData.skills?.length) {
+          this.data.users[uIdx].skills = verifiedData.skills;
+        }
+        if (verifiedData.summary) {
+          this.data.users[uIdx].bio = verifiedData.summary;
+        }
+        if (verifiedData.phone) {
+          this.data.users[uIdx].phone = verifiedData.phone;
+        }
+        if (verifiedData.location) {
+          this.data.users[uIdx].location = verifiedData.location;
+        }
+        if (verifiedData.experience?.length) {
+          this.data.users[uIdx].experience = verifiedData.experience.map((e) => ({
+            title: e.title,
+            company: e.company,
+            period: e.duration,
+            description: e.description || '',
+          }));
+          this.data.users[uIdx].title = verifiedData.experience[0].title;
+        }
+        if (verifiedData.education?.length) {
+          this.data.users[uIdx].education = verifiedData.education.map((e) => ({
+            degree: e.degree,
+            school: e.institution,
+            year: e.year,
+          }));
+        }
+        if (verifiedData.certifications) {
+          this.data.users[uIdx].certifications = verifiedData.certifications;
+        }
+      }
+    }
+    this.persistJson();
   }
 }
 

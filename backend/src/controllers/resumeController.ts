@@ -29,7 +29,8 @@ import {
   BlobStorageService,
 } from '../services/blobStorageService';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
-import { ResumeDocument } from '../types';
+import { AzureDocumentIntelligenceService as AzureExtractionService } from '../services/azureDocumentIntelligenceService';
+import { ResumeDocument, ExtractedCandidateProfile } from '../types';
 
 /**
  * Helper to extract the relative blob name from a stored resumeUrl (which might be a full URL, relative path, or blob name).
@@ -133,6 +134,7 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
     fileSizeBytes: buffer.length,
     checksumSha256: validation.checksum!,
     uploadStatus: 'uploaded',
+    extractionStatus: 'processing',
     isCurrent: true,
     uploadedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
@@ -150,32 +152,124 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
     return;
   }
 
-  // ── Parse resume and update user profile ─────────────────────────────────
-  const existingSkills = req.user.skills || [];
-  const parsedData = AzureDocumentIntelligenceService.parseResumeFile(
-    safeFilename,
-    existingSkills,
-    req.user.experience?.length ? req.user.experience.length * 2 : 4
-  );
+  // ── Azure AI Document Intelligence Extraction ──────────────────────────
+  let extractionResult: {
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    data?: ExtractedCandidateProfile;
+    error?: string;
+  } = { status: 'pending' };
 
-  let updatedUser = req.user;
   try {
-    const mergedSkills = Array.from(new Set([...existingSkills, ...parsedData.extractedSkills]));
-    const result = await db.updateUser(req.user.id, {
+    const ext = await AzureExtractionService.extractCandidateDetails(
+      buffer,
+      safeFilename,
+      validation.mimeType!
+    );
+    extractionResult = {
+      status: ext.status,
+      data: ext.data,
+      error: ext.error,
+    };
+  } catch (extErr: any) {
+    console.error('[resumeController] Document Intelligence extraction failed:', extErr);
+    extractionResult = {
+      status: 'failed',
+      error: extErr.message || 'Azure AI Document Intelligence service error.',
+    };
+  }
+
+  // Update resume document with extraction results
+  try {
+    if (typeof (db as any).updateResumeExtraction === 'function') {
+      await (db as any).updateResumeExtraction(
+        savedDoc.id,
+        extractionResult.status,
+        extractionResult.data,
+        extractionResult.error
+      );
+    }
+    savedDoc.extractionStatus = extractionResult.status;
+    savedDoc.extractedData = extractionResult.data;
+    savedDoc.extractionError = extractionResult.error;
+  } catch (updateExtErr) {
+    console.warn('[resumeController] Warning: Could not persist extraction status on resume document:', updateExtErr);
+  }
+
+  // ── Candidate Profile Update Logic ──────────────────────────────────────
+  // Requirement 10: Do NOT overwrite manually verified candidate information without confirmation.
+  const isCandidateVerified = Boolean(req.user.isProfileVerified || (req.user as any).isVerified);
+  let updatedUser = req.user;
+
+  if (isCandidateVerified) {
+    console.log(`[resumeController] Candidate "${req.user.id}" profile is already verified by recruiter. Preserving existing profile without automated overwrite.`);
+    try {
+      const result = await db.updateUser(req.user.id, {
+        resumeUrl: blobName,
+        resumeOriginalName: originalName,
+      });
+      if (result) updatedUser = result;
+    } catch (userDbErr) {
+      console.warn('[resumeController] Could not update resume URL on verified candidate:', userDbErr);
+    }
+  } else {
+    // Unverified candidate profile: merge extracted information safely
+    const existingSkills = req.user.skills || [];
+    const extractedSkills = extractionResult.data?.skills || [];
+    const mergedSkills = Array.from(new Set([...existingSkills, ...extractedSkills]));
+
+    const profileUpdates: any = {
       resumeUrl: blobName,
       resumeOriginalName: originalName,
-      parsedResumeData: parsedData,
       skills: mergedSkills,
-    });
-    if (result) updatedUser = result;
-  } catch (userDbErr) {
-    console.error('[resumeController] User record update failed after blob upload — cleaning up blob:', blobName, userDbErr);
-    await BlobStorageService.deleteBlob(blobName);
-    if (typeof (db as any).markResumeDeleted === 'function') {
-      await (db as any).markResumeDeleted(doc.id).catch(() => {});
+    };
+
+    if (extractionResult.data?.summary && !req.user.bio) {
+      profileUpdates.bio = extractionResult.data.summary;
     }
-    res.status(500).json({ message: 'Failed to update user profile with resume details.' });
-    return;
+    if (extractionResult.data?.phone && !req.user.phone) {
+      profileUpdates.phone = extractionResult.data.phone;
+    }
+    if (extractionResult.data?.location && !req.user.location) {
+      profileUpdates.location = extractionResult.data.location;
+    }
+    if (extractionResult.data?.experience?.length && (!req.user.experience || req.user.experience.length === 0)) {
+      profileUpdates.experience = extractionResult.data.experience.map((exp) => ({
+        title: exp.title,
+        company: exp.company,
+        period: exp.duration,
+        description: exp.description || '',
+      }));
+      profileUpdates.title = extractionResult.data.experience[0].title;
+    }
+    if (extractionResult.data?.education?.length && (!req.user.education || req.user.education.length === 0)) {
+      profileUpdates.education = extractionResult.data.education.map((edu) => ({
+        degree: edu.degree,
+        school: edu.institution,
+        year: edu.year,
+      }));
+    }
+    if (extractionResult.data?.certifications?.length && (!req.user.certifications || req.user.certifications.length === 0)) {
+      profileUpdates.certifications = extractionResult.data.certifications;
+    }
+
+    // Retain legacy parsedResumeData for backwards compatibility
+    profileUpdates.parsedResumeData = {
+      fullName: extractionResult.data?.fullName || req.user.name,
+      email: extractionResult.data?.email || req.user.email,
+      phone: extractionResult.data?.phone || req.user.phone || '',
+      summary: extractionResult.data?.summary || '',
+      extractedSkills: mergedSkills,
+      experienceYears: extractionResult.data?.experience?.length ? extractionResult.data.experience.length * 2 : 4,
+      educationLevel: extractionResult.data?.education?.[0]?.degree || 'Bachelor Degree',
+      extractedAt: new Date().toISOString(),
+    };
+
+    try {
+      const result = await db.updateUser(req.user.id, profileUpdates);
+      if (result) updatedUser = result;
+    } catch (userDbErr) {
+      console.error('[resumeController] User record update failed after blob upload:', userDbErr);
+    }
   }
 
   // Generate initial secure SAS URL
@@ -189,7 +283,7 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
   const { password: _password, ...safeUser } = updatedUser || {};
 
   res.status(200).json({
-    message: 'Resume uploaded successfully to private cloud storage and parsed.',
+    message: 'Resume uploaded successfully to private cloud storage and processed with Azure AI Document Intelligence.',
     resume: savedDoc,
     blobName,
     resumeUrl: sasUrl || `/api/resume/${savedDoc.id}/download`,
@@ -197,7 +291,9 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
     originalName,
     fileSizeBytes: validation.fileSizeBytes || buffer.length,
     checksumSha256: validation.checksum,
-    parsedData,
+    extractionStatus: extractionResult.status,
+    extractedProfile: extractionResult.data,
+    extractionError: extractionResult.error,
     user: safeUser,
   });
 };
@@ -486,4 +582,184 @@ export const parseResume = (req: AuthRequest, res: Response): void => {
     status: 'PARSED',
     extracted: parsed,
   });
+};
+
+// ─── GET /api/resume/candidate/:candidateId/extracted ────────────────────────
+
+export const getCandidateExtractedResume = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const candidateId = String(req.params.candidateId || '');
+    if (!candidateId) {
+      res.status(400).json({ message: 'Candidate ID is required.' });
+      return;
+    }
+
+    // Recruiters and Admins can view; candidates can view their own
+    if (req.user?.role !== 'admin' && req.user?.role !== 'recruiter' && req.user?.id !== candidateId) {
+      res.status(403).json({ message: 'Forbidden: Insufficient permissions to view candidate resume extraction.' });
+      return;
+    }
+
+    let doc: ResumeDocument | undefined;
+    if (typeof (db as any).getCurrentResume === 'function') {
+      doc = await (db as any).getCurrentResume(candidateId);
+    }
+
+    const candidate = await db.getUserById(candidateId);
+    if (!candidate) {
+      res.status(404).json({ message: 'Candidate not found.' });
+      return;
+    }
+
+    // If doc has extracted data, return it
+    if (doc && doc.extractedData) {
+      res.json({
+        candidateId,
+        resumeId: doc.id,
+        filename: doc.originalFilename,
+        status: doc.extractionStatus || 'completed',
+        isVerified: Boolean(doc.isVerified || candidate.isProfileVerified),
+        verifiedById: doc.verifiedById || candidate.verifiedById,
+        verifiedByName: doc.verifiedByName || candidate.verifiedByName,
+        verifiedAt: doc.verifiedAt || candidate.verifiedAt,
+        extractedData: doc.extractedData,
+        error: doc.extractionError,
+      });
+      return;
+    }
+
+    // Fallback synthesized from candidate profile records
+    const synthesized: ExtractedCandidateProfile = {
+      fullName: candidate.name,
+      email: candidate.email,
+      phone: candidate.phone || '',
+      location: candidate.location || '',
+      summary: candidate.bio || '',
+      skills: candidate.skills || [],
+      experience: (candidate.experience || []).map((e) => ({
+        title: e.title,
+        company: e.company,
+        duration: e.period,
+        description: e.description,
+      })),
+      education: (candidate.education || []).map((ed) => ({
+        degree: ed.degree,
+        institution: ed.school,
+        year: ed.year,
+      })),
+      certifications: candidate.certifications || [],
+      extractedAt: candidate.createdAt,
+      modelUsed: 'profile-stored-records',
+    };
+
+    res.json({
+      candidateId,
+      resumeId: doc?.id || null,
+      filename: doc?.originalFilename || candidate.resumeOriginalName || 'Resume',
+      status: doc?.extractionStatus || (doc ? 'completed' : 'pending'),
+      isVerified: Boolean(candidate.isProfileVerified),
+      verifiedById: candidate.verifiedById,
+      verifiedByName: candidate.verifiedByName,
+      verifiedAt: candidate.verifiedAt,
+      extractedData: synthesized,
+      error: doc?.extractionError,
+    });
+  } catch (err: any) {
+    console.error('[resumeController] getCandidateExtractedResume error:', err);
+    res.status(500).json({ message: 'Failed to retrieve extracted resume data.', error: err.message });
+  }
+};
+
+// ─── PUT /api/resume/candidate/:candidateId/extracted ────────────────────────
+
+export const updateCandidateExtractedResume = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const candidateId = String(req.params.candidateId || '');
+    const updatedData: ExtractedCandidateProfile = req.body;
+
+    if (!candidateId || !updatedData) {
+      res.status(400).json({ message: 'Candidate ID and updated extraction payload are required.' });
+      return;
+    }
+
+    if (req.user?.role !== 'admin' && req.user?.role !== 'recruiter') {
+      res.status(403).json({ message: 'Forbidden: Only recruiters and administrators can modify candidate extraction details.' });
+      return;
+    }
+
+    const doc = await (db as any).getCurrentResume(candidateId);
+    if (doc && typeof (db as any).updateResumeExtractedData === 'function') {
+      await (db as any).updateResumeExtractedData(doc.id, updatedData);
+    }
+
+    res.json({
+      message: 'Extracted candidate details updated successfully.',
+      candidateId,
+      extractedData: updatedData,
+    });
+  } catch (err: any) {
+    console.error('[resumeController] updateCandidateExtractedResume error:', err);
+    res.status(500).json({ message: 'Failed to update extracted resume data.', error: err.message });
+  }
+};
+
+// ─── POST /api/resume/candidate/:candidateId/verify ──────────────────────────
+
+export const verifyCandidateResumeData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const candidateId = String(req.params.candidateId || '');
+    const { data, overwriteProfile, confirmOverwrite } = req.body;
+
+    if (!candidateId || !data) {
+      res.status(400).json({ message: 'Candidate ID and verified data payload are required.' });
+      return;
+    }
+
+    if (req.user?.role !== 'admin' && req.user?.role !== 'recruiter') {
+      res.status(403).json({ message: 'Forbidden: Only recruiters and administrators can verify candidate information.' });
+      return;
+    }
+
+    const candidate = await db.getUserById(candidateId);
+    if (!candidate) {
+      res.status(404).json({ message: 'Candidate not found.' });
+      return;
+    }
+
+    // Requirement 10: Do not overwrite manually verified candidate information without confirmation
+    if (candidate.isProfileVerified && !confirmOverwrite) {
+      res.status(409).json({
+        requiresConfirmation: true,
+        message: 'Candidate information has already been manually verified. Please confirm that you want to overwrite previously verified details.',
+      });
+      return;
+    }
+
+    const doc = await (db as any).getCurrentResume(candidateId);
+    const docId = doc?.id || `rdoc-verified-${Date.now()}`;
+
+    if (typeof (db as any).verifyResumeExtraction === 'function') {
+      await (db as any).verifyResumeExtraction(
+        docId,
+        candidateId,
+        req.user.id,
+        req.user.name,
+        data,
+        overwriteProfile !== false
+      );
+    }
+
+    res.json({
+      message: 'Candidate profile verified and updated successfully.',
+      candidateId,
+      isVerified: true,
+      verifiedById: req.user.id,
+      verifiedByName: req.user.name,
+      verifiedAt: new Date().toISOString(),
+      verifiedData: data,
+    });
+  } catch (err: any) {
+    console.error('[resumeController] verifyCandidateResumeData error:', err);
+    res.status(500).json({ message: 'Failed to verify candidate resume data.', error: err.message });
+  }
 };
