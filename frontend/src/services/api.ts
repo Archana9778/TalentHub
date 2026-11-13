@@ -16,6 +16,8 @@ import {
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
+  ExtractedCandidateProfile,
+  CandidateExtractionResponse,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -265,6 +267,43 @@ export const api = {
       return res.data;
     }
     const res = await apiClient.post('/resume/parse', {});
+    return res.data;
+  },
+
+  getCandidateExtractedResume: async (candidateId: string) => {
+    const res = await apiClient.get<CandidateExtractionResponse>(`/resume/candidate/${candidateId}/extracted`);
+    return res.data;
+  },
+
+  updateCandidateExtractedResume: async (candidateId: string, data: ExtractedCandidateProfile) => {
+    const res = await apiClient.put<{
+      message: string;
+      candidateId: string;
+      extractedData: ExtractedCandidateProfile;
+    }>(`/resume/candidate/${candidateId}/extracted`, data);
+    return res.data;
+  },
+
+  verifyCandidateResumeData: async (
+    candidateId: string,
+    data: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true,
+    confirmOverwrite: boolean = false
+  ) => {
+    const res = await apiClient.post<{
+      message: string;
+      candidateId: string;
+      isVerified: boolean;
+      verifiedById: string;
+      verifiedByName: string;
+      verifiedAt: string;
+      verifiedData: ExtractedCandidateProfile;
+      requiresConfirmation?: boolean;
+    }>(`/resume/candidate/${candidateId}/verify`, {
+      data,
+      overwriteProfile,
+      confirmOverwrite,
+    });
     return res.data;
   },
 

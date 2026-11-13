@@ -20,6 +20,7 @@
     "migrate:status": "tsx src/database/migrator.ts status",
     "migrate:unlock": "tsx src/database/migrator.ts unlock",
     "test:resume": "tsx src/tests/resumeValidation.test.ts",
+    "test:azure": "tsx src/tests/azureExtraction.test.ts",
     "test:features": "tsx src/tests/resumeFeatures.test.ts",
     "test:security": "tsx src/tests/resumeSecurity.test.ts",
     "test:validation": "tsx src/tests/resumeValidation.test.ts",
@@ -28,6 +29,7 @@
     "test:all": "tsx src/tests/featureTest.ts && tsx src/tests/resumeValidation.test.ts && tsx src/tests/candidateProfile.test.ts && tsx src/tests/mysqlCandidateProfile.test.ts"
   },
   "dependencies": {
+    "@azure/ai-form-recognizer": "^5.1.0",
     "@azure/identity": "^4.14.1",
     "@azure/storage-blob": "^12.34.0",
     "bcryptjs": "^2.4.3",

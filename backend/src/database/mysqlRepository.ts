@@ -11,6 +11,8 @@ import {
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 
 export class MySqlRepository {
@@ -1057,6 +1059,118 @@ export class MySqlRepository {
     );
   }
 
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    try {
+      await this.pool.query(
+        `UPDATE resume_documents
+         SET extraction_status = ?, extracted_data_json = ?, extraction_error = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [status, extractedData ? JSON.stringify(extractedData) : null, error || null, docId]
+      );
+    } catch (err) {
+      console.warn('[TalentHub MySQL] Warning updating extraction status:', err);
+    }
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    try {
+      await this.pool.query(
+        `UPDATE resume_documents SET extracted_data_json = ?, updated_at = NOW() WHERE id = ?`,
+        [JSON.stringify(extractedData), docId]
+      );
+    } catch (err) {
+      console.warn('[TalentHub MySQL] Warning updating extracted data:', err);
+    }
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true
+  ): Promise<void> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        `UPDATE resume_documents
+         SET is_verified = 1, verified_by_id = ?, verified_by_name = ?, verified_at = NOW(),
+             extracted_data_json = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [recruiterId, recruiterName, JSON.stringify(verifiedData), docId]
+      );
+
+      if (overwriteProfile) {
+        const fields: string[] = [];
+        const values: any[] = [];
+        if (verifiedData.skills) {
+          fields.push('skills_json = ?');
+          values.push(JSON.stringify(verifiedData.skills));
+        }
+        if (verifiedData.summary) {
+          fields.push('bio = ?');
+          values.push(verifiedData.summary);
+        }
+        if (verifiedData.phone) {
+          fields.push('phone = ?');
+          values.push(verifiedData.phone);
+        }
+        if (verifiedData.location) {
+          fields.push('location = ?');
+          values.push(verifiedData.location);
+        }
+        if (verifiedData.experience?.length) {
+          fields.push('experience_json = ?');
+          values.push(
+            JSON.stringify(
+              verifiedData.experience.map((e) => ({
+                title: e.title,
+                company: e.company,
+                period: e.duration,
+                description: e.description || '',
+              }))
+            )
+          );
+          fields.push('title = ?');
+          values.push(verifiedData.experience[0].title);
+        }
+        if (verifiedData.education?.length) {
+          fields.push('education_json = ?');
+          values.push(
+            JSON.stringify(
+              verifiedData.education.map((e) => ({
+                degree: e.degree,
+                school: e.institution,
+                year: e.year,
+              }))
+            )
+          );
+        }
+        if (fields.length > 0) {
+          values.push(candidateId);
+          await conn.query(`UPDATE candidates SET ${fields.join(', ')} WHERE user_id = ?`, values);
+        }
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
   // --- Mappers ---
   private parseJson<T>(value: any, fallback: T): T {
     if (value === null || value === undefined) return fallback;
@@ -1080,6 +1194,13 @@ export class MySqlRepository {
       checksumSha256: r.checksum_sha256,
       uploadStatus: r.upload_status,
       isCurrent: Boolean(r.is_current),
+      extractionStatus: r.extraction_status || 'completed',
+      extractedData: this.parseJson(r.extracted_data_json, undefined),
+      extractionError: r.extraction_error || undefined,
+      isVerified: Boolean(r.is_verified),
+      verifiedById: r.verified_by_id || undefined,
+      verifiedByName: r.verified_by_name || undefined,
+      verifiedAt: r.verified_at ? new Date(r.verified_at).toISOString() : undefined,
       uploadedAt: r.uploaded_at ? new Date(r.uploaded_at).toISOString() : new Date().toISOString(),
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
     };

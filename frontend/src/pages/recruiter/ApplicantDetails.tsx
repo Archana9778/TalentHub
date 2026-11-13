@@ -22,6 +22,13 @@ import {
   UserCheck,
   X,
   Layers,
+  Edit3,
+  Award,
+  GraduationCap,
+  Briefcase,
+  Check,
+  Loader2,
+  ShieldCheck,
   Download,
   AlertCircle,
   Loader2,
@@ -30,7 +37,15 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { MatchDetailsModal } from '../../components/MatchDetailsModal';
 import { SkillMatchModal } from '../../components/SkillMatchModal';
-import { Application, User as UserType, Job, ApplicationStage, ApplicationStatusHistory } from '../../types';
+import {
+  Application,
+  User as UserType,
+  Job,
+  ApplicationStage,
+  ApplicationStatusHistory,
+  CandidateExtractionResponse,
+  ExtractedCandidateProfile,
+} from '../../types';
 import { Loading } from '../../components/Loading';
 
 const ALLOWED_TRANSITIONS: Record<ApplicationStage, ApplicationStage[]> = {
@@ -87,6 +102,19 @@ export const ApplicantDetails: React.FC = () => {
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
 
+  // Azure AI Document Intelligence Extraction State
+  const [extraction, setExtraction] = useState<CandidateExtractionResponse | null>(null);
+  const [loadingExtraction, setLoadingExtraction] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<ExtractedCandidateProfile | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifySuccess, setVerifySuccess] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [showConfirmOverwriteModal, setShowConfirmOverwriteModal] = useState(false);
+
+  const handleViewResume = async () => {
   const handleAccessResume = async (action: 'view' | 'download' = 'view') => {
     if (!application?.candidateId) return;
     setResumeError(null);
@@ -123,6 +151,20 @@ export const ApplicantDetails: React.FC = () => {
     user?.companyRole === 'admin' ||
     !user?.companyRole;
 
+  const fetchExtraction = async (cId: string) => {
+    try {
+      setLoadingExtraction(true);
+      setExtractionError(null);
+      const ext = await api.getCandidateExtractedResume(cId);
+      setExtraction(ext);
+    } catch (err: any) {
+      console.warn('Could not fetch candidate extraction:', err);
+      setExtractionError(err.message || 'Failed to retrieve Azure AI resume extraction.');
+    } finally {
+      setLoadingExtraction(false);
+    }
+  };
+
   const fetchData = async () => {
     if (!id) return;
     try {
@@ -131,6 +173,9 @@ export const ApplicantDetails: React.FC = () => {
       setCandidate(data.candidate);
       setJob(data.job);
       setRecruiterNotes(data.application.recruiterNotes || '');
+      if (data.application.candidateId) {
+        fetchExtraction(data.application.candidateId);
+      }
       const historyRes = await api.getApplicationHistory(id).catch(() => null);
       if (historyRes?.history && historyRes.history.length > 0) {
         setAuditRecords(historyRes.history);
@@ -141,6 +186,62 @@ export const ApplicantDetails: React.FC = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    if (!extraction?.extractedData) return;
+    setEditForm(JSON.parse(JSON.stringify(extraction.extractedData)));
+    setShowEditModal(true);
+  };
+
+  const handleSaveExtractedEdit = async () => {
+    if (!application?.candidateId || !editForm) return;
+    try {
+      setSavingEdit(true);
+      await api.updateCandidateExtractedResume(application.candidateId, editForm);
+      setExtraction((prev) => (prev ? { ...prev, extractedData: editForm } : null));
+      setShowEditModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save updated candidate details.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleVerifyExtraction = async (confirmOverwrite: boolean = false) => {
+    if (!application?.candidateId || !extraction?.extractedData) return;
+    try {
+      setVerifying(true);
+      setVerifyError(null);
+      const res = await api.verifyCandidateResumeData(
+        application.candidateId,
+        extraction.extractedData,
+        true,
+        confirmOverwrite
+      );
+      setExtraction((prev) =>
+        prev
+          ? {
+              ...prev,
+              isVerified: true,
+              verifiedByName: res.verifiedByName || user?.name || 'Recruiter',
+              verifiedAt: res.verifiedAt,
+            }
+          : null
+      );
+      setVerifySuccess('Candidate information successfully verified and applied to profile.');
+      setShowConfirmOverwriteModal(false);
+      setTimeout(() => setVerifySuccess(null), 5000);
+      fetchData();
+    } catch (err: any) {
+      if (err.response?.status === 409 || err.message?.includes('confirm')) {
+        setShowConfirmOverwriteModal(true);
+      } else {
+        setVerifyError(err.message || 'Verification failed.');
+      }
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -558,6 +659,258 @@ export const ApplicantDetails: React.FC = () => {
             </div>
           )}
 
+          {/* Azure AI Document Intelligence Extraction Section */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-600">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-slate-900">Azure AI Resume Extraction</h3>
+                    {/* Extraction Status Badge */}
+                    {loadingExtraction ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Processing...
+                      </span>
+                    ) : extraction?.status === 'completed' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        Extraction Completed
+                      </span>
+                    ) : extraction?.status === 'processing' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        AI Parsing Active
+                      </span>
+                    ) : extraction?.status === 'failed' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                        <AlertTriangle className="w-3 h-3 text-rose-600" />
+                        Extraction Failed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        Pending Extraction
+                      </span>
+                    )}
+
+                    {/* Verification Badge */}
+                    {extraction?.isVerified ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Recruiter Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                        AI Extracted • Unverified
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Extracted via Azure AI Document Intelligence (<code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">prebuilt-layout</code>)
+                    {extraction?.verifiedByName && (
+                      <span className="ml-1 text-slate-600 font-medium">
+                        • Verified by {extraction.verifiedByName} on {new Date(extraction.verifiedAt || '').toLocaleDateString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenEditModal}
+                  disabled={!extraction?.extractedData}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors disabled:opacity-50"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Edit Extracted Info</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleVerifyExtraction(false)}
+                  disabled={verifying || !extraction?.extractedData}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {verifying ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>{extraction?.isVerified ? 'Re-Verify Profile' : 'Verify & Apply'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Verification Success / Error Messages */}
+            {verifySuccess && (
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{verifySuccess}</span>
+              </div>
+            )}
+            {verifyError && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{verifyError}</span>
+              </div>
+            )}
+
+            {/* Extraction Failure Alert */}
+            {extraction?.status === 'failed' && (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-1">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>Azure AI Document Intelligence Extraction Could Not Complete</span>
+                </div>
+                <p className="text-xs text-rose-700 leading-relaxed pl-6">
+                  {extraction.error || 'The document layout analysis service encountered an error processing this resume file.'}
+                </p>
+                <p className="text-[11px] text-rose-600 pl-6 mt-1">
+                  Tip: You can use "Edit Extracted Info" above to manually enter details, or ask the candidate to re-upload an uncorrupted PDF or DOCX file.
+                </p>
+              </div>
+            )}
+
+            {/* Extracted Details Display */}
+            {extraction?.extractedData ? (
+              <div className="space-y-4 pt-1">
+                {/* Contact & Location Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Candidate Name</span>
+                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.fullName || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Email Address</span>
+                    <p className="font-semibold text-slate-900 mt-0.5 truncate">{extraction.extractedData.email || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Phone Number</span>
+                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.phone || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Location</span>
+                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.location || '—'}</p>
+                  </div>
+                </div>
+
+                {/* Professional Summary */}
+                {extraction.extractedData.summary && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-slate-700">Professional Summary</span>
+                    <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/60 p-3 rounded-lg border border-slate-200">
+                      {extraction.extractedData.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Technical & Professional Skills */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">
+                      Extracted Skills ({extraction.extractedData.skills?.length || 0})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(extraction.extractedData.skills || []).map((sk, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
+                      >
+                        {sk}
+                      </span>
+                    ))}
+                    {(!extraction.extractedData.skills || extraction.extractedData.skills.length === 0) && (
+                      <span className="text-slate-400 italic text-xs">No skills identified in document layout.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Work Experience */}
+                <div className="space-y-2 pt-1">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Work Experience ({extraction.extractedData.experience?.length || 0})</span>
+                  </span>
+                  <div className="space-y-2.5">
+                    {(extraction.extractedData.experience || []).map((exp, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900">{exp.title}</span>
+                          <span className="text-slate-500 text-[11px] font-medium">{exp.duration}</span>
+                        </div>
+                        <div className="text-slate-600 font-medium text-[11px]">{exp.company}</div>
+                        {exp.description && (
+                          <p className="text-slate-600 text-xs leading-relaxed pt-0.5">{exp.description}</p>
+                        )}
+                      </div>
+                    ))}
+                    {(!extraction.extractedData.experience || extraction.extractedData.experience.length === 0) && (
+                      <p className="text-slate-400 italic text-xs">No experience items detected.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Education & Certifications Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  {/* Education */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Education ({extraction.extractedData.education?.length || 0})</span>
+                    </span>
+                    <div className="space-y-2">
+                      {(extraction.extractedData.education || []).map((edu, idx) => (
+                        <div key={idx} className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200 text-xs space-y-0.5">
+                          <div className="font-bold text-slate-900">{edu.degree}</div>
+                          <div className="text-slate-500 text-[11px] flex justify-between">
+                            <span>{edu.institution}</span>
+                            <span>{edu.year}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {(!extraction.extractedData.education || extraction.extractedData.education.length === 0) && (
+                        <p className="text-slate-400 italic text-xs">No education records found.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Certifications */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Certifications ({extraction.extractedData.certifications?.length || 0})</span>
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(extraction.extractedData.certifications || []).map((cert, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1"
+                        >
+                          <Award className="w-3 h-3 text-amber-600" />
+                          <span>{cert}</span>
+                        </span>
+                      ))}
+                      {(!extraction.extractedData.certifications || extraction.extractedData.certifications.length === 0) && (
+                        <p className="text-slate-400 italic text-xs">No certifications listed.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 text-xs">
+                {loadingExtraction ? 'Analyzing candidate resume with Azure AI Document Intelligence...' : 'No extraction records available for this candidate.'}
+              </div>
+            )}
+          </div>
+
           {/* Cover Letter */}
           {application.coverLetter && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-2">
@@ -926,6 +1279,178 @@ export const ApplicantDetails: React.FC = () => {
           candidateName={application.candidateName}
           jobTitle={application.jobTitle}
         />
+      )}
+
+      {/* Recruiter Edit Extracted Resume Modal */}
+      {showEditModal && editForm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">Edit Extracted Candidate Information</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveExtractedEdit();
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={editForm.location}
+                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Professional Summary</label>
+                <textarea
+                  rows={3}
+                  value={editForm.summary}
+                  onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editForm.skills?.join(', ') || ''}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      skills: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  placeholder="React, TypeScript, Node.js..."
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Certifications (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editForm.certifications?.join(', ') || ''}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      certifications: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  placeholder="AWS Solutions Architect, PMP..."
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
+                >
+                  {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>{savingEdit ? 'Saving Changes...' : 'Save Extracted Details'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal to Prevent Overwriting Verified Profiles */}
+      {showConfirmOverwriteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900">Confirm Overwrite of Verified Profile</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  This candidate’s profile information has already been manually reviewed and verified by a recruiter. Are you sure you want to overwrite their verified profile details with these extracted fields?
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmOverwriteModal(false)}
+                className="px-4 py-2 text-xs rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVerifyExtraction(true)}
+                className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-xs"
+              >
+                Confirm & Overwrite Profile
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

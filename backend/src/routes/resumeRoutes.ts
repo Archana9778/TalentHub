@@ -6,6 +6,9 @@ import {
   downloadResume,
   getResumeDownloadUrl,
   parseResume,
+  getCandidateExtractedResume,
+  updateCandidateExtractedResume,
+  verifyCandidateResumeData,
 } from '../controllers/resumeController';
 import { authenticateToken, requireRoles } from '../middleware/auth';
 import { uploadResume } from '../middleware/upload';
@@ -58,5 +61,26 @@ router.get('/download/:id', getResumeDownloadUrl);
  * AI heuristic parsing test endpoint
  */
 router.post('/parse', uploadResume.single('resume'), parseResume);
+
+/**
+ * Recruiter & Admin Azure AI Document Intelligence Extraction Management
+ */
+router.get(
+  '/candidate/:candidateId/extracted',
+  requireRoles('recruiter', 'admin', 'candidate'),
+  getCandidateExtractedResume
+);
+
+router.put(
+  '/candidate/:candidateId/extracted',
+  requireRoles('recruiter', 'admin'),
+  updateCandidateExtractedResume
+);
+
+router.post(
+  '/candidate/:candidateId/verify',
+  requireRoles('recruiter', 'admin'),
+  verifyCandidateResumeData
+);
 
 export default router;
