@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Shield,
+  ShieldCheck,
   UserCheck,
   X,
   Layers,
@@ -28,6 +29,9 @@ import {
   Check,
   Loader2,
   ShieldCheck,
+  Download,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -94,6 +98,7 @@ export const ApplicantDetails: React.FC = () => {
 
   // Modals & Resume
   const [loadingResume, setLoadingResume] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
 
@@ -110,15 +115,32 @@ export const ApplicantDetails: React.FC = () => {
   const [showConfirmOverwriteModal, setShowConfirmOverwriteModal] = useState(false);
 
   const handleViewResume = async () => {
+  const handleAccessResume = async (action: 'view' | 'download' = 'view') => {
     if (!application?.candidateId) return;
+    setResumeError(null);
     try {
       setLoadingResume(true);
+      // Generate a fresh short-lived SAS URL on demand
       const res = await api.getResumeDownloadUrl(application.candidateId);
       if (res.downloadUrl) {
-        window.open(res.downloadUrl, '_blank');
+        if (action === 'download') {
+          const link = document.createElement('a');
+          link.href = res.downloadUrl;
+          link.download = res.filename || res.originalName || 'Candidate_Resume.pdf';
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          window.open(res.downloadUrl, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        setResumeError('No download URL returned by server.');
       }
     } catch (err: any) {
-      alert(err.message || 'Unable to load candidate resume.');
+      const msg = err?.response?.data?.message || err.message || 'Unable to load candidate resume.';
+      setResumeError(msg);
     } finally {
       setLoadingResume(false);
     }
@@ -400,6 +422,12 @@ export const ApplicantDetails: React.FC = () => {
                   {application.stage}
                 </span>
               </div>
+              {(candidate?.title || application.candidateTitle) && (
+                <p className="text-xs font-semibold text-indigo-700">
+                  {candidate?.title || application.candidateTitle}
+                  {candidate?.location && <span className="text-slate-400 font-normal"> &bull; {candidate.location}</span>}
+                </p>
+              )}
               <p className="text-xs text-slate-500 font-medium">
                 Applied for <strong>{application.jobTitle}</strong> at {application.companyName}
               </p>
@@ -453,24 +481,58 @@ export const ApplicantDetails: React.FC = () => {
             <button
               type="button"
               onClick={() => setSkillModalOpen(true)}
-              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+              className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
               title="Compare skills with job requisition"
             >
               <Layers className="w-4 h-4 text-indigo-600" />
               <span>Skill Matrix</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleViewResume}
-              disabled={loadingResume}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              <span>{loadingResume ? 'Opening Resume...' : 'View Resume File'}</span>
-            </button>
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAccessResume('view')}
+                  disabled={loadingResume}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                  title="Generate a temporary secure link to preview this resume"
+                >
+                  {loadingResume ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  <span>{loadingResume ? 'Securing Link...' : 'View Resume'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAccessResume('download')}
+                  disabled={loadingResume}
+                  className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
+                  title="Download resume using a temporary read-only link"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                Temporary read-only link
+              </span>
+            </div>
           </div>
         </div>
+
+        {resumeError && (
+          <div className="mt-4 bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{resumeError}</span>
+            </div>
+            <button
+              onClick={() => setResumeError(null)}
+              className="text-rose-600 hover:text-rose-800 font-bold text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Visual Lifecycle Progress Stepper (Requirement 2.A) */}
         <div className="mt-6 pt-6 border-t border-slate-100">
@@ -862,16 +924,80 @@ export const ApplicantDetails: React.FC = () => {
             </div>
           )}
 
-          {/* Candidate Experience & Education */}
+          {/* Candidate Profile & Personal Information */}
           {candidate && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-600" />
-                <span>Candidate Profile & Experience</span>
-              </h3>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <User className="w-4 h-4 text-indigo-600" />
+                  <span>Candidate Personal &amp; Professional Details</span>
+                </h3>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold">
+                  Read Only
+                </span>
+              </div>
+
+              {/* Personal Details Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Full Name
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.name || application.candidateName}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Email Address
+                  </div>
+                  <div className="font-semibold text-slate-800 truncate">{candidate.email || application.candidateEmail}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Phone Number
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.phone || application.candidatePhone || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Date of Birth
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.dateOfBirth || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Gender
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.gender || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Professional Headline
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.title || application.candidateTitle || 'Not provided'}</div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 sm:col-span-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Current Location
+                  </div>
+                  <div className="font-semibold text-slate-800">{candidate.location || 'Not provided'}</div>
+                </div>
+              </div>
 
               {candidate.bio && (
-                <p className="text-xs text-slate-600 leading-relaxed">{candidate.bio}</p>
+                <div className="pt-2">
+                  <div className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-1">
+                    Professional Summary / About Me
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-line">
+                    {candidate.bio}
+                  </p>
+                </div>
               )}
 
               {candidate.experience && candidate.experience.length > 0 && (
@@ -883,7 +1009,7 @@ export const ApplicantDetails: React.FC = () => {
                     <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                       <div className="font-bold text-slate-900">{exp.title}</div>
                       <div className="text-slate-500">
-                        {exp.company} • {exp.period}
+                        {exp.company} &bull; {exp.period}
                       </div>
                       <p className="mt-1 text-slate-600 leading-relaxed">{exp.description}</p>
                     </div>

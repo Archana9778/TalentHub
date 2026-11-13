@@ -6,7 +6,11 @@ import { Company } from '../types';
 
 export const getAllCompanies = async (req: Request, res: Response): Promise<void> => {
   try {
-    const companies = await db.getCompanies();
+    const { search, status } = req.query;
+    const companies = await db.getCompanies({
+      search: typeof search === 'string' ? search : undefined,
+      status: typeof status === 'string' ? status : undefined,
+    });
     res.json({ total: companies.length, companies });
   } catch (err: any) {
     console.error('[companyController] getAllCompanies error:', err);

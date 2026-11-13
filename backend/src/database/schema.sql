@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS candidates (
     location VARCHAR(150) NULL,
     phone VARCHAR(50) NULL,
     bio TEXT NULL,
+    date_of_birth DATE NULL,
+    gender VARCHAR(32) NULL,
     resume_url VARCHAR(500) NULL,
     resume_original_name VARCHAR(255) NULL,
     skills_json JSON NULL,

@@ -3,16 +3,28 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
+  id?: string;
   title: string;
   company: string;
-  period: string;
-  description: string;
+  period?: string;
+  description?: string;
+  location?: string;
+  employmentType?: string;
+  startDate?: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
 }
 
 export interface UserEducation {
+  id?: string;
   degree: string;
   school: string;
-  year: string;
+  year?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  description?: string;
 }
 
 export interface ExtractedExperienceItem {
@@ -86,6 +98,8 @@ export interface User {
   designation?: string;
   location?: string;
   bio?: string;
+  dateOfBirth?: string;
+  gender?: string;
   skills?: string[];
   certifications?: string[];
   experience?: UserExperience[];
@@ -103,6 +117,27 @@ export interface User {
   updatedAt?: string;
 }
 
+export interface CandidateProfile {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  title?: string;
+  location?: string;
+  bio?: string;
+  skills?: string[];
+  experience?: UserExperience[];
+  education?: UserEducation[];
+  resumeUrl?: string;
+  resumeOriginalName?: string;
+  avatarUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -117,6 +152,7 @@ export interface Company {
   industry: string;
   size: string;
   verified: boolean;
+  status?: 'active' | 'suspended';
   createdAt: string;
   updatedAt?: string;
 }
@@ -127,6 +163,7 @@ export interface JobCategory {
   description: string;
   icon: string;
   jobCount: number;
+  isActive?: boolean;
 }
 
 export type WorkplaceType = 'Remote' | 'On-site' | 'Hybrid';
@@ -284,6 +321,12 @@ export interface ReportedJob {
   reason: string;
   details: string;
   status: 'pending' | 'resolved' | 'dismissed';
+  reviewedByUserId?: string;
+  reviewedByName?: string;
+  adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+  adminReason?: string;
+  reviewedAt?: string;
+  currentJobStatus?: JobStatus;
   createdAt: string;
 }
 

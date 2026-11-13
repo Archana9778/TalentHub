@@ -340,7 +340,7 @@ export const getMyResume = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
-// ─── GET /api/resume/history ─────────────────────────────────────────────────
+// ─── GET /api/resume/history/:candidateId? ─────────────────────────────────
 
 export const getResumeHistory = async (req: AuthRequest, res: Response): Promise<void> => {
   if (!req.user) {
@@ -348,27 +348,70 @@ export const getResumeHistory = async (req: AuthRequest, res: Response): Promise
     return;
   }
 
-  if (req.user.role !== 'candidate') {
-    res.status(403).json({ message: 'Only candidates can access their resume history.' });
+  const rawCandidateId = req.params?.candidateId;
+  const requestedCandidateId = typeof rawCandidateId === 'string'
+    ? rawCandidateId.trim()
+    : (Array.isArray(rawCandidateId) ? rawCandidateId[0]?.trim() : undefined);
+  const targetCandidateId = requestedCandidateId || req.user.id;
+
+  // ── Authorization check ──────────────────────────────────────────────────
+  if (req.user.role === 'candidate') {
+    // Candidates can only access their own resume history
+    if (requestedCandidateId && requestedCandidateId !== req.user.id) {
+      res.status(403).json({ message: 'Forbidden: Candidates can only access their own resume history.' });
+      return;
+    }
+  } else if (req.user.role === 'recruiter') {
+    // Recruiters must specify a candidate and can only view history if the candidate applied to a job managed by this recruiter
+    if (!requestedCandidateId) {
+      res.status(400).json({ message: 'Candidate ID is required to retrieve resume history.' });
+      return;
+    }
+
+    const applications = await db.getApplicationsByCandidateId(targetCandidateId);
+    let managesCandidateJob = false;
+    for (const app of applications) {
+      const job = await db.getJobById(app.jobId);
+      if (job && job.recruiterId === req.user.id) {
+        managesCandidateJob = true;
+        break;
+      }
+    }
+
+    if (!managesCandidateJob) {
+      res.status(403).json({
+        message: 'Forbidden: You can only access resume history for candidates who applied to jobs you manage.',
+      });
+      return;
+    }
+  } else if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Forbidden: Insufficient permissions to access resume history.' });
+    return;
+  }
+
+  // Verify candidate exists
+  const candidateUser = await db.getUserById(targetCandidateId);
+  if (!candidateUser || (candidateUser.role !== 'candidate' && req.user.role !== 'candidate')) {
+    res.status(404).json({ message: 'Candidate not found.' });
     return;
   }
 
   try {
     if (typeof (db as any).getResumeHistory === 'function') {
-      const history = await (db as any).getResumeHistory(req.user.id);
+      const history = await (db as any).getResumeHistory(targetCandidateId);
       res.json({ total: history.length, history });
       return;
     }
 
-    if (req.user.resumeUrl) {
+    if (candidateUser.resumeUrl) {
       res.json({
         total: 1,
         history: [
           {
-            id: req.user.id,
-            candidateId: req.user.id,
-            originalFilename: req.user.resumeOriginalName || 'resume.pdf',
-            blobName: req.user.resumeUrl,
+            id: candidateUser.id,
+            candidateId: candidateUser.id,
+            originalFilename: candidateUser.resumeOriginalName || 'resume.pdf',
+            blobName: candidateUser.resumeUrl,
             isCurrent: true,
           },
         ],
@@ -378,7 +421,7 @@ export const getResumeHistory = async (req: AuthRequest, res: Response): Promise
 
     res.json({ total: 0, history: [] });
   } catch (err) {
-    console.error('[resumeController] getResumeHistory error:', err);
+    console.error('[resumeController] getResumeHistory error for target:', targetCandidateId, err);
     res.status(500).json({ message: 'Failed to retrieve resume history.' });
   }
 };
@@ -392,15 +435,15 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const rawParam = req.params.id || req.params.candidateId;
-    const targetId = (typeof rawParam === 'string' ? rawParam : (Array.isArray(rawParam) ? rawParam[0] : undefined)) || req.user.id;
+    const rawParam = req.params?.id || req.params?.candidateId;
+    const targetId = (typeof rawParam === 'string' ? rawParam.trim() : (Array.isArray(rawParam) ? rawParam[0]?.trim() : undefined)) || req.user.id;
 
     let blobName = '';
     let originalFilename = 'resume.pdf';
     let candidateId = targetId;
 
-    // First check if targetId matches a resume document in resume_documents
-    if (typeof (db as any).getResumeDocById === 'function' && targetId.startsWith('rdoc-')) {
+    // 1. Check if targetId matches a resume document in resume_documents
+    if (typeof (db as any).getResumeDocById === 'function') {
       const doc = await (db as any).getResumeDocById(targetId);
       if (doc && doc.uploadStatus !== 'deleted') {
         blobName = doc.blobName;
@@ -409,17 +452,17 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
-    // If not found as doc, try finding candidate user record
+    // 2. Check if targetId matches an application ID
     if (!blobName) {
-      const targetUser = await db.getUserById(targetId);
-      if (targetUser && targetUser.resumeUrl) {
-        blobName = extractBlobName(targetUser.resumeUrl);
-        originalFilename = targetUser.resumeOriginalName || 'resume.pdf';
-        candidateId = targetUser.id;
+      const app = await db.getApplicationById(targetId);
+      if (app && app.resumeUrl) {
+        blobName = extractBlobName(app.resumeUrl);
+        originalFilename = app.candidateName ? `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf` : 'resume.pdf';
+        candidateId = app.candidateId;
       }
     }
 
-    // If still not found and targetId could be a candidateId, check current resume document
+    // 3. Check current resume document for candidate
     if (!blobName && typeof (db as any).getCurrentResume === 'function') {
       const currentDoc = await (db as any).getCurrentResume(targetId);
       if (currentDoc && currentDoc.uploadStatus !== 'deleted') {
@@ -429,24 +472,38 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
+    // 4. Check candidate user profile
     if (!blobName) {
-      res.status(404).json({ message: 'No resume found for the requested candidate.' });
+      const targetUser = await db.getUserById(targetId);
+      if (targetUser && targetUser.resumeUrl) {
+        blobName = extractBlobName(targetUser.resumeUrl);
+        originalFilename = targetUser.resumeOriginalName || 'resume.pdf';
+        candidateId = targetUser.id;
+      }
+    }
+
+    if (!blobName) {
+      res.status(404).json({ message: 'No resume found for the requested candidate or document.' });
       return;
     }
 
-    // Authorization check
+    // ── Authorization check (strictly before SAS generation) ──────────────────
     let isAuthorized = false;
 
     if (req.user.role === 'admin') {
+      // Administrators follow existing policy: authorized to access candidate documents
       isAuthorized = true;
-    } else if (req.user.id === candidateId) {
-      isAuthorized = true;
+    } else if (req.user.role === 'candidate') {
+      // Candidates can ONLY access their own resume
+      if (req.user.id === candidateId) {
+        isAuthorized = true;
+      }
     } else if (req.user.role === 'recruiter') {
-      // Check if candidate applied to any job managed by this recruiter
+      // Recruiters can ONLY access resumes of candidates who applied to jobs managed by this recruiter
       const applications = await db.getApplicationsByCandidateId(candidateId);
       for (const app of applications) {
         const job = await db.getJobById(app.jobId);
-        if (job && (job.recruiterId === req.user.id || (req.user.companyId && job.companyId === req.user.companyId))) {
+        if (job && job.recruiterId === req.user.id) {
           isAuthorized = true;
           break;
         }
@@ -458,37 +515,51 @@ export const downloadResume = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Stream directly if requested
+    // ── Direct Streaming (if explicitly requested) ───────────────────────────
     if (req.query.stream === 'true') {
-      const fileBuffer = await BlobStorageService.downloadBlobToBuffer(blobName);
-      const isPdf = originalFilename.toLowerCase().endsWith('.pdf');
-      res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(originalFilename)}"`);
-      res.send(fileBuffer);
-      return;
+      try {
+        const fileBuffer = await BlobStorageService.downloadBlobToBuffer(blobName);
+        const isPdf = originalFilename.toLowerCase().endsWith('.pdf');
+        res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(originalFilename)}"`);
+        res.send(fileBuffer);
+        return;
+      } catch (streamErr: any) {
+        if (streamErr?.statusCode === 404 || streamErr?.message?.includes('BlobNotFound')) {
+          res.status(404).json({ message: 'Resume document file could not be found in storage.' });
+          return;
+        }
+        throw streamErr;
+      }
     }
 
-    // Generate secure short-lived SAS URL
-    const sasUrl = await BlobStorageService.generateReadSasUrl(blobName, config.storage.sasExpiryMinutes);
+    // ── Generate short-lived read-only SAS URL on demand ─────────────────────
+    const expiryMinutes = config.storage.sasExpiryMinutes;
+    const sasUrl = await BlobStorageService.generateReadSasUrl(blobName, expiryMinutes);
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString();
 
     if (req.query.redirect === 'true') {
       res.redirect(sasUrl);
       return;
     }
 
+    // Return temporary URL without storing it permanently anywhere
     res.json({
-      message: 'Short-lived download URL generated.',
+      message: 'Temporary secure resume download URL generated.',
       candidateId,
       originalName: originalFilename,
       filename: originalFilename,
       downloadUrl: sasUrl,
-      expiresInMinutes: config.storage.sasExpiryMinutes,
+      expiresInMinutes: expiryMinutes,
+      expiresAt,
     });
   } catch (err: any) {
-    console.error('[ResumeController] Error generating resume download link:', err);
+    const safeError = (err?.message || 'Failed to generate secure resume download link.')
+      .replace(/sig=[^&]+/g, 'sig=REDACTED');
+    console.error('[ResumeController] Error generating resume download link:', safeError);
     res.status(500).json({
       message: 'Failed to generate secure resume download link.',
-      error: err.message,
+      error: safeError,
     });
   }
 };

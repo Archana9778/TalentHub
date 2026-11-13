@@ -135,8 +135,8 @@ async function test(name: string, fn: () => Promise<void> | void): Promise<void>
     results.push({ name, passed: true });
     console.log(`  \u2705 PASS  ${name}`);
   } catch (err: any) {
-    results.push({ name, passed: false, error: err.message });
-    console.log(`  \u274c FAIL  ${name}: ${err.message}`);
+    results.push({ name, passed: false, error: err.stack || err.message });
+    console.log(`  \u274c FAIL  ${name}: ${err.stack || err.message}`);
   }
 }
 
@@ -502,6 +502,7 @@ async function main(): Promise<void> {
       db.getCurrentResume = async (candId: string) => storedDocs.find((d) => d.candidateId === candId && d.isCurrent);
       db.getResumeHistory = async (candId: string) => storedDocs.filter((d) => d.candidateId === candId);
       db.getResumeDocById = async (id: string) => storedDocs.find((d) => d.id === id);
+      db.getUserById = async (id: string) => (id === testCandidate.id ? testCandidate : undefined);
       db.updateUser = async (id: string, updates: Partial<User>) => ({ ...testCandidate, ...updates });
 
       // First upload: PDF
