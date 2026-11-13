@@ -2,6 +2,8 @@ import axios, { AxiosError } from 'axios';
 import {
   User,
   CandidateProfile,
+  UserEducation,
+  UserExperience,
   Job,
   Application,
   Company,
@@ -145,6 +147,67 @@ export const api = {
     const res = await apiClient.put<{ message: string; profile: CandidateProfile }>(
       '/candidate/profile',
       updates
+    );
+    return res.data;
+  },
+
+  addCandidateSkill: async (skill: string) => {
+    const res = await apiClient.post<{ message: string; skills: string[] }>(
+      '/candidate/skills',
+      { skill }
+    );
+    return res.data;
+  },
+
+  removeCandidateSkill: async (skill: string) => {
+    const res = await apiClient.delete<{ message: string; skills: string[] }>(
+      `/candidate/skills/${encodeURIComponent(skill)}`
+    );
+    return res.data;
+  },
+
+  addCandidateEducation: async (edu: Partial<UserEducation>) => {
+    const res = await apiClient.post<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+      '/candidate/education',
+      edu
+    );
+    return res.data;
+  },
+
+  updateCandidateEducation: async (id: string, edu: Partial<UserEducation>) => {
+    const res = await apiClient.put<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+      `/candidate/education/${encodeURIComponent(id)}`,
+      edu
+    );
+    return res.data;
+  },
+
+  deleteCandidateEducation: async (id: string) => {
+    const res = await apiClient.delete<{ message: string; education: UserEducation[] }>(
+      `/candidate/education/${encodeURIComponent(id)}`
+    );
+    return res.data;
+  },
+
+  addCandidateExperience: async (exp: Partial<UserExperience>) => {
+    const res = await apiClient.post<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
+      '/candidate/experience',
+      exp
+    );
+    return res.data;
+  },
+
+  updateCandidateExperience: async (id: string, exp: Partial<UserExperience>) => {
+    const res = await apiClient.put<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
+      `/candidate/experience/${encodeURIComponent(id)}`,
+      exp
+    );
+    return res.data;
+  },
+
+  deleteCandidateExperience: async (id: string) => {
+    const res = await apiClient.delete<{ message: string; experience: UserExperience[] }>(
+      `/candidate/experience/${encodeURIComponent(id)}`
     );
     return res.data;
   },

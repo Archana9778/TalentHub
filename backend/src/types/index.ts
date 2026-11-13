@@ -3,16 +3,28 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
+  id?: string;
   title: string;
   company: string;
-  period: string;
-  description: string;
+  period?: string;
+  description?: string;
+  location?: string;
+  employmentType?: string;
+  startDate?: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
 }
 
 export interface UserEducation {
+  id?: string;
   degree: string;
   school: string;
-  year: string;
+  year?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  description?: string;
 }
 
 export interface User {
