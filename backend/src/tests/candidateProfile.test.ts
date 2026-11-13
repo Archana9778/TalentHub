@@ -1,4 +1,4 @@
-process.env.NODE_ENV = 'test';
+import './testEnv';
 import { Duplex } from 'stream';
 import { app } from '../server';
 import { db } from '../database/db';
@@ -123,6 +123,13 @@ async function main() {
   console.log('======================================================\n');
 
   await db.initialize();
+
+  // Ensure candidate user is set to candidate@talenthub.com
+  const allUsers = await db.getUsers();
+  const existingCandidate = allUsers.find((u) => u.role === 'candidate');
+  if (existingCandidate && existingCandidate.email !== 'candidate@talenthub.com') {
+    await db.updateUser(existingCandidate.id, { email: 'candidate@talenthub.com' });
+  }
 
   // Obtain candidate and recruiter authentication tokens
   const candLogin = await invokeApp(app, {
@@ -365,6 +372,393 @@ async function main() {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
+  // TEST SUITE 6: Technical Skills Management
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n--- TEST SUITE 6: Technical Skills Management ---');
+
+  const testSkill = 'Golang-Concurrency';
+
+  await runTest('Skills', 'Candidate can add a new technical skill', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      token: candToken,
+      body: { skill: testSkill },
+    });
+    assert(res.status === 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.data)}`);
+    assert(Array.isArray(res.data.skills), 'Response must contain skills array');
+    assert(res.data.skills.includes(testSkill), 'Skills array must contain newly added skill');
+  });
+
+  await runTest('Skills', 'Rejects empty skill name', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      token: candToken,
+      body: { skill: '   ' },
+    });
+    assert(res.status === 400, `Expected 400 for empty skill, got ${res.status}`);
+  });
+
+  await runTest('Skills', 'Prevents duplicate technical skills (case-insensitive)', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      token: candToken,
+      body: { skill: testSkill.toLowerCase() },
+    });
+    assert(res.status === 400, `Expected 400 for duplicate skill, got ${res.status}`);
+  });
+
+  await runTest('Skills', 'Candidate can remove an existing skill', async () => {
+    const res = await invokeApp(app, {
+      method: 'DELETE',
+      url: `/api/candidate/skills/${testSkill}`,
+      token: candToken,
+    });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(!res.data.skills.includes(testSkill), 'Skills array must not contain removed skill');
+  });
+
+  await runTest('Skills', 'Skills persist after reloading profile', async () => {
+    await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      token: candToken,
+      body: { skill: 'Terraform' },
+    });
+    const profileRes = await invokeApp(app, {
+      method: 'GET',
+      url: '/api/candidate/profile',
+      token: candToken,
+    });
+    assert(profileRes.status === 200, 'GET profile must return 200');
+    assert(profileRes.data.profile.skills.includes('Terraform'), 'Profile must persist Terraform');
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TEST SUITE 7: Educational Qualifications Management
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n--- TEST SUITE 7: Educational Qualifications Management ---');
+
+  let createdEduId = '';
+
+  await runTest('Education', 'Candidate can add an educational qualification', async () => {
+    const eduPayload = {
+      degree: 'Master of Science in Software Engineering',
+      school: 'Carnegie Mellon University',
+      fieldOfStudy: 'Computer Science',
+      startDate: '2020-09',
+      endDate: '2022-05',
+      grade: '3.9 GPA',
+      description: 'Specialized in Distributed Systems and Cloud Architecture.',
+    };
+
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/education',
+      token: candToken,
+      body: eduPayload,
+    });
+
+    assert(res.status === 201, `Expected 201 Created, got ${res.status}: ${JSON.stringify(res.data)}`);
+    assert(res.data.entry && res.data.entry.id, 'Response must return created entry with id');
+    assert(res.data.entry.degree === eduPayload.degree, 'Degree must match');
+    assert(res.data.entry.school === eduPayload.school, 'School must match');
+    createdEduId = res.data.entry.id;
+  });
+
+  await runTest('Education', 'Rejects education entry with missing required degree or school', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/education',
+      token: candToken,
+      body: { degree: '', school: 'Harvard University' },
+    });
+    assert(res.status === 400, `Expected 400 for missing degree, got ${res.status}`);
+  });
+
+  await runTest('Education', 'Candidate can edit an existing educational qualification', async () => {
+    const updatePayload = {
+      degree: 'M.S. in Software Engineering (Honors)',
+      grade: '4.0 GPA',
+      description: 'Graduated with Highest Distinction.',
+    };
+
+    const res = await invokeApp(app, {
+      method: 'PUT',
+      url: `/api/candidate/education/${createdEduId}`,
+      token: candToken,
+      body: updatePayload,
+    });
+
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(res.data.entry.degree === updatePayload.degree, 'Updated degree must reflect');
+    assert(res.data.entry.grade === updatePayload.grade, 'Updated grade must reflect');
+  });
+
+  await runTest('Education', 'Updating non-existent education ID returns 404', async () => {
+    const res = await invokeApp(app, {
+      method: 'PUT',
+      url: '/api/candidate/education/edu-nonexistent-id-999',
+      token: candToken,
+      body: { degree: 'Ph.D.' },
+    });
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  await runTest('Education', 'Education entries persist when re-fetching profile', async () => {
+    const res = await invokeApp(app, {
+      method: 'GET',
+      url: '/api/candidate/profile',
+      token: candToken,
+    });
+    assert(res.status === 200, 'Profile fetch must return 200');
+    const matched = res.data.profile.education.find((e: any) => e.id === createdEduId);
+    assert(matched !== undefined, 'Persisted education entry must exist in profile');
+    assert(matched.degree === 'M.S. in Software Engineering (Honors)', 'Persisted degree must match updated value');
+  });
+
+  await runTest('Education', 'Candidate can delete an educational qualification', async () => {
+    const res = await invokeApp(app, {
+      method: 'DELETE',
+      url: `/api/candidate/education/${createdEduId}`,
+      token: candToken,
+    });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    const remaining = res.data.education.find((e: any) => e.id === createdEduId);
+    assert(remaining === undefined, 'Deleted education entry must no longer exist');
+  });
+
+  await runTest('Education', 'Deleting non-existent education ID returns 404', async () => {
+    const res = await invokeApp(app, {
+      method: 'DELETE',
+      url: '/api/candidate/education/edu-nonexistent-id-999',
+      token: candToken,
+    });
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TEST SUITE 8: Work Experience Management
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n--- TEST SUITE 8: Work Experience Management ---');
+
+  let createdExpId = '';
+
+  await runTest('Experience', 'Candidate can add a work experience entry', async () => {
+    const expPayload = {
+      title: 'Senior Cloud Systems Architect',
+      company: 'Amazon Web Services',
+      employmentType: 'Full-time',
+      location: 'Seattle, WA',
+      startDate: '2022-06',
+      currentlyWorking: true,
+      description: 'Leading distributed systems resilience and zero-downtime migrations.',
+    };
+
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/experience',
+      token: candToken,
+      body: expPayload,
+    });
+
+    assert(res.status === 201, `Expected 201 Created, got ${res.status}: ${JSON.stringify(res.data)}`);
+    assert(res.data.entry && res.data.entry.id, 'Response must return created entry with id');
+    assert(res.data.entry.title === expPayload.title, 'Title must match');
+    assert(res.data.entry.company === expPayload.company, 'Company must match');
+    assert(res.data.entry.currentlyWorking === true, 'currentlyWorking must be true');
+    createdExpId = res.data.entry.id;
+  });
+
+  await runTest('Experience', 'Rejects work experience with missing title or company', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/experience',
+      token: candToken,
+      body: { title: 'Software Engineer', company: '   ' },
+    });
+    assert(res.status === 400, `Expected 400 for empty company, got ${res.status}`);
+  });
+
+  await runTest('Experience', 'Rejects work experience when end date is earlier than start date', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/experience',
+      token: candToken,
+      body: {
+        title: 'Backend Engineer',
+        company: 'Stripe',
+        startDate: '2024-01-01',
+        endDate: '2023-01-01',
+        currentlyWorking: false,
+      },
+    });
+    assert(res.status === 400, `Expected 400 for invalid date range, got ${res.status}`);
+  });
+
+  await runTest('Experience', 'Candidate can edit an existing work experience entry', async () => {
+    const updatePayload = {
+      title: 'Principal Cloud Systems Architect',
+      description: 'Promoted to Principal Architect leading multi-region deployments.',
+    };
+
+    const res = await invokeApp(app, {
+      method: 'PUT',
+      url: `/api/candidate/experience/${createdExpId}`,
+      token: candToken,
+      body: updatePayload,
+    });
+
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(res.data.entry.title === updatePayload.title, 'Title must be updated');
+    assert(res.data.entry.description === updatePayload.description, 'Description must be updated');
+  });
+
+  await runTest('Experience', 'Updating non-existent experience ID returns 404', async () => {
+    const res = await invokeApp(app, {
+      method: 'PUT',
+      url: '/api/candidate/experience/exp-nonexistent-id-999',
+      token: candToken,
+      body: { title: 'CTO' },
+    });
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  await runTest('Experience', 'Work experience persists after reloading profile', async () => {
+    const res = await invokeApp(app, {
+      method: 'GET',
+      url: '/api/candidate/profile',
+      token: candToken,
+    });
+    assert(res.status === 200, 'Profile fetch must return 200');
+    const matched = res.data.profile.experience.find((e: any) => e.id === createdExpId);
+    assert(matched !== undefined, 'Persisted experience entry must exist in profile');
+    assert(matched.title === 'Principal Cloud Systems Architect', 'Persisted title must match');
+  });
+
+  await runTest('Experience', 'Candidate can delete a work experience entry', async () => {
+    const res = await invokeApp(app, {
+      method: 'DELETE',
+      url: `/api/candidate/experience/${createdExpId}`,
+      token: candToken,
+    });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    const remaining = res.data.experience.find((e: any) => e.id === createdExpId);
+    assert(remaining === undefined, 'Deleted experience entry must no longer exist');
+  });
+
+  await runTest('Experience', 'Deleting non-existent experience ID returns 404', async () => {
+    const res = await invokeApp(app, {
+      method: 'DELETE',
+      url: '/api/candidate/experience/exp-nonexistent-id-999',
+      token: candToken,
+    });
+    assert(res.status === 404, `Expected 404, got ${res.status}`);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TEST SUITE 9: Contact Details & Re-login
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n--- TEST SUITE 9: Contact Details & Re-login ---');
+
+  const newCandidateEmail = 'jane.auth.verified@talenthub.com';
+  const newCandidatePhone = '+1 (555) 987-6543';
+
+  await runTest('Contact', 'Update email and phone number on profile', async () => {
+    const res = await invokeApp(app, {
+      method: 'PUT',
+      url: '/api/candidate/profile',
+      token: candToken,
+      body: {
+        name: 'Jane Auth Verified',
+        email: newCandidateEmail,
+        phone: newCandidatePhone,
+      },
+    });
+    assert(res.status === 200, `Expected 200, got ${res.status}`);
+    assert(res.data.profile.email === newCandidateEmail, 'Email must match updated value');
+    assert(res.data.profile.phone === newCandidatePhone, 'Phone must match updated value');
+  });
+
+  await runTest('Contact', 'Candidate can re-login using their updated email address', async () => {
+    const loginRes = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/auth/login',
+      body: {
+        email: newCandidateEmail,
+        password: 'password123',
+      },
+    });
+    assert(loginRes.status === 200, `Login with new email must succeed, got ${loginRes.status}`);
+    assert(loginRes.data.token !== undefined, 'Login must issue a valid token');
+    assert(loginRes.data.user.email === newCandidateEmail, 'Logged in user email must be the new email');
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // TEST SUITE 10: Sub-resource Security & Role Isolation
+  // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n--- TEST SUITE 10: Sub-resource Security & Role Isolation ---');
+
+  await runTest('Security', 'Unauthenticated request to add skills returns 401', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      body: { skill: 'GraphQL' },
+    });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await runTest('Security', 'Recruiter role is forbidden from adding candidate skills (403)', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/skills',
+      token: recToken,
+      body: { skill: 'GraphQL' },
+    });
+    assert(res.status === 403, `Expected 403 Forbidden, got ${res.status}`);
+  });
+
+  await runTest('Security', 'Unauthenticated request to add education returns 401', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/education',
+      body: { degree: 'B.S.', school: 'MIT' },
+    });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await runTest('Security', 'Recruiter role is forbidden from managing candidate education (403)', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/education',
+      token: recToken,
+      body: { degree: 'B.S.', school: 'MIT' },
+    });
+    assert(res.status === 403, `Expected 403 Forbidden, got ${res.status}`);
+  });
+
+  await runTest('Security', 'Unauthenticated request to add experience returns 401', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/experience',
+      body: { title: 'Engineer', company: 'Apple' },
+    });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await runTest('Security', 'Recruiter role is forbidden from managing candidate experience (403)', async () => {
+    const res = await invokeApp(app, {
+      method: 'POST',
+      url: '/api/candidate/experience',
+      token: recToken,
+      body: { title: 'Engineer', company: 'Apple' },
+    });
+    assert(res.status === 403, `Expected 403 Forbidden, got ${res.status}`);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
   // TEST SUITE 6: Recruiter Visibility & Regression
   // ────────────────────────────────────────────────────────────────────────────
   console.log('\n--- TEST SUITE 6: Recruiter Visibility & Regression ---');
@@ -411,6 +805,9 @@ async function main() {
     assert(res.status === 200, `Expected 200, got ${res.status}`);
     assert(res.data.analytics !== undefined, 'Analytics must be present');
   });
+
+  // Restore candidate email
+  await db.updateUser(candUser.id, { email: 'candidate@talenthub.com', name: candUser.name });
 
   // ────────────────────────────────────────────────────────────────────────────
   // Summary

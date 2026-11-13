@@ -21,10 +21,13 @@ import {
   Upload,
   Download,
   Award,
+  GraduationCap,
+  Building,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { CandidateProfile } from '../../types';
+import { CandidateProfile, UserEducation, UserExperience } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +157,43 @@ export const Profile: React.FC = () => {
   const [skills, setSkills] = useState<string[]>(user?.skills || []);
   const [newSkill, setNewSkill] = useState('');
   const [savingSkills, setSavingSkills] = useState(false);
+  const [skillError, setSkillError] = useState<string | null>(null);
+  const [skillSuccess, setSkillSuccess] = useState<string | null>(null);
+
+  // Education state & modal
+  const [education, setEducation] = useState<UserEducation[]>(user?.education || []);
+  const [isEduModalOpen, setIsEduModalOpen] = useState(false);
+  const [editingEduId, setEditingEduId] = useState<string | null>(null);
+  const [eduFormData, setEduFormData] = useState({
+    degree: '',
+    school: '',
+    fieldOfStudy: '',
+    startDate: '',
+    endDate: '',
+    grade: '',
+    description: '',
+  });
+  const [eduErrors, setEduErrors] = useState<Record<string, string>>({});
+  const [savingEdu, setSavingEdu] = useState(false);
+  const [eduFeedback, setEduFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Experience state & modal
+  const [experience, setExperience] = useState<UserExperience[]>(user?.experience || []);
+  const [isExpModalOpen, setIsExpModalOpen] = useState(false);
+  const [editingExpId, setEditingExpId] = useState<string | null>(null);
+  const [expFormData, setExpFormData] = useState({
+    title: '',
+    company: '',
+    employmentType: 'Full-time',
+    location: '',
+    startDate: '',
+    endDate: '',
+    currentlyWorking: false,
+    description: '',
+  });
+  const [expErrors, setExpErrors] = useState<Record<string, string>>({});
+  const [savingExp, setSavingExp] = useState(false);
+  const [expFeedback, setExpFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Resume state & history
   const [resumeHistory, setResumeHistory] = useState<ResumeDocument[]>([]);
@@ -187,6 +227,12 @@ export const Profile: React.FC = () => {
         if (res.profile.skills) {
           setSkills(res.profile.skills);
         }
+        if (res.profile.education) {
+          setEducation(res.profile.education);
+        }
+        if (res.profile.experience) {
+          setExperience(res.profile.experience);
+        }
       }
     } catch {
       // Fallback to auth context user
@@ -202,6 +248,8 @@ export const Profile: React.FC = () => {
           bio: user.bio || '',
         });
         if (user.skills) setSkills(user.skills);
+        if (user.education) setEducation(user.education);
+        if (user.experience) setExperience(user.experience);
       }
     } finally {
       setLoadingProfile(false);
@@ -351,41 +399,212 @@ export const Profile: React.FC = () => {
 
   const handleAddSkill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newSkill.trim() && !skills.includes(newSkill.trim())) {
-      const updatedSkills = [...skills, newSkill.trim()];
-      setSkills(updatedSkills);
+    setSkillError(null);
+    setSkillSuccess(null);
+
+    const trimmed = newSkill.trim();
+    if (!trimmed) {
+      setSkillError('Please enter a technical skill name.');
+      return;
+    }
+
+    if (skills.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
+      setSkillError(`"${trimmed}" is already added to your skills.`);
+      return;
+    }
+
+    try {
+      setSavingSkills(true);
+      const res = await api.addCandidateSkill(trimmed);
+      const updated = res.skills || [...skills, trimmed];
+      setSkills(updated);
       setNewSkill('');
-      try {
-        setSavingSkills(true);
-        await api.updateCandidateProfile({
-          name: formData.name || profile?.name || user?.name || '',
-          email: formData.email || profile?.email || user?.email || '',
-          skills: updatedSkills,
-        });
-        updateCurrentUser({ skills: updatedSkills });
-      } catch {
-        // non-fatal
-      } finally {
-        setSavingSkills(false);
-      }
+      setSkillSuccess(`"${trimmed}" successfully added to your profile.`);
+      updateCurrentUser({ skills: updated });
+      setTimeout(() => setSkillSuccess(null), 3000);
+    } catch (err: any) {
+      setSkillError(err.response?.data?.message || err.message || 'Failed to add skill.');
+    } finally {
+      setSavingSkills(false);
     }
   };
 
   const handleRemoveSkill = async (s: string) => {
-    const updatedSkills = skills.filter((x) => x !== s);
-    setSkills(updatedSkills);
+    setSkillError(null);
+    setSkillSuccess(null);
     try {
       setSavingSkills(true);
-      await api.updateCandidateProfile({
-        name: formData.name || profile?.name || user?.name || '',
-        email: formData.email || profile?.email || user?.email || '',
-        skills: updatedSkills,
-      });
-      updateCurrentUser({ skills: updatedSkills });
-    } catch {
-      // non-fatal
+      const res = await api.removeCandidateSkill(s);
+      const updated = res.skills || skills.filter((x) => x !== s);
+      setSkills(updated);
+      setSkillSuccess(`Skill "${s}" removed.`);
+      updateCurrentUser({ skills: updated });
+      setTimeout(() => setSkillSuccess(null), 3000);
+    } catch (err: any) {
+      setSkillError(err.response?.data?.message || err.message || 'Failed to remove skill.');
     } finally {
       setSavingSkills(false);
+    }
+  };
+
+  // ── Education handlers ──────────────────────────────────────────────────────
+
+  const openAddEduModal = () => {
+    setEditingEduId(null);
+    setEduFormData({
+      degree: '',
+      school: '',
+      fieldOfStudy: '',
+      startDate: '',
+      endDate: '',
+      grade: '',
+      description: '',
+    });
+    setEduErrors({});
+    setIsEduModalOpen(true);
+  };
+
+  const openEditEduModal = (edu: UserEducation) => {
+    setEditingEduId(edu.id || null);
+    setEduFormData({
+      degree: edu.degree || '',
+      school: edu.school || '',
+      fieldOfStudy: edu.fieldOfStudy || '',
+      startDate: edu.startDate || '',
+      endDate: edu.endDate || (edu.year && edu.year !== 'N/A' ? edu.year : ''),
+      grade: edu.grade || '',
+      description: edu.description || '',
+    });
+    setEduErrors({});
+    setIsEduModalOpen(true);
+  };
+
+  const handleSaveEdu = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!eduFormData.degree.trim()) errors.degree = 'Degree or qualification is required.';
+    if (!eduFormData.school.trim()) errors.school = 'School or university name is required.';
+    setEduErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSavingEdu(true);
+    setEduFeedback(null);
+    try {
+      if (editingEduId) {
+        const res = await api.updateCandidateEducation(editingEduId, eduFormData);
+        setEducation(res.education);
+        updateCurrentUser({ education: res.education });
+        setEduFeedback({ type: 'success', message: 'Educational qualification updated successfully.' });
+      } else {
+        const res = await api.addCandidateEducation(eduFormData);
+        setEducation(res.education);
+        updateCurrentUser({ education: res.education });
+        setEduFeedback({ type: 'success', message: 'Educational qualification added successfully.' });
+      }
+      setIsEduModalOpen(false);
+      setTimeout(() => setEduFeedback(null), 4000);
+    } catch (err: any) {
+      setEduFeedback({ type: 'error', message: err.response?.data?.message || err.message || 'Failed to save education.' });
+    } finally {
+      setSavingEdu(false);
+    }
+  };
+
+  const handleDeleteEdu = async (id?: string) => {
+    if (!id) return;
+    if (!window.confirm('Are you sure you want to remove this education entry?')) return;
+    try {
+      const res = await api.deleteCandidateEducation(id);
+      setEducation(res.education);
+      updateCurrentUser({ education: res.education });
+      setEduFeedback({ type: 'success', message: 'Educational qualification removed.' });
+      setTimeout(() => setEduFeedback(null), 4000);
+    } catch (err: any) {
+      setEduFeedback({ type: 'error', message: err.response?.data?.message || err.message || 'Failed to delete education.' });
+    }
+  };
+
+  // ── Work Experience handlers ────────────────────────────────────────────────
+
+  const openAddExpModal = () => {
+    setEditingExpId(null);
+    setExpFormData({
+      title: '',
+      company: '',
+      employmentType: 'Full-time',
+      location: '',
+      startDate: '',
+      endDate: '',
+      currentlyWorking: false,
+      description: '',
+    });
+    setExpErrors({});
+    setIsExpModalOpen(true);
+  };
+
+  const openEditExpModal = (exp: UserExperience) => {
+    setEditingExpId(exp.id || null);
+    setExpFormData({
+      title: exp.title || '',
+      company: exp.company || '',
+      employmentType: exp.employmentType || 'Full-time',
+      location: exp.location || '',
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      currentlyWorking: Boolean(exp.currentlyWorking),
+      description: exp.description || '',
+    });
+    setExpErrors({});
+    setIsExpModalOpen(true);
+  };
+
+  const handleSaveExp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!expFormData.title.trim()) errors.title = 'Job title is required.';
+    if (!expFormData.company.trim()) errors.company = 'Company name is required.';
+    if (expFormData.startDate && expFormData.endDate && !expFormData.currentlyWorking) {
+      if (new Date(expFormData.endDate) < new Date(expFormData.startDate)) {
+        errors.endDate = 'End date cannot be earlier than start date.';
+      }
+    }
+    setExpErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSavingExp(true);
+    setExpFeedback(null);
+    try {
+      if (editingExpId) {
+        const res = await api.updateCandidateExperience(editingExpId, expFormData);
+        setExperience(res.experience);
+        updateCurrentUser({ experience: res.experience });
+        setExpFeedback({ type: 'success', message: 'Work experience updated successfully.' });
+      } else {
+        const res = await api.addCandidateExperience(expFormData);
+        setExperience(res.experience);
+        updateCurrentUser({ experience: res.experience });
+        setExpFeedback({ type: 'success', message: 'Work experience added successfully.' });
+      }
+      setIsExpModalOpen(false);
+      setTimeout(() => setExpFeedback(null), 4000);
+    } catch (err: any) {
+      setExpFeedback({ type: 'error', message: err.response?.data?.message || err.message || 'Failed to save experience.' });
+    } finally {
+      setSavingExp(false);
+    }
+  };
+
+  const handleDeleteExp = async (id?: string) => {
+    if (!id) return;
+    if (!window.confirm('Are you sure you want to remove this work experience entry?')) return;
+    try {
+      const res = await api.deleteCandidateExperience(id);
+      setExperience(res.experience);
+      updateCurrentUser({ experience: res.experience });
+      setExpFeedback({ type: 'success', message: 'Work experience removed.' });
+      setTimeout(() => setExpFeedback(null), 4000);
+    } catch (err: any) {
+      setExpFeedback({ type: 'error', message: err.response?.data?.message || err.message || 'Failed to delete experience.' });
     }
   };
 
@@ -1086,16 +1305,39 @@ export const Profile: React.FC = () => {
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'skills' && (
         <div className="space-y-6">
+          {/* SECTION 1: Technical Skills Management */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>Technical Skills Management</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Add skills to power algorithmic job matches and improve your ranking on candidate search boards.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                  <span>Technical Skills Management</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Add skills to power algorithmic job matches and improve your ranking on candidate search boards.
+                </p>
+              </div>
             </div>
+
+            {skillSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{skillSuccess}</span>
+                </div>
+                <button onClick={() => setSkillSuccess(null)} className="text-emerald-700 hover:text-emerald-900 text-xs font-bold">✕</button>
+              </div>
+            )}
+
+            {skillError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{skillError}</span>
+                </div>
+                <button onClick={() => setSkillError(null)} className="text-rose-700 hover:text-rose-900 text-xs font-bold">✕</button>
+              </div>
+            )}
 
             <div>
               <div className="flex flex-wrap gap-2 mb-4">
@@ -1109,15 +1351,15 @@ export const Profile: React.FC = () => {
                       type="button"
                       onClick={() => handleRemoveSkill(skill)}
                       disabled={savingSkills}
-                      className="hover:text-rose-600 focus:outline-none transition-colors"
-                      title="Remove skill"
+                      className="hover:text-rose-600 focus:outline-none transition-colors cursor-pointer"
+                      title={`Remove ${skill}`}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </span>
                 ))}
                 {skills.length === 0 && (
-                  <span className="text-xs text-slate-400 italic">No technical skills added yet.</span>
+                  <span className="text-xs text-slate-400 italic">No technical skills added yet. Add your key languages, frameworks, and tools below.</span>
                 )}
               </div>
 
@@ -1132,37 +1374,572 @@ export const Profile: React.FC = () => {
                 <button
                   type="submit"
                   disabled={!newSkill.trim() || savingSkills}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Skill</span>
+                  <span>{savingSkills ? 'Adding…' : 'Add Skill'}</span>
                 </button>
               </form>
             </div>
+          </div>
 
-            {/* Experience & Education Preview */}
-            <div className="pt-6 border-t border-slate-100 space-y-4">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-slate-500" />
-                <span>Professional Experience &amp; Education Summary</span>
-              </h3>
-
-              {user?.experience && user.experience.length > 0 ? (
-                <div className="space-y-3">
-                  {user.experience.map((exp, idx) => (
-                    <div key={idx} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                      <p className="font-bold text-slate-800">{exp.title} &bull; {exp.company}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{exp.period}</p>
-                      <p className="text-slate-600 mt-1 leading-relaxed">{exp.description}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">
-                  Upload your resume in the "Resume &amp; Documents" tab to automatically extract your work history.
+          {/* SECTION 2: Work Experience Management */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-blue-600" />
+                  <span>Work Experience</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Document your career timeline, company positions, and project accomplishments.
                 </p>
-              )}
+              </div>
+
+              <button
+                type="button"
+                onClick={openAddExpModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Work Experience</span>
+              </button>
             </div>
+
+            {expFeedback && (
+              <div
+                className={`p-3 text-xs rounded-xl flex items-center justify-between ${
+                  expFeedback.type === 'success'
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {expFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{expFeedback.message}</span>
+                </div>
+                <button onClick={() => setExpFeedback(null)} className="font-bold text-xs">✕</button>
+              </div>
+            )}
+
+            {experience.length > 0 ? (
+              <div className="space-y-4">
+                {experience.map((exp, idx) => (
+                  <div
+                    key={exp.id || idx}
+                    className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 hover:border-blue-200 transition-colors space-y-2.5"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900">{exp.title}</h3>
+                          {exp.currentlyWorking && (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                              Currently Working
+                            </span>
+                          )}
+                          {exp.employmentType && (
+                            <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md text-[10px] font-medium">
+                              {exp.employmentType}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                          <span className="flex items-center gap-1 font-semibold text-slate-800">
+                            <Building className="w-3.5 h-3.5 text-slate-500" />
+                            {exp.company}
+                          </span>
+                          {exp.location && (
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <MapPin className="w-3 h-3" />
+                              {exp.location}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Calendar className="w-3 h-3" />
+                            {exp.period || (exp.startDate ? `${exp.startDate} - ${exp.currentlyWorking ? 'Present' : (exp.endDate || '')}` : 'N/A')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-end sm:self-start">
+                        <button
+                          type="button"
+                          onClick={() => openEditExpModal(exp)}
+                          className="px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Edit work experience"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExp(exp.id)}
+                          className="px-2.5 py-1.5 text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Delete work experience"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {exp.description && (
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line border-t border-slate-200/60 pt-2">
+                        {exp.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                <Briefcase className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-700">No work experience entries recorded yet.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Click "Add Work Experience" above to build your career history.</p>
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 3: Educational Qualifications Management */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-blue-600" />
+                  <span>Educational Qualifications</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Add your academic degrees, colleges, certifications, and specializations.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={openAddEduModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Education</span>
+              </button>
+            </div>
+
+            {eduFeedback && (
+              <div
+                className={`p-3 text-xs rounded-xl flex items-center justify-between ${
+                  eduFeedback.type === 'success'
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {eduFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{eduFeedback.message}</span>
+                </div>
+                <button onClick={() => setEduFeedback(null)} className="font-bold text-xs">✕</button>
+              </div>
+            )}
+
+            {education.length > 0 ? (
+              <div className="space-y-4">
+                {education.map((edu, idx) => (
+                  <div
+                    key={edu.id || idx}
+                    className="p-4 rounded-xl bg-slate-50/70 border border-slate-200/80 hover:border-blue-200 transition-colors space-y-2.5"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900">{edu.degree}</h3>
+                          {edu.fieldOfStudy && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md text-[10px] font-semibold">
+                              {edu.fieldOfStudy}
+                            </span>
+                          )}
+                          {edu.grade && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md text-[10px] font-semibold">
+                              Grade: {edu.grade}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                          <span className="flex items-center gap-1 font-semibold text-slate-800">
+                            <Building className="w-3.5 h-3.5 text-slate-500" />
+                            {edu.school}
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Calendar className="w-3 h-3" />
+                            {edu.year || (edu.startDate ? `${edu.startDate} - ${edu.endDate || ''}` : 'N/A')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-end sm:self-start">
+                        <button
+                          type="button"
+                          onClick={() => openEditEduModal(edu)}
+                          className="px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Edit educational qualification"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEdu(edu.id)}
+                          className="px-2.5 py-1.5 text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Delete educational qualification"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {edu.description && (
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line border-t border-slate-200/60 pt-2">
+                        {edu.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                <GraduationCap className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-700">No educational qualifications added yet.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Click "Add Education" above to list your academic credentials.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 1: WORK EXPERIENCE                                                 */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {isExpModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-blue-600" />
+                <span>{editingExpId ? 'Edit Work Experience' : 'Add Work Experience'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsExpModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExp} className="space-y-4">
+              {/* Job Title */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Job Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={expFormData.title}
+                  onChange={(e) => setExpFormData({ ...expFormData, title: e.target.value })}
+                  placeholder="e.g. Senior Software Engineer, Product Manager"
+                  className={`w-full px-3.5 py-2 text-xs rounded-xl border ${
+                    expErrors.title ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-slate-50'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+                {expErrors.title && <p className="text-[11px] text-rose-600 mt-1">{expErrors.title}</p>}
+              </div>
+
+              {/* Company & Employment Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Company Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={expFormData.company}
+                    onChange={(e) => setExpFormData({ ...expFormData, company: e.target.value })}
+                    placeholder="e.g. Microsoft, Google"
+                    className={`w-full px-3.5 py-2 text-xs rounded-xl border ${
+                      expErrors.company ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-slate-50'
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  />
+                  {expErrors.company && <p className="text-[11px] text-rose-600 mt-1">{expErrors.company}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Employment Type
+                  </label>
+                  <select
+                    value={expFormData.employmentType}
+                    onChange={(e) => setExpFormData({ ...expFormData, employmentType: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                    <option value="Freelance">Freelance</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={expFormData.location}
+                  onChange={(e) => setExpFormData({ ...expFormData, location: e.target.value })}
+                  placeholder="e.g. Bangalore, India (or Remote)"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Dates & Currently Working */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="currentlyWorking"
+                    checked={expFormData.currentlyWorking}
+                    onChange={(e) => setExpFormData({ ...expFormData, currentlyWorking: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500"
+                  />
+                  <label htmlFor="currentlyWorking" className="text-xs font-medium text-slate-700 cursor-pointer">
+                    I am currently working in this role
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="text"
+                      value={expFormData.startDate}
+                      onChange={(e) => setExpFormData({ ...expFormData, startDate: e.target.value })}
+                      placeholder="e.g. Jan 2021 or 2021-01"
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="text"
+                      disabled={expFormData.currentlyWorking}
+                      value={expFormData.currentlyWorking ? 'Present' : expFormData.endDate}
+                      onChange={(e) => setExpFormData({ ...expFormData, endDate: e.target.value })}
+                      placeholder="e.g. Present, Dec 2023 or 2023-12"
+                      className={`w-full px-3.5 py-2 text-xs rounded-xl border ${
+                        expErrors.endDate ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-slate-50'
+                      } disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                    />
+                    {expErrors.endDate && <p className="text-[11px] text-rose-600 mt-1">{expErrors.endDate}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Job Description &amp; Accomplishments
+                </label>
+                <textarea
+                  rows={3}
+                  value={expFormData.description}
+                  onChange={(e) => setExpFormData({ ...expFormData, description: e.target.value })}
+                  placeholder="Outline key responsibilities, leadership experience, and quantifiable achievements..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsExpModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingExp}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {savingExp ? 'Saving…' : editingExpId ? 'Save Changes' : 'Add Experience'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 2: EDUCATIONAL QUALIFICATIONS                                      */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {isEduModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-blue-600" />
+                <span>{editingEduId ? 'Edit Educational Qualification' : 'Add Educational Qualification'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsEduModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdu} className="space-y-4">
+              {/* Degree */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Degree / Qualification <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={eduFormData.degree}
+                  onChange={(e) => setEduFormData({ ...eduFormData, degree: e.target.value })}
+                  placeholder="e.g. Bachelor of Technology, Master of Science, High School"
+                  className={`w-full px-3.5 py-2 text-xs rounded-xl border ${
+                    eduErrors.degree ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-slate-50'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+                {eduErrors.degree && <p className="text-[11px] text-rose-600 mt-1">{eduErrors.degree}</p>}
+              </div>
+
+              {/* School / Institution */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Institution / University / School <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={eduFormData.school}
+                  onChange={(e) => setEduFormData({ ...eduFormData, school: e.target.value })}
+                  placeholder="e.g. Indian Institute of Technology, Stanford University"
+                  className={`w-full px-3.5 py-2 text-xs rounded-xl border ${
+                    eduErrors.school ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-slate-50'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+                {eduErrors.school && <p className="text-[11px] text-rose-600 mt-1">{eduErrors.school}</p>}
+              </div>
+
+              {/* Field of Study & Grade */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Field of Study / Major
+                  </label>
+                  <input
+                    type="text"
+                    value={eduFormData.fieldOfStudy}
+                    onChange={(e) => setEduFormData({ ...eduFormData, fieldOfStudy: e.target.value })}
+                    placeholder="e.g. Computer Science, Mechanical Eng."
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Grade / CGPA / Percentage
+                  </label>
+                  <input
+                    type="text"
+                    value={eduFormData.grade}
+                    onChange={(e) => setEduFormData({ ...eduFormData, grade: e.target.value })}
+                    placeholder="e.g. 3.8 / 4.0 GPA, 85%"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Start & End Dates */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Start Year / Date
+                  </label>
+                  <input
+                    type="text"
+                    value={eduFormData.startDate}
+                    onChange={(e) => setEduFormData({ ...eduFormData, startDate: e.target.value })}
+                    placeholder="e.g. 2018 or 2018-08"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Graduation Year / End Date
+                  </label>
+                  <input
+                    type="text"
+                    value={eduFormData.endDate}
+                    onChange={(e) => setEduFormData({ ...eduFormData, endDate: e.target.value })}
+                    placeholder="e.g. 2022 or 2022-05"
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Academic Activities / Honors / Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={eduFormData.description}
+                  onChange={(e) => setEduFormData({ ...eduFormData, description: e.target.value })}
+                  placeholder="e.g. Dean's Honour List, relevant coursework, thesis topic..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEduModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdu}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {savingEdu ? 'Saving…' : editingEduId ? 'Save Changes' : 'Add Qualification'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
