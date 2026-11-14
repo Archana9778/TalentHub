@@ -28,10 +28,8 @@ import {
   Briefcase,
   Check,
   Loader2,
-  ShieldCheck,
   Download,
   AlertCircle,
-  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -114,7 +112,6 @@ export const ApplicantDetails: React.FC = () => {
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [showConfirmOverwriteModal, setShowConfirmOverwriteModal] = useState(false);
 
-  const handleViewResume = async () => {
   const handleAccessResume = async (action: 'view' | 'download' = 'view') => {
     if (!application?.candidateId) return;
     setResumeError(null);
