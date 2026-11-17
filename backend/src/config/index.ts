@@ -115,4 +115,11 @@ export const config = {
     /** Short-lived SAS URL expiry in minutes (default 5 min) */
     sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '5', 10),
   },
+
+  // Azure AI Document Intelligence configuration
+  azureDocumentIntelligence: {
+    endpoint: (process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || '').replace(/\/$/, ''),
+    apiKey: process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || '',
+    modelId: process.env.AZURE_DOCUMENT_INTELLIGENCE_MODEL || 'prebuilt-layout',
+  },
 };
