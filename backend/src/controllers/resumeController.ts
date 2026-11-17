@@ -710,13 +710,13 @@ export const getCandidateExtractedResume = async (req: AuthRequest, res: Respons
       experience: (candidate.experience || []).map((e) => ({
         title: e.title,
         company: e.company,
-        duration: e.period,
+        duration: e.period || '',
         description: e.description,
       })),
       education: (candidate.education || []).map((ed) => ({
         degree: ed.degree,
         institution: ed.school,
-        year: ed.year,
+        year: ed.year || '',
       })),
       certifications: candidate.certifications || [],
       extractedAt: candidate.createdAt,

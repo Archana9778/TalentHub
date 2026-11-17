@@ -12,6 +12,8 @@ import {
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
+  ActivityLog,
+  ActivityLogFilter,
   ExtractionStatus,
   ExtractedCandidateProfile,
 } from '../types';
@@ -41,6 +43,7 @@ interface DatabaseSchema {
   passwordResetTokens: PasswordResetToken[];
   revokedTokens: RevokedToken[];
   resumeDocuments: ResumeDocument[];
+  activityLogs: ActivityLog[];
 }
 
 class DatabaseManager {
@@ -61,6 +64,7 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     if (config.dbMode === 'json') this.initJson();
   }
@@ -100,6 +104,7 @@ class DatabaseManager {
         if (!Array.isArray(this.data.passwordResetTokens)) this.data.passwordResetTokens = [];
         if (!Array.isArray(this.data.revokedTokens)) this.data.revokedTokens = [];
         if (!Array.isArray(this.data.resumeDocuments)) this.data.resumeDocuments = [];
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
         if (!Array.isArray(this.data.applicationStageHistory)) {
           this.data.applicationStageHistory = [...initialApplicationStageHistory];
         }
@@ -134,6 +139,11 @@ class DatabaseManager {
 
     if (!Array.isArray(this.data.revokedTokens)) {
       this.data.revokedTokens = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.activityLogs)) {
+      this.data.activityLogs = [];
       modified = true;
     }
 
@@ -216,11 +226,12 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     this.persistJson();
   }
 
-  private persistJson() {
+  private persistJson(rethrow = false) {
     try {
       const payload = JSON.stringify(this.data, null, 2);
       const tempPath = `${this.filePath}.tmp`;
@@ -233,6 +244,7 @@ class DatabaseManager {
       }
     } catch (err) {
       console.error('[TalentHub DB] Failed to persist data to disk:', err);
+      if (rethrow) throw err;
     }
   }
 
@@ -337,11 +349,41 @@ class DatabaseManager {
     return this.data.companies.find((c) => c.id === id);
   }
 
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    if (this.isMysql) return mysqlRepository.getCompanyByName(name);
+    const normalized = name.trim().toLowerCase();
+    return this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+  }
+
   async createCompany(company: Company): Promise<Company> {
     if (this.isMysql) return mysqlRepository.createCompany(company);
     this.data.companies.push(company);
     this.persistJson();
     return company;
+  }
+
+  async registerRecruiterWithCompany(user: User, company: Company): Promise<{ user: User; company: Company }> {
+    if (this.isMysql) return mysqlRepository.registerRecruiterWithCompany(user, company);
+    const normalized = company.name.trim().toLowerCase();
+    const existing = this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+    if (existing) {
+      const err: any = new Error(
+        'A company with this name already exists. To join an existing organization, please have your Company Administrator add your account from Recruiter Management.'
+      );
+      err.code = 'COMPANY_ALREADY_EXISTS';
+      throw err;
+    }
+    this.data.companies.push(company);
+    const recruiterUser: User = {
+      ...user,
+      role: 'recruiter',
+      companyId: company.id,
+      companyName: company.name,
+      companyRole: 'admin',
+    };
+    this.data.users.push(recruiterUser);
+    this.persistJson();
+    return { user: recruiterUser, company };
   }
 
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
@@ -425,14 +467,14 @@ class DatabaseManager {
   // ==========================================
   // JOBS
   // ==========================================
-  async getJobs(): Promise<Job[]> {
-    if (this.isMysql) return mysqlRepository.getJobs();
-    return this.data.jobs;
+  async getJobs(includeDeleted: boolean = false): Promise<Job[]> {
+    if (this.isMysql) return mysqlRepository.getJobs(includeDeleted);
+    return includeDeleted ? [...this.data.jobs] : this.data.jobs.filter((j) => !j.deletedAt);
   }
 
-  async getJobById(id: string): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.getJobById(id);
-    return this.data.jobs.find((j) => j.id === id);
+  async getJobById(id: string, includeDeleted: boolean = false): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.getJobById(id, includeDeleted);
+    return this.data.jobs.find((j) => j.id === id && (includeDeleted || !j.deletedAt));
   }
 
   async createJob(job: Job): Promise<Job> {
@@ -444,28 +486,173 @@ class DatabaseManager {
     return job;
   }
 
-  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.updateJob(id, updates);
-    const idx = this.data.jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return undefined;
-    this.data.jobs[idx] = {
-      ...this.data.jobs[idx],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.persistJson();
-    return this.data.jobs[idx];
+  async createJobWithAudit(job: Job, audit: ActivityLog): Promise<Job> {
+    if (this.isMysql) return mysqlRepository.createJobWithAudit(job, audit);
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    // In-memory transactional rollback safety
+    const backupJobs = [...this.data.jobs];
+    const backupCategories = this.data.categories.map((c) => ({ ...c }));
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs.unshift(job);
+      const cat = this.data.categories.find((c) => c.id === job.categoryId);
+      if (cat) cat.jobCount = (cat.jobCount || 0) + 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return job;
+    } catch (err) {
+      this.data.jobs = backupJobs;
+      this.data.categories = backupCategories;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
   }
 
-  async deleteJob(id: string): Promise<boolean> {
-    if (this.isMysql) return mysqlRepository.deleteJob(id);
-    const job = this.data.jobs.find((j) => j.id === id);
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    return this.updateJobWithAudit(id, updates, null);
+  }
+
+  async updateJobWithAudit(id: string, updates: Partial<Job>, audit: ActivityLog | null): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.updateJobWithAudit(id, updates, audit);
+
+    const idx = this.data.jobs.findIndex((j) => j.id === id && !j.deletedAt);
+    if (idx === -1) return undefined;
+
+    if (audit && (!audit.id || !audit.companyId || !audit.action)) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const backupJob = { ...this.data.jobs[idx] };
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs[idx] = {
+        ...this.data.jobs[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (audit) {
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+        this.data.activityLogs.unshift(audit);
+      }
+
+      this.persistJson(true);
+      return this.data.jobs[idx];
+    } catch (err) {
+      this.data.jobs[idx] = backupJob;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  async deleteJob(id: string, deletedBy?: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJob(id, deletedBy);
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
     if (!job) return false;
+    job.deletedAt = new Date().toISOString();
+    job.deletedBy = deletedBy || 'system';
     const cat = this.data.categories.find((c) => c.id === job.categoryId);
     if (cat && cat.jobCount > 0) cat.jobCount -= 1;
-    this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
     this.persistJson();
     return true;
+  }
+
+  async deleteJobWithAudit(id: string, deletedBy: string, audit: ActivityLog): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobWithAudit(id, deletedBy, audit);
+
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
+    if (!job) return false;
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const prevDeletedAt = job.deletedAt;
+    const prevDeletedBy = job.deletedBy;
+    const cat = this.data.categories.find((c) => c.id === job.categoryId);
+    const prevCatCount = cat ? cat.jobCount : 0;
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      job.deletedAt = new Date().toISOString();
+      job.deletedBy = deletedBy;
+      if (cat && cat.jobCount > 0) cat.jobCount -= 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return true;
+    } catch (err) {
+      job.deletedAt = prevDeletedAt;
+      job.deletedBy = prevDeletedBy;
+      if (cat) cat.jobCount = prevCatCount;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  // ==========================================
+  // ACTIVITY LOGS
+  // ==========================================
+  async createActivityLog(audit: ActivityLog): Promise<ActivityLog> {
+    if (this.isMysql) return mysqlRepository.createActivityLog(audit);
+    if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+    this.data.activityLogs.unshift(audit);
+    this.persistJson();
+    return audit;
+  }
+
+  async getActivityLogs(filters?: ActivityLogFilter): Promise<{ logs: ActivityLog[]; total: number }> {
+    if (this.isMysql) return mysqlRepository.getActivityLogs(filters);
+
+    let logs = [...(this.data.activityLogs || [])];
+
+    if (filters?.companyId) {
+      logs = logs.filter((l) => l.companyId === filters.companyId);
+    }
+    if (filters?.action && filters.action !== 'all') {
+      logs = logs.filter((l) => l.action.toUpperCase() === filters.action?.toUpperCase());
+    }
+    if (filters?.module && filters.module !== 'all') {
+      logs = logs.filter((l) => l.module.toLowerCase() === filters.module?.toLowerCase());
+    }
+    if (filters?.actorUserId) {
+      logs = logs.filter((l) => l.actorUserId === filters.actorUserId);
+    }
+    if (filters?.actor) {
+      const q = filters.actor.toLowerCase();
+      logs = logs.filter((l) => l.actorName.toLowerCase().includes(q) || l.actorUserId.toLowerCase() === q);
+    }
+    if (filters?.startDate) {
+      const start = new Date(filters.startDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() >= start);
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() <= end);
+    }
+
+    logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = logs.length;
+    const page = Math.max(1, filters?.page || 1);
+    const limit = Math.max(1, Math.min(100, filters?.limit || 20));
+    const offset = (page - 1) * limit;
+
+    return {
+      logs: logs.slice(offset, offset + limit),
+      total,
+    };
   }
 
   async incrementJobViews(id: string): Promise<void> {

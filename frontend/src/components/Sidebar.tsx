@@ -13,6 +13,7 @@ import {
   FolderTree,
   AlertTriangle,
   UserCheck,
+  History,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -40,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
     { to: '/recruiter/jobs', label: 'Manage Jobs & Ownership', icon: Briefcase },
     { to: '/recruiter/jobs/create', label: 'Post a New Job', icon: PlusCircle },
     { to: '/recruiter/applicants', label: 'Application ATS Board', icon: FileCheck2 },
+    { to: '/recruiter/activity-logs', label: 'Activity Log', icon: History },
   ];
 
   const adminLinks = [
@@ -48,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
     { to: '/admin/companies', label: 'Companies', icon: Building2 },
     { to: '/admin/categories', label: 'Job Categories', icon: FolderTree },
     { to: '/admin/reported-jobs', label: 'Reported Jobs Queue', icon: AlertTriangle },
+    { to: '/admin/activity-logs', label: 'Activity Logs', icon: History },
   ];
 
   const links =

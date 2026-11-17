@@ -16,6 +16,8 @@ import {
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
+  ActivityLogFilter,
+  ActivityLogsResponse,
   ExtractedCandidateProfile,
   CandidateExtractionResponse,
 } from '../types';
@@ -695,6 +697,12 @@ export const api = {
       `/admin/reported-jobs/${id}`,
       payload
     );
+    return res.data;
+  },
+
+  // --- Activity Logs ---
+  getActivityLogs: async (params?: ActivityLogFilter) => {
+    const res = await apiClient.get<ActivityLogsResponse>('/activity-logs', { params });
     return res.data;
   },
 };
