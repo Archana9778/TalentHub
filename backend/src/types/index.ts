@@ -166,6 +166,8 @@ export interface Job {
   isFeatured: boolean;
   applicantsCount: number;
   viewsCount: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -367,4 +369,42 @@ export interface ResumeDocument {
   isCurrent: boolean;
   uploadedAt: string;
   createdAt: string;
+}
+
+// ─── Activity Log / Audit Trail ─────────────────────────────────────────────
+
+export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE';
+
+export interface ActivityLog {
+  id: string;
+  companyId: string;
+  actorUserId: string;
+  actorName: string;
+  action: ActivityAction;
+  module: string;
+  recordId: string;
+  recordName: string;
+  oldValues?: Record<string, any> | null;
+  newValues?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface ActivityLogFilter {
+  companyId?: string;
+  action?: ActivityAction | string;
+  module?: string;
+  actor?: string;
+  actorUserId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ActivityLogsResponse {
+  logs: ActivityLog[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

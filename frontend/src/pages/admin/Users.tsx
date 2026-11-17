@@ -7,6 +7,7 @@ import {
   Ban,
   Trash2,
   Shield,
+  Briefcase,
   Layers,
   UserCheck,
 } from 'lucide-react';
@@ -207,7 +208,22 @@ export const Users: React.FC = () => {
                     </td>
 
                     <td className="px-6 py-4 text-slate-600">
-                      <div>{u.companyName || u.title || 'Independent'}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-slate-800">{u.companyName || u.title || 'Independent'}</span>
+                        {u.role === 'recruiter' && (
+                          u.companyRole === 'admin' ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                              <Shield className="w-2.5 h-2.5 text-purple-600" />
+                              Company Admin
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              <Briefcase className="w-2.5 h-2.5 text-blue-600" />
+                              Regular HR
+                            </span>
+                          )
+                        )}
+                      </div>
                       <div className="text-[10px] text-slate-400">{u.location || 'US'}</div>
                     </td>
 

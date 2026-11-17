@@ -2,11 +2,17 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../database/db';
 import { AuthRequest } from '../middleware/auth';
-import { Job, ReportedJob } from '../types';
+import { Job, ReportedJob, ActivityLog } from '../types';
+
+function sanitizeJobForAudit(job: Job): Record<string, any> {
+  const { applicantsCount, viewsCount, deletedAt, deletedBy, ...clean } = job;
+  return clean;
+}
 
 export const getAllJobs = async (req: Request, res: Response): Promise<void> => {
   try {
     let jobs = await db.getJobs();
+    jobs = jobs.filter((j) => !j.deletedAt);
 
     const {
       search,
@@ -135,7 +141,7 @@ export const getJobById = async (req: Request, res: Response): Promise<void> => 
     const id = req.params.id as string;
     const job = await db.getJobById(id);
 
-    if (!job) {
+    if (!job || job.deletedAt) {
       res.status(404).json({ message: 'Job not found.' });
       return;
     }
@@ -278,7 +284,21 @@ export const createJob = async (req: AuthRequest, res: Response): Promise<void> 
       updatedAt: new Date().toISOString(),
     };
 
-    await db.createJob(newJob);
+    const auditLog: ActivityLog = {
+      id: `act-${uuidv4().substring(0, 8)}`,
+      companyId: newJob.companyId,
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: 'CREATE',
+      module: 'jobs',
+      recordId: newJob.id,
+      recordName: newJob.title,
+      oldValues: null,
+      newValues: sanitizeJobForAudit(newJob),
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.createJobWithAudit(newJob, auditLog);
 
     res.status(201).json({
       message: 'Job created successfully.',
@@ -325,7 +345,53 @@ export const updateJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const updated = await db.updateJob(id, req.body);
+    // Compute diff for audit log (ignoring counters and sensitive info)
+    const allowedFields = [
+      'title', 'categoryId', 'categoryName', 'location', 'workplaceType',
+      'jobType', 'experienceLevel', 'salaryMin', 'salaryMax', 'salaryCurrency',
+      'description', 'requirements', 'skills', 'benefits', 'status', 'isFeatured', 'expiresAt'
+    ];
+
+    const oldValues: Record<string, any> = {};
+    const newValues: Record<string, any> = {};
+
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        const oldVal = (existing as any)[key];
+        const newVal = req.body[key];
+        const isOldArray = Array.isArray(oldVal);
+        const isNewArray = Array.isArray(newVal);
+
+        if (isOldArray || isNewArray) {
+          if (JSON.stringify(oldVal || []) !== JSON.stringify(newVal || [])) {
+            oldValues[key] = oldVal;
+            newValues[key] = newVal;
+          }
+        } else if (oldVal !== newVal) {
+          oldValues[key] = oldVal;
+          newValues[key] = newVal;
+        }
+      }
+    }
+
+    let auditLog: ActivityLog | null = null;
+    if (Object.keys(newValues).length > 0) {
+      auditLog = {
+        id: `act-${uuidv4().substring(0, 8)}`,
+        companyId: existing.companyId,
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: 'UPDATE',
+        module: 'jobs',
+        recordId: existing.id,
+        recordName: req.body.title || existing.title,
+        oldValues,
+        newValues,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    const updated = await db.updateJobWithAudit(id, req.body, auditLog);
     res.json({ message: 'Job updated successfully.', job: updated });
   } catch (err: any) {
     console.error('[jobController] updateJob error:', err);
@@ -367,7 +433,21 @@ export const deleteJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    await db.deleteJob(id);
+    const auditLog: ActivityLog = {
+      id: `act-${uuidv4().substring(0, 8)}`,
+      companyId: existing.companyId,
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: 'DELETE',
+      module: 'jobs',
+      recordId: existing.id,
+      recordName: existing.title,
+      oldValues: sanitizeJobForAudit(existing),
+      newValues: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.deleteJobWithAudit(id, req.user.id, auditLog);
     res.json({ message: 'Job posting deleted successfully.' });
   } catch (err: any) {
     console.error('[jobController] deleteJob error:', err);
@@ -434,10 +514,34 @@ export const assignJob = async (req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
-    const updatedJob = await db.updateJob(id, {
-      recruiterId: targetRecruiter.id,
-      recruiterName: targetRecruiter.name,
-    });
+    const auditLog: ActivityLog = {
+      id: `act-${uuidv4().substring(0, 8)}`,
+      companyId: job.companyId,
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: 'UPDATE',
+      module: 'jobs',
+      recordId: job.id,
+      recordName: job.title,
+      oldValues: {
+        recruiterId: job.recruiterId,
+        recruiterName: job.recruiterName,
+      },
+      newValues: {
+        recruiterId: targetRecruiter.id,
+        recruiterName: targetRecruiter.name,
+      },
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedJob = await db.updateJobWithAudit(
+      id,
+      {
+        recruiterId: targetRecruiter.id,
+        recruiterName: targetRecruiter.name,
+      },
+      auditLog
+    );
 
     // Update applications for this job with the newly assigned recruiter
     const jobApplications = await db.getApplicationsByJobId(id);
@@ -468,6 +572,7 @@ export const getRecruiterJobs = async (req: AuthRequest, res: Response): Promise
     const { scope, companyId, recruiterId } = req.query;
 
     let jobs = await db.getJobs();
+    jobs = jobs.filter((j) => !j.deletedAt);
 
     if (req.user.role === 'recruiter') {
       // Isolate to company

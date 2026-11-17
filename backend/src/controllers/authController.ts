@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../database/db';
 import { config } from '../config';
 import { AuthRequest } from '../middleware/auth';
-import { User, UserRole, PasswordResetToken, RevokedToken } from '../types';
+import { User, UserRole, Company, PasswordResetToken, RevokedToken } from '../types';
 import { validatePasswordPolicy } from '../utils/passwordPolicy';
 import { emailService } from '../services/emailService';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
@@ -92,6 +92,17 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         res.status(400).json({ message: 'Company name must be between 2 and 150 characters.' });
         return;
       }
+
+      // Check trimmed, case-insensitive duplicate company name
+      const trimmedCompanyName = companyName.trim();
+      const existingCompany = await db.getCompanyByName(trimmedCompanyName);
+      if (existingCompany) {
+        res.status(409).json({
+          message:
+            'A company with this name already exists. To join an existing organization, please have your Company Administrator add your account from Recruiter Management.',
+        });
+        return;
+      }
     }
 
     // 4. Password Policy Validation
@@ -127,33 +138,105 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     // 6. Secure password hashing
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser: User = {
-      id: `user-${uuidv4().substring(0, 8)}`,
-      email: normalizedEmail,
-      password: hashedPassword,
-      name: name.trim(),
-      role: assignedRole,
-      status: 'active',
-      tokenVersion: 1,
-      lastLoginAt: new Date().toISOString(),
-      title: title?.trim() || (assignedRole === 'recruiter' ? 'Talent Acquisition' : 'Software Engineer'),
-      location: location?.trim() || 'Remote, US',
-      companyName: assignedRole === 'recruiter' ? companyName.trim() : undefined,
-      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
-      skills: assignedRole === 'candidate' ? ['React', 'TypeScript', 'Node.js'] : undefined,
-      experience: [],
-      education: [],
-      createdAt: new Date().toISOString(),
-    };
+    let userToReturn: User;
 
-    await db.createUser(newUser);
+    if (assignedRole === 'recruiter') {
+      const trimmedCompanyName = companyName.trim();
+      const newCompany: Company = {
+        id: `comp-${uuidv4().substring(0, 8)}`,
+        name: trimmedCompanyName,
+        description: `${trimmedCompanyName} hiring organization`,
+        logo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120',
+        website: '',
+        email: normalizedEmail,
+        contactNumber: '',
+        phone: '',
+        address: '',
+        location: location?.trim() || 'Remote, US',
+        industry: 'Technology',
+        size: '1-50 employees',
+        verified: false,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const newUser: User = {
+        id: `user-${uuidv4().substring(0, 8)}`,
+        email: normalizedEmail,
+        password: hashedPassword,
+        name: name.trim(),
+        role: 'recruiter',
+        companyRole: 'admin', // First authorized account creating a new company is Company Admin
+        companyId: newCompany.id,
+        companyName: newCompany.name,
+        status: 'active',
+        tokenVersion: 1,
+        lastLoginAt: new Date().toISOString(),
+        title: title?.trim() || 'Talent Acquisition',
+        location: location?.trim() || 'Remote, US',
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
+        experience: [],
+        education: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      const result = await db.registerRecruiterWithCompany(newUser, newCompany);
+      userToReturn = result.user;
+
+      try {
+        await db.createActivityLog({
+          id: `act-${uuidv4().substring(0, 8)}`,
+          companyId: newCompany.id,
+          actorUserId: newUser.id,
+          actorName: newUser.name,
+          action: 'CREATE',
+          module: 'COMPANY',
+          recordId: newCompany.id,
+          recordName: newCompany.name,
+          oldValues: null,
+          newValues: {
+            id: newCompany.id,
+            name: newCompany.name,
+            adminEmail: newUser.email,
+            adminName: newUser.name,
+          },
+          createdAt: new Date().toISOString(),
+        });
+      } catch (logErr) {
+        console.error('Failed to log company creation activity:', logErr);
+      }
+    } else {
+      const newUser: User = {
+        id: `user-${uuidv4().substring(0, 8)}`,
+        email: normalizedEmail,
+        password: hashedPassword,
+        name: name.trim(),
+        role: 'candidate',
+        status: 'active',
+        tokenVersion: 1,
+        lastLoginAt: new Date().toISOString(),
+        title: title?.trim() || 'Software Engineer',
+        location: location?.trim() || 'Remote, US',
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
+        skills: ['React', 'TypeScript', 'Node.js'],
+        experience: [],
+        education: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      await db.createUser(newUser);
+      userToReturn = newUser;
+    }
 
     const jti = uuidv4();
     const token = jwt.sign(
       {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
+        id: userToReturn.id,
+        email: userToReturn.email,
+        role: userToReturn.role,
+        companyId: userToReturn.companyId,
+        companyRole: userToReturn.companyRole,
         tokenVersion: 1,
         jti,
       },
@@ -166,9 +249,13 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     res.status(201).json({
       message: 'Account registered successfully.',
       token,
-      user: sanitizeUser(newUser),
+      user: sanitizeUser(userToReturn),
     });
   } catch (error: any) {
+    if (error.code === 'COMPANY_ALREADY_EXISTS') {
+      res.status(409).json({ message: error.message });
+      return;
+    }
     res.status(500).json({ message: 'Server error during registration.', error: error.message });
   }
 };
@@ -217,6 +304,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
         id: user.id,
         email: user.email,
         role: user.role,
+        companyId: user.companyId,
+        companyRole: user.companyRole,
         tokenVersion,
         jti,
       },

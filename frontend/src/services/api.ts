@@ -16,6 +16,8 @@ import {
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
+  ActivityLogFilter,
+  ActivityLogsResponse,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -656,6 +658,12 @@ export const api = {
       `/admin/reported-jobs/${id}`,
       payload
     );
+    return res.data;
+  },
+
+  // --- Activity Logs ---
+  getActivityLogs: async (params?: ActivityLogFilter) => {
+    const res = await apiClient.get<ActivityLogsResponse>('/activity-logs', { params });
     return res.data;
   },
 };
