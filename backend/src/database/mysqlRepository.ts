@@ -11,6 +11,8 @@ import {
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
+  CandidateEducation,
+  CandidateExperience,
   ActivityLog,
   ActivityLogFilter,
   CompanyRole,
@@ -302,6 +304,389 @@ export class MySqlRepository {
   async deleteUser(id: string): Promise<boolean> {
     const [result] = await this.pool.query<any>('DELETE FROM users WHERE id = ?', [id]);
     return result.affectedRows > 0;
+  }
+
+  // --- Candidate Education ---
+  private mapCandidateEducation(row: any): CandidateEducation {
+    return {
+      id: row.id,
+      candidateId: row.candidate_id,
+      institution: row.institution,
+      degree: row.degree,
+      fieldOfStudy: row.field_of_study || undefined,
+      startDate: row.start_date || undefined,
+      endDate: row.end_date || undefined,
+      isCurrent: Boolean(row.is_current),
+      grade: row.grade || undefined,
+      description: row.description || undefined,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+    };
+  }
+
+  async getCandidateEducation(candidateId: string): Promise<CandidateEducation[]> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY created_at ASC',
+      [candidateId]
+    );
+    return rows.map((r) => this.mapCandidateEducation(r));
+  }
+
+  async getCandidateEducationById(id: string, candidateId: string): Promise<CandidateEducation | undefined> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM candidate_education WHERE id = ? AND candidate_id = ?',
+      [id, candidateId]
+    );
+    return rows.length > 0 ? this.mapCandidateEducation(rows[0]) : undefined;
+  }
+
+  async createCandidateEducation(
+    candidateId: string,
+    data: {
+      institution: string;
+      degree: string;
+      fieldOfStudy?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      grade?: string;
+      description?: string;
+    }
+  ): Promise<CandidateEducation> {
+    const id = `edu-${uuidv4().substring(0, 8)}`;
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO candidate_education (
+          id, candidate_id, institution, degree, field_of_study,
+          start_date, end_date, is_current, grade, description,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          id,
+          candidateId,
+          data.institution,
+          data.degree,
+          data.fieldOfStudy || null,
+          data.startDate || null,
+          data.endDate || null,
+          data.isCurrent ? 1 : 0,
+          data.grade || null,
+          data.description || null,
+        ]
+      );
+
+      await this.syncEducationJson(conn, candidateId);
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const created = await this.getCandidateEducationById(id, candidateId);
+    if (!created) throw new Error('Failed to create candidate education record.');
+    return created;
+  }
+
+  async updateCandidateEducation(
+    id: string,
+    candidateId: string,
+    updates: Partial<{
+      institution: string;
+      degree: string;
+      fieldOfStudy?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      grade?: string;
+      description?: string;
+    }>
+  ): Promise<CandidateEducation | undefined> {
+    const existing = await this.getCandidateEducationById(id, candidateId);
+    if (!existing) return undefined;
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.institution !== undefined) { fields.push('institution = ?'); values.push(updates.institution); }
+    if (updates.degree !== undefined) { fields.push('degree = ?'); values.push(updates.degree); }
+    if (updates.fieldOfStudy !== undefined) { fields.push('field_of_study = ?'); values.push(updates.fieldOfStudy || null); }
+    if (updates.startDate !== undefined) { fields.push('start_date = ?'); values.push(updates.startDate || null); }
+    if (updates.endDate !== undefined) { fields.push('end_date = ?'); values.push(updates.endDate || null); }
+    if (updates.isCurrent !== undefined) { fields.push('is_current = ?'); values.push(updates.isCurrent ? 1 : 0); }
+    if (updates.grade !== undefined) { fields.push('grade = ?'); values.push(updates.grade || null); }
+    if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description || null); }
+
+    if (fields.length > 0) {
+      fields.push('updated_at = NOW()');
+      values.push(id, candidateId);
+
+      const conn = await this.pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        await conn.query(
+          `UPDATE candidate_education SET ${fields.join(', ')} WHERE id = ? AND candidate_id = ?`,
+          values
+        );
+
+        await this.syncEducationJson(conn, candidateId);
+
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+
+    return this.getCandidateEducationById(id, candidateId);
+  }
+
+  async deleteCandidateEducation(id: string, candidateId: string): Promise<boolean> {
+    const existing = await this.getCandidateEducationById(id, candidateId);
+    if (!existing) return false;
+
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query('DELETE FROM candidate_education WHERE id = ? AND candidate_id = ?', [id, candidateId]);
+
+      await this.syncEducationJson(conn, candidateId);
+
+      await conn.commit();
+      return true;
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  private async syncEducationJson(conn: any, candidateId: string): Promise<void> {
+    const [rows]: any = await conn.query(
+      'SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY created_at ASC',
+      [candidateId]
+    );
+    const educations = rows.map((r: any) => ({
+      id: r.id,
+      candidateId: r.candidate_id,
+      institution: r.institution,
+      school: r.institution,
+      degree: r.degree,
+      fieldOfStudy: r.field_of_study || undefined,
+      startDate: r.start_date || undefined,
+      endDate: r.end_date || undefined,
+      isCurrent: Boolean(r.is_current),
+      grade: r.grade || undefined,
+      description: r.description || undefined,
+      year: r.start_date && r.end_date ? `${r.start_date} - ${r.end_date}` : (r.end_date || r.start_date || undefined),
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
+    }));
+    await conn.query('UPDATE candidates SET education_json = ? WHERE user_id = ?', [
+      JSON.stringify(educations),
+      candidateId,
+    ]);
+  }
+
+  // --- Candidate Experience ---
+  private mapCandidateExperience(row: any): CandidateExperience {
+    return {
+      id: row.id,
+      candidateId: row.candidate_id,
+      company: row.company,
+      title: row.title,
+      employmentType: row.employment_type || undefined,
+      location: row.location || undefined,
+      startDate: row.start_date || undefined,
+      endDate: row.end_date || undefined,
+      isCurrent: Boolean(row.is_current),
+      description: row.description || undefined,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+    };
+  }
+
+  async getCandidateExperience(candidateId: string): Promise<CandidateExperience[]> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM candidate_experience WHERE candidate_id = ? ORDER BY created_at ASC',
+      [candidateId]
+    );
+    return rows.map((r) => this.mapCandidateExperience(r));
+  }
+
+  async getCandidateExperienceById(id: string, candidateId: string): Promise<CandidateExperience | undefined> {
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM candidate_experience WHERE id = ? AND candidate_id = ?',
+      [id, candidateId]
+    );
+    return rows.length > 0 ? this.mapCandidateExperience(rows[0]) : undefined;
+  }
+
+  async createCandidateExperience(
+    candidateId: string,
+    data: {
+      company: string;
+      title: string;
+      employmentType?: string;
+      location?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      description?: string;
+    }
+  ): Promise<CandidateExperience> {
+    const id = `exp-${uuidv4().substring(0, 8)}`;
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO candidate_experience (
+          id, candidate_id, company, title, employment_type,
+          location, start_date, end_date, is_current, description,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          id,
+          candidateId,
+          data.company,
+          data.title,
+          data.employmentType || null,
+          data.location || null,
+          data.startDate || null,
+          data.endDate || null,
+          data.isCurrent ? 1 : 0,
+          data.description || null,
+        ]
+      );
+
+      await this.syncExperienceJson(conn, candidateId);
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const created = await this.getCandidateExperienceById(id, candidateId);
+    if (!created) throw new Error('Failed to create candidate experience record.');
+    return created;
+  }
+
+  async updateCandidateExperience(
+    id: string,
+    candidateId: string,
+    updates: Partial<{
+      company: string;
+      title: string;
+      employmentType?: string;
+      location?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      description?: string;
+    }>
+  ): Promise<CandidateExperience | undefined> {
+    const existing = await this.getCandidateExperienceById(id, candidateId);
+    if (!existing) return undefined;
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.company !== undefined) { fields.push('company = ?'); values.push(updates.company); }
+    if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
+    if (updates.employmentType !== undefined) { fields.push('employment_type = ?'); values.push(updates.employmentType || null); }
+    if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location || null); }
+    if (updates.startDate !== undefined) { fields.push('start_date = ?'); values.push(updates.startDate || null); }
+    if (updates.endDate !== undefined) { fields.push('end_date = ?'); values.push(updates.endDate || null); }
+    if (updates.isCurrent !== undefined) { fields.push('is_current = ?'); values.push(updates.isCurrent ? 1 : 0); }
+    if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description || null); }
+
+    if (fields.length > 0) {
+      fields.push('updated_at = NOW()');
+      values.push(id, candidateId);
+
+      const conn = await this.pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        await conn.query(
+          `UPDATE candidate_experience SET ${fields.join(', ')} WHERE id = ? AND candidate_id = ?`,
+          values
+        );
+
+        await this.syncExperienceJson(conn, candidateId);
+
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+    }
+
+    return this.getCandidateExperienceById(id, candidateId);
+  }
+
+  async deleteCandidateExperience(id: string, candidateId: string): Promise<boolean> {
+    const existing = await this.getCandidateExperienceById(id, candidateId);
+    if (!existing) return false;
+
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query('DELETE FROM candidate_experience WHERE id = ? AND candidate_id = ?', [id, candidateId]);
+
+      await this.syncExperienceJson(conn, candidateId);
+
+      await conn.commit();
+      return true;
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  private async syncExperienceJson(conn: any, candidateId: string): Promise<void> {
+    const [rows]: any = await conn.query(
+      'SELECT * FROM candidate_experience WHERE candidate_id = ? ORDER BY created_at ASC',
+      [candidateId]
+    );
+    const experiences = rows.map((r: any) => ({
+      id: r.id,
+      candidateId: r.candidate_id,
+      company: r.company,
+      title: r.title,
+      employmentType: r.employment_type || undefined,
+      location: r.location || undefined,
+      startDate: r.start_date || undefined,
+      endDate: r.end_date || undefined,
+      isCurrent: Boolean(r.is_current),
+      description: r.description || '',
+      period: r.start_date ? (r.is_current ? `${r.start_date} - Present` : (r.end_date ? `${r.start_date} - ${r.end_date}` : r.start_date)) : '',
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
+    }));
+    await conn.query('UPDATE candidates SET experience_json = ? WHERE user_id = ?', [
+      JSON.stringify(experiences),
+      candidateId,
+    ]);
   }
 
   // --- Companies ---
