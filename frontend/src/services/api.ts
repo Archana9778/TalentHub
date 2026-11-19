@@ -18,6 +18,7 @@ import {
   SkillComparisonResult,
   ExtractedCandidateProfile,
   CandidateExtractionResponse,
+  ExtractionStatus,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -222,6 +223,9 @@ export const api = {
       resume: any;
       user: User;
       parsedData: any;
+      extractionStatus?: ExtractionStatus;
+      extractedData?: ExtractedCandidateProfile;
+      extractionError?: string;
     }>('/resume/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: onProgress
@@ -275,11 +279,37 @@ export const api = {
     return res.data;
   },
 
+  getResumeProcessingStatus: async (candidateId: string) => {
+    const res = await apiClient.get<{
+      candidateId: string;
+      resumeId: string;
+      status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      filename: string;
+      uploadedAt: string;
+      isVerified: boolean;
+      error: string | null;
+    }>(`/resume/candidate/${candidateId}/status`);
+    return res.data;
+  },
+
+  retryResumeExtraction: async (candidateId: string) => {
+    const res = await apiClient.post<{
+      message: string;
+      status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      extractedData?: ExtractedCandidateProfile;
+      error?: string;
+    }>(`/resume/candidate/${candidateId}/retry`);
+    return res.data;
+  },
+
   updateCandidateExtractedResume: async (candidateId: string, data: ExtractedCandidateProfile) => {
     const res = await apiClient.put<{
       message: string;
       candidateId: string;
+      reviewStatus?: 'Pending' | 'Extracted' | 'Reviewed';
+      isCorrected?: boolean;
       extractedData: ExtractedCandidateProfile;
+      originalExtractedData?: ExtractedCandidateProfile;
     }>(`/resume/candidate/${candidateId}/extracted`, data);
     return res.data;
   },
@@ -294,10 +324,13 @@ export const api = {
       message: string;
       candidateId: string;
       isVerified: boolean;
+      reviewStatus?: 'Pending' | 'Extracted' | 'Reviewed';
+      isCorrected?: boolean;
       verifiedById: string;
       verifiedByName: string;
       verifiedAt: string;
       verifiedData: ExtractedCandidateProfile;
+      originalExtractedData?: ExtractedCandidateProfile;
       requiresConfirmation?: boolean;
     }>(`/resume/candidate/${candidateId}/verify`, {
       data,

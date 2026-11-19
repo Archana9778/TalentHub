@@ -9,6 +9,8 @@ import {
   getCandidateExtractedResume,
   updateCandidateExtractedResume,
   verifyCandidateResumeData,
+  getResumeProcessingStatus,
+  retryResumeExtraction,
 } from '../controllers/resumeController';
 import { authenticateToken, requireRoles } from '../middleware/auth';
 import { uploadResume } from '../middleware/upload';
@@ -65,6 +67,18 @@ router.post('/parse', uploadResume.single('resume'), parseResume);
 /**
  * Recruiter & Admin Azure AI Document Intelligence Extraction Management
  */
+router.get(
+  '/candidate/:candidateId/status',
+  requireRoles('recruiter', 'admin', 'candidate'),
+  getResumeProcessingStatus
+);
+
+router.post(
+  '/candidate/:candidateId/retry',
+  requireRoles('recruiter', 'admin', 'candidate'),
+  retryResumeExtraction
+);
+
 router.get(
   '/candidate/:candidateId/extracted',
   requireRoles('recruiter', 'admin', 'candidate'),

@@ -24,10 +24,17 @@ import {
   GraduationCap,
   Building,
   Check,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { CandidateProfile, UserEducation, UserExperience } from '../../types';
+import {
+  CandidateProfile,
+  UserEducation,
+  UserExperience,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
+} from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -207,6 +214,43 @@ export const Profile: React.FC = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Azure AI Document Intelligence Resume Extraction State
+  const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus | null>(null);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [extractedProfile, setExtractedProfile] = useState<ExtractedCandidateProfile | null>(null);
+  const [isRetryingExtraction, setIsRetryingExtraction] = useState(false);
+
+  const fetchExtractionStatus = async () => {
+    if (!user?.id) return;
+    try {
+      const data = await api.getCandidateExtractedResume(user.id);
+      if (data) {
+        setExtractionStatus(data.status);
+        setExtractionError(data.error || null);
+        setExtractedProfile(data.extractedData || null);
+      }
+    } catch {
+      // Ignored if no extraction exists yet
+    }
+  };
+
+  const handleRetryCandidateExtraction = async () => {
+    if (!user?.id) return;
+    try {
+      setIsRetryingExtraction(true);
+      setExtractionError(null);
+      const res = await api.retryResumeExtraction(user.id);
+      setExtractionStatus(res.status);
+      setExtractedProfile(res.extractedData || null);
+      setResumeSuccess('Azure AI resume analysis re-initiated successfully.');
+      setTimeout(() => setResumeSuccess(null), 4000);
+    } catch (err: any) {
+      setExtractionError(err?.response?.data?.message || err.message || 'Retry failed.');
+    } finally {
+      setIsRetryingExtraction(false);
+    }
+  };
+
   // ── Load Profile from Backend on Mount ───────────────────────────────────────
   const fetchProfile = async () => {
     try {
@@ -260,7 +304,7 @@ export const Profile: React.FC = () => {
     fetchProfile();
   }, []);
 
-  // Load resume history on mount
+  // Load resume history and extraction status on mount
   useEffect(() => {
     if (user?.role !== 'candidate') return;
     setHistoryLoading(true);
@@ -268,7 +312,8 @@ export const Profile: React.FC = () => {
       .then((data) => setResumeHistory(data.history || []))
       .catch(() => { /* non-fatal */ })
       .finally(() => setHistoryLoading(false));
-  }, [user?.role]);
+    fetchExtractionStatus();
+  }, [user?.role, user?.id]);
 
   // ── Validation logic ────────────────────────────────────────────────────────
 
@@ -651,6 +696,16 @@ export const Profile: React.FC = () => {
       if (res.user) {
         updateCurrentUser(res.user);
         if (res.user.skills) setSkills(res.user.skills);
+      }
+
+      if (res.extractionStatus) {
+        setExtractionStatus(res.extractionStatus);
+      }
+      if (res.extractedData) {
+        setExtractedProfile(res.extractedData);
+      }
+      if (res.extractionError) {
+        setExtractionError(res.extractionError);
       }
 
       const skillCount = res.parsedData?.extractedSkills?.length ?? 0;
@@ -1192,6 +1247,66 @@ export const Profile: React.FC = () => {
             ) : (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
                 No resume uploaded yet.
+              </div>
+            )}
+
+            {/* Azure AI Resume Intelligence Extraction Status */}
+            {(currentResume || user?.resumeUrl || extractionStatus) && extractionStatus && (
+              <div className="rounded-xl border border-slate-200 p-3 text-xs space-y-2 bg-slate-50/50">
+                {(extractionStatus === 'PROCESSING' || extractionStatus === 'PENDING') && (
+                  <div className="flex items-center justify-between text-indigo-700 bg-indigo-50/80 p-3 rounded-lg border border-indigo-200">
+                    <div className="flex items-center gap-2.5">
+                      <RefreshCw className="w-4 h-4 animate-spin text-indigo-600 shrink-0" />
+                      <div>
+                        <p className="font-bold">Azure AI Document Intelligence Analysis in Progress</p>
+                        <p className="text-[11px] text-indigo-600">Extracting skills, experience, education, and credentials using prebuilt-layout model...</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold uppercase">
+                      {extractionStatus}
+                    </span>
+                  </div>
+                )}
+
+                {extractionStatus === 'COMPLETED' && (
+                  <div className="bg-emerald-50/80 border border-emerald-200 text-emerald-800 p-3 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold">
+                        <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>AI Document Intelligence Extraction Complete</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        Analyzed
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700">
+                      Your resume has been parsed by Azure AI. Recruiters can view structured details including your skills ({extractedProfile?.skills?.length || user?.skills?.length || 0}), experience ({extractedProfile?.experience?.length || 0} entries), and education.
+                    </p>
+                  </div>
+                )}
+
+                {extractionStatus === 'FAILED' && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>Azure AI Document Analysis Failed</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRetryCandidateExtraction}
+                        disabled={isRetryingExtraction}
+                        className="px-2.5 py-1 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingExtraction ? 'animate-spin' : ''}`} />
+                        <span>{isRetryingExtraction ? 'Retrying...' : 'Retry Extraction'}</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-rose-700">
+                      {extractionError || 'Azure AI Document Intelligence could not parse this file. You can retry extraction or upload a clear PDF/DOCX file.'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

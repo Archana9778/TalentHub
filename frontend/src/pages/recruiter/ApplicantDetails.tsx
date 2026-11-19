@@ -30,6 +30,17 @@ import {
   Loader2,
   Download,
   AlertCircle,
+  ExternalLink,
+  Globe,
+  Github,
+  Linkedin,
+  RefreshCw,
+  FolderGit2,
+  Plus,
+  Trash2,
+  Eye,
+  BookOpen,
+  Wrench,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -43,6 +54,9 @@ import {
   ApplicationStatusHistory,
   CandidateExtractionResponse,
   ExtractedCandidateProfile,
+  ExtractedEducationItem,
+  ExtractedExperienceItem,
+  CategorizedSkills,
 } from '../../types';
 import { Loading } from '../../components/Loading';
 
@@ -111,6 +125,47 @@ export const ApplicantDetails: React.FC = () => {
   const [verifySuccess, setVerifySuccess] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [showConfirmOverwriteModal, setShowConfirmOverwriteModal] = useState(false);
+  const [retryingExtraction, setRetryingExtraction] = useState(false);
+  const [showRawText, setShowRawText] = useState(false);
+
+  // ─── AI Extracted Resume Information: Enhanced Tabs & State ───
+  const [extractedTab, setExtractedTab] = useState<'skills' | 'education' | 'experience'>('skills');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [newSkillCategory, setNewSkillCategory] = useState<'technical' | 'softSkills'>('technical');
+
+  // Education Modal State
+  const [showEduModal, setShowEduModal] = useState(false);
+  const [editingEduIndex, setEditingEduIndex] = useState<number | null>(null);
+  const [eduFormData, setEduFormData] = useState<ExtractedEducationItem>({
+    degree: '',
+    institution: '',
+    fieldOfStudy: '',
+    year: '',
+    status: 'Completed',
+  });
+
+  // Experience Modal State
+  const [showExpModal, setShowExpModal] = useState(false);
+  const [editingExpIndex, setEditingExpIndex] = useState<number | null>(null);
+  const [expFormData, setExpFormData] = useState<ExtractedExperienceItem>({
+    company: '',
+    title: '',
+    duration: '',
+    startDate: '',
+    endDate: '',
+    isCurrent: false,
+    description: '',
+    responsibilities: [],
+    technologies: [],
+    achievements: [],
+  });
+
+  // Resume Side-by-Side Reviewer State
+  const [showResumeViewer, setShowResumeViewer] = useState(false);
+  const [resumeViewerUrl, setResumeViewerUrl] = useState<string | null>(null);
+  const [loadingResumeViewer, setLoadingResumeViewer] = useState(false);
+  const [showAuditComparison, setShowAuditComparison] = useState(false);
 
   const handleAccessResume = async (action: 'view' | 'download' = 'view') => {
     if (!application?.candidateId) return;
@@ -239,6 +294,266 @@ export const ApplicantDetails: React.FC = () => {
       }
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleRetryExtraction = async () => {
+    if (!application?.candidateId) return;
+    try {
+      setRetryingExtraction(true);
+      setExtractionError(null);
+      const res = await api.retryResumeExtraction(application.candidateId);
+      setExtraction((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: res.status,
+              extractedData: res.extractedData || prev.extractedData,
+              error: res.error,
+            }
+          : {
+              candidateId: application.candidateId,
+              resumeId: '',
+              filename: '',
+              status: res.status,
+              isVerified: false,
+              extractedData: (res.extractedData || {}) as ExtractedCandidateProfile,
+              error: res.error,
+            }
+      );
+      setVerifySuccess('Resume re-extraction initiated successfully.');
+      setTimeout(() => setVerifySuccess(null), 4000);
+    } catch (err: any) {
+      setExtractionError(err?.response?.data?.message || err.message || 'Retry failed.');
+    } finally {
+      setRetryingExtraction(false);
+    }
+  };
+
+  const handleToggleResumeViewer = async () => {
+    if (showResumeViewer) {
+      setShowResumeViewer(false);
+      return;
+    }
+    if (!application?.candidateId) return;
+    try {
+      setLoadingResumeViewer(true);
+      const res = await api.getResumeDownloadUrl(application.candidateId);
+      if (res.downloadUrl) {
+        setResumeViewerUrl(res.downloadUrl);
+        setShowResumeViewer(true);
+      } else {
+        alert('Could not generate document preview URL.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to load resume for review.');
+    } finally {
+      setLoadingResumeViewer(false);
+    }
+  };
+
+  const handleAddSkill = () => {
+    if (!extraction?.extractedData || !newSkillInput.trim()) return;
+    const trimmed = newSkillInput.trim();
+    const updated = { ...extraction.extractedData };
+    const currentSkills = updated.skills || [];
+
+    // Avoid duplicate skills case-insensitively
+    if (currentSkills.some((s) => s.toLowerCase() === trimmed.toLowerCase())) {
+      setNewSkillInput('');
+      return;
+    }
+
+    updated.skills = [...currentSkills, trimmed];
+
+    if (!updated.categorizedSkills) {
+      updated.categorizedSkills = {
+        programmingLanguages: [],
+        frameworks: [],
+        cloudPlatforms: [],
+        devOpsTools: [],
+        databases: [],
+        networking: [],
+        tools: [],
+        softSkills: [],
+        other: [],
+      };
+    }
+
+    if (newSkillCategory === 'softSkills') {
+      updated.softSkills = [...(updated.softSkills || []), trimmed];
+      if (!updated.categorizedSkills.softSkills) updated.categorizedSkills.softSkills = [];
+      updated.categorizedSkills.softSkills.push(trimmed);
+    } else {
+      updated.categorizedSkills.other = [...(updated.categorizedSkills.other || []), trimmed];
+    }
+
+    setExtraction({ ...extraction, extractedData: updated });
+    setNewSkillInput('');
+    setHasUnsavedChanges(true);
+  };
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    if (!extraction?.extractedData) return;
+    const updated = { ...extraction.extractedData };
+    const lower = skillToRemove.toLowerCase();
+    updated.skills = (updated.skills || []).filter((s) => s.toLowerCase() !== lower);
+    if (updated.softSkills) {
+      updated.softSkills = updated.softSkills.filter((s) => s.toLowerCase() !== lower);
+    }
+    if (updated.categorizedSkills) {
+      const cats: Record<string, any> = { ...updated.categorizedSkills };
+      for (const k of Object.keys(cats)) {
+        if (Array.isArray(cats[k])) {
+          cats[k] = cats[k].filter((s: string) => s.toLowerCase() !== lower);
+        }
+      }
+      updated.categorizedSkills = cats as CategorizedSkills;
+    }
+    setExtraction({ ...extraction, extractedData: updated });
+    setHasUnsavedChanges(true);
+  };
+
+  // Education handlers
+  const handleOpenAddEdu = () => {
+    setEditingEduIndex(null);
+    setEduFormData({
+      degree: '',
+      institution: '',
+      fieldOfStudy: '',
+      year: '',
+      status: 'Completed',
+    });
+    setShowEduModal(true);
+  };
+
+  const handleOpenEditEdu = (index: number) => {
+    if (!extraction?.extractedData?.education?.[index]) return;
+    const edu = extraction.extractedData.education[index];
+    setEditingEduIndex(index);
+    setEduFormData({
+      degree: edu.degree || '',
+      institution: edu.institution || '',
+      fieldOfStudy: edu.fieldOfStudy || '',
+      year: edu.year || '',
+      startDate: edu.startDate || '',
+      endDate: edu.endDate || '',
+      status: edu.status || 'Completed',
+    });
+    setShowEduModal(true);
+  };
+
+  const handleSaveEduForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extraction?.extractedData || !eduFormData.degree || !eduFormData.institution) return;
+    const updated = { ...extraction.extractedData };
+    const list = [...(updated.education || [])];
+    if (editingEduIndex !== null && editingEduIndex >= 0) {
+      list[editingEduIndex] = { ...eduFormData };
+    } else {
+      list.push({ ...eduFormData });
+    }
+    updated.education = list;
+    setExtraction({ ...extraction, extractedData: updated });
+    setHasUnsavedChanges(true);
+    setShowEduModal(false);
+    setEditingEduIndex(null);
+  };
+
+  const handleDeleteEdu = (index: number) => {
+    if (!extraction?.extractedData?.education) return;
+    const updated = { ...extraction.extractedData };
+    updated.education = updated.education.filter((_, idx) => idx !== index);
+    setExtraction({ ...extraction, extractedData: updated });
+    setHasUnsavedChanges(true);
+  };
+
+  // Experience handlers
+  const handleOpenAddExp = () => {
+    setEditingExpIndex(null);
+    setExpFormData({
+      company: '',
+      title: '',
+      duration: '',
+      startDate: '',
+      endDate: '',
+      isCurrent: false,
+      description: '',
+      responsibilities: [],
+      technologies: [],
+      achievements: [],
+    });
+    setShowExpModal(true);
+  };
+
+  const handleOpenEditExp = (index: number) => {
+    if (!extraction?.extractedData?.experience?.[index]) return;
+    const exp = extraction.extractedData.experience[index];
+    setEditingExpIndex(index);
+    setExpFormData({
+      company: exp.company || '',
+      title: exp.title || '',
+      duration: exp.duration || '',
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      isCurrent: Boolean(exp.isCurrent || (exp.duration && /present|current/i.test(exp.duration))),
+      description: exp.description || '',
+      responsibilities: exp.responsibilities ? [...exp.responsibilities] : [],
+      technologies: exp.technologies ? [...exp.technologies] : [],
+      achievements: exp.achievements ? [...exp.achievements] : [],
+    });
+    setShowExpModal(true);
+  };
+
+  const handleSaveExpForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extraction?.extractedData || !expFormData.company || !expFormData.title) return;
+    const updated = { ...extraction.extractedData };
+    const list = [...(updated.experience || [])];
+    const itemToSave = {
+      ...expFormData,
+      duration: expFormData.duration || (expFormData.startDate && expFormData.endDate ? `${expFormData.startDate} - ${expFormData.endDate}` : '2021 - Present'),
+    };
+    if (editingExpIndex !== null && editingExpIndex >= 0) {
+      list[editingExpIndex] = itemToSave;
+    } else {
+      list.push(itemToSave);
+    }
+    updated.experience = list;
+    setExtraction({ ...extraction, extractedData: updated });
+    setHasUnsavedChanges(true);
+    setShowExpModal(false);
+    setEditingExpIndex(null);
+  };
+
+  const handleDeleteExp = (index: number) => {
+    if (!extraction?.extractedData?.experience) return;
+    const updated = { ...extraction.extractedData };
+    updated.experience = updated.experience.filter((_, idx) => idx !== index);
+    setExtraction({ ...extraction, extractedData: updated });
+    setHasUnsavedChanges(true);
+  };
+
+  // Save All Corrections
+  const handleSaveAllCorrections = async () => {
+    if (!application?.candidateId || !extraction?.extractedData) return;
+    try {
+      setSavingEdit(true);
+      const res = await api.updateCandidateExtractedResume(application.candidateId, extraction.extractedData);
+      setExtraction((prev) => prev ? {
+        ...prev,
+        reviewStatus: 'Reviewed',
+        isCorrected: true,
+        extractedData: res.extractedData || extraction.extractedData,
+        originalExtractedData: res.originalExtractedData || prev.originalExtractedData,
+      } : null);
+      setHasUnsavedChanges(false);
+      setVerifySuccess('Resume corrections saved successfully. Status updated to Reviewed.');
+      setTimeout(() => setVerifySuccess(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save resume corrections.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -658,56 +973,75 @@ export const ApplicantDetails: React.FC = () => {
 
           {/* Azure AI Document Intelligence Extraction Section */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-600">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-slate-900">Azure AI Resume Extraction</h3>
-                    {/* Extraction Status Badge */}
+                    <h3 className="text-sm font-bold text-slate-900">AI Extracted Resume Information</h3>
+
+                    {/* Extraction Status Badge (Pending / Extracted / Reviewed) */}
                     {loadingExtraction ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
                         <Loader2 className="w-3 h-3 animate-spin" />
                         Processing...
                       </span>
-                    ) : extraction?.status === 'completed' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    ) : extraction?.reviewStatus === 'Reviewed' || extraction?.isVerified ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                         <Check className="w-3 h-3 text-emerald-600" />
-                        Extraction Completed
+                        Status: Reviewed
+                      </span>
+                    ) : extraction?.status === 'completed' || extraction?.extractedData ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <Sparkles className="w-3 h-3 text-indigo-600" />
+                        Status: Extracted
                       </span>
                     ) : extraction?.status === 'processing' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
                         <Loader2 className="w-3 h-3 animate-spin" />
-                        AI Parsing Active
+                        Status: Processing
                       </span>
                     ) : extraction?.status === 'failed' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                         <AlertTriangle className="w-3 h-3 text-rose-600" />
-                        Extraction Failed
+                        Status: Failed
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                        Pending Extraction
+                        Status: Pending
                       </span>
                     )}
 
-                    {/* Verification Badge */}
-                    {extraction?.isVerified ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        Recruiter Verified
+                    {/* Source / Correction Badge */}
+                    {extraction?.isCorrected ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                        <Edit3 className="w-3 h-3 text-amber-600" />
+                        Recruiter Corrected
                       </span>
-                    ) : (
+                    ) : extraction?.extractedData ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                        AI Extracted • Unverified
+                        AI Extracted
+                      </span>
+                    ) : null}
+
+                    {/* Unsaved changes indicator */}
+                    {hasUnsavedChanges && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-bounce">
+                        Unsaved Changes
                       </span>
                     )}
                   </div>
+
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Extracted via Azure AI Document Intelligence (<code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">prebuilt-layout</code>)
-                    {extraction?.verifiedByName && (
+                    Powered by Azure AI Document Intelligence (<code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">prebuilt-layout</code>)
+                    {extraction?.correctedByName && (
+                      <span className="ml-1 text-slate-600 font-medium">
+                        • Corrected by {extraction.correctedByName} on {new Date(extraction.correctedAt || '').toLocaleDateString()}
+                      </span>
+                    )}
+                    {extraction?.verifiedByName && !extraction?.correctedByName && (
                       <span className="ml-1 text-slate-600 font-medium">
                         • Verified by {extraction.verifiedByName} on {new Date(extraction.verifiedAt || '').toLocaleDateString()}
                       </span>
@@ -717,7 +1051,47 @@ export const ApplicantDetails: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Toggle Resume Viewer */}
+                <button
+                  type="button"
+                  onClick={handleToggleResumeViewer}
+                  disabled={loadingResumeViewer}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-1.5 shadow-2xs transition-colors ${
+                    showResumeViewer
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700'
+                  }`}
+                  title="View original uploaded resume alongside extracted details"
+                >
+                  {loadingResumeViewer ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                  )}
+                  <span>{showResumeViewer ? 'Hide Original Resume' : 'Review Original Resume'}</span>
+                </button>
+
+                {/* Save Corrections Button */}
+                <button
+                  type="button"
+                  onClick={handleSaveAllCorrections}
+                  disabled={savingEdit || !extraction?.extractedData}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-1.5 shadow-2xs transition-colors ${
+                    hasUnsavedChanges
+                      ? 'bg-amber-500 hover:bg-amber-600 border-amber-600 text-white'
+                      : 'bg-white border-slate-300 hover:bg-slate-50 text-slate-700 disabled:opacity-50'
+                  }`}
+                >
+                  {savingEdit ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>{savingEdit ? 'Saving...' : 'Save Corrections'}</span>
+                </button>
+
+                {/* Edit All Fields */}
                 <button
                   type="button"
                   onClick={handleOpenEditModal}
@@ -725,9 +1099,10 @@ export const ApplicantDetails: React.FC = () => {
                   className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors disabled:opacity-50"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Edit Extracted Info</span>
+                  <span>Edit All Fields</span>
                 </button>
 
+                {/* Verify & Apply Button */}
                 <button
                   type="button"
                   onClick={() => handleVerifyExtraction(false)}
@@ -758,18 +1133,63 @@ export const ApplicantDetails: React.FC = () => {
               </div>
             )}
 
+            {/* Split View: Embedded Original Resume Viewer */}
+            {showResumeViewer && resumeViewerUrl && (
+              <div className="border border-indigo-200 rounded-xl overflow-hidden bg-slate-900 text-white shadow-md">
+                <div className="p-3 bg-slate-800 flex items-center justify-between border-b border-slate-700">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    <span>Original Uploaded Resume Document</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={resumeViewerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded text-slate-200 flex items-center gap-1"
+                    >
+                      <span>Open in New Tab</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setShowResumeViewer(false)}
+                      className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="h-96 w-full bg-slate-100">
+                  <iframe
+                    src={resumeViewerUrl}
+                    title="Original Resume Preview"
+                    className="w-full h-full border-0"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Extraction Failure Alert */}
-            {extraction?.status === 'failed' && (
-              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-1">
-                <div className="flex items-center gap-2 font-bold text-xs">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>Azure AI Document Intelligence Extraction Could Not Complete</span>
+            {(extraction?.status === 'failed' || extraction?.status === 'FAILED') && (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Azure AI Document Intelligence Extraction Could Not Complete</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRetryExtraction}
+                    disabled={retryingExtraction}
+                    className="px-2.5 py-1 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${retryingExtraction ? 'animate-spin' : ''}`} />
+                    <span>{retryingExtraction ? 'Retrying...' : 'Retry Azure AI Extraction'}</span>
+                  </button>
                 </div>
                 <p className="text-xs text-rose-700 leading-relaxed pl-6">
                   {extraction.error || 'The document layout analysis service encountered an error processing this resume file.'}
-                </p>
-                <p className="text-[11px] text-rose-600 pl-6 mt-1">
-                  Tip: You can use "Edit Extracted Info" above to manually enter details, or ask the candidate to re-upload an uncorrupted PDF or DOCX file.
                 </p>
               </div>
             )}
@@ -777,107 +1197,594 @@ export const ApplicantDetails: React.FC = () => {
             {/* Extracted Details Display */}
             {extraction?.extractedData ? (
               <div className="space-y-4 pt-1">
-                {/* Contact & Location Strip */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Candidate Name</span>
-                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.fullName || '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Email Address</span>
-                    <p className="font-semibold text-slate-900 mt-0.5 truncate">{extraction.extractedData.email || '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Phone Number</span>
-                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.phone || '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Location</span>
-                    <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.location || '—'}</p>
-                  </div>
-                </div>
-
-                {/* Professional Summary */}
-                {extraction.extractedData.summary && (
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-bold text-slate-700">Professional Summary</span>
-                    <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/60 p-3 rounded-lg border border-slate-200">
-                      {extraction.extractedData.summary}
-                    </p>
-                  </div>
-                )}
-
-                {/* Technical & Professional Skills */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">
-                      Extracted Skills ({extraction.extractedData.skills?.length || 0})
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(extraction.extractedData.skills || []).map((sk, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
-                      >
-                        {sk}
-                      </span>
-                    ))}
-                    {(!extraction.extractedData.skills || extraction.extractedData.skills.length === 0) && (
-                      <span className="text-slate-400 italic text-xs">No skills identified in document layout.</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Work Experience */}
-                <div className="space-y-2 pt-1">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Work Experience ({extraction.extractedData.experience?.length || 0})</span>
-                  </span>
-                  <div className="space-y-2.5">
-                    {(extraction.extractedData.experience || []).map((exp, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-900">{exp.title}</span>
-                          <span className="text-slate-500 text-[11px] font-medium">{exp.duration}</span>
-                        </div>
-                        <div className="text-slate-600 font-medium text-[11px]">{exp.company}</div>
-                        {exp.description && (
-                          <p className="text-slate-600 text-xs leading-relaxed pt-0.5">{exp.description}</p>
-                        )}
-                      </div>
-                    ))}
-                    {(!extraction.extractedData.experience || extraction.extractedData.experience.length === 0) && (
-                      <p className="text-slate-400 italic text-xs">No experience items detected.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Education & Certifications Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                  {/* Education */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Education ({extraction.extractedData.education?.length || 0})</span>
-                    </span>
-                    <div className="space-y-2">
-                      {(extraction.extractedData.education || []).map((edu, idx) => (
-                        <div key={idx} className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200 text-xs space-y-0.5">
-                          <div className="font-bold text-slate-900">{edu.degree}</div>
-                          <div className="text-slate-500 text-[11px] flex justify-between">
-                            <span>{edu.institution}</span>
-                            <span>{edu.year}</span>
-                          </div>
-                        </div>
-                      ))}
-                      {(!extraction.extractedData.education || extraction.extractedData.education.length === 0) && (
-                        <p className="text-slate-400 italic text-xs">No education records found.</p>
-                      )}
+                {/* 1. Candidate Overview & Contact Strip */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Candidate Name</span>
+                      <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.fullName || <span className="text-slate-400 italic font-normal">Not detected</span>}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Email Address</span>
+                      <p className="font-semibold text-slate-900 mt-0.5 truncate">{extraction.extractedData.email || <span className="text-slate-400 italic font-normal">Not detected</span>}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Phone Number</span>
+                      <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.phone || <span className="text-slate-400 italic font-normal">Not detected</span>}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Current Location</span>
+                      <p className="font-semibold text-slate-900 mt-0.5">{extraction.extractedData.location || <span className="text-slate-400 italic font-normal">Not detected</span>}</p>
                     </div>
                   </div>
 
+                  {/* Online Profiles Strip */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-200/70">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Linkedin className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">LinkedIn</span>
+                        {extraction.extractedData.linkedInUrl ? (
+                          <a
+                            href={extraction.extractedData.linkedInUrl.startsWith('http') ? extraction.extractedData.linkedInUrl : `https://${extraction.extractedData.linkedInUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-600 hover:underline truncate block"
+                          >
+                            {extraction.extractedData.linkedInUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">Not provided</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Github className="w-4 h-4 text-slate-800 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">GitHub</span>
+                        {extraction.extractedData.githubUrl ? (
+                          <a
+                            href={extraction.extractedData.githubUrl.startsWith('http') ? extraction.extractedData.githubUrl : `https://${extraction.extractedData.githubUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-slate-800 hover:underline truncate block"
+                          >
+                            {extraction.extractedData.githubUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">Not provided</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Globe className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Portfolio / Website</span>
+                        {extraction.extractedData.portfolioUrl ? (
+                          <a
+                            href={extraction.extractedData.portfolioUrl.startsWith('http') ? extraction.extractedData.portfolioUrl : `https://${extraction.extractedData.portfolioUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-indigo-600 hover:underline truncate block"
+                          >
+                            {extraction.extractedData.portfolioUrl.replace(/^https?:\/\/(www\.)?/, '')}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">Not provided</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Professional Summary & Experience Header */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">Professional Summary</span>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
+                      {extraction.extractedData.currentJobTitle && (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700">
+                          Role: {extraction.extractedData.currentJobTitle}
+                        </span>
+                      )}
+                      {extraction.extractedData.totalYearsExperience !== undefined && extraction.extractedData.totalYearsExperience !== null ? (
+                        <span className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold">
+                          {extraction.extractedData.totalYearsExperience} Years Total Exp
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 text-[10px]" title="Dates could not be reliably determined from resume">
+                          Total Exp: Not specified by dates
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {extraction.extractedData.summary ? (
+                    <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/60 p-3 rounded-lg border border-slate-200">
+                      {extraction.extractedData.summary}
+                    </p>
+                  ) : (
+                    <p className="text-slate-400 italic text-xs bg-slate-50/40 p-2.5 rounded-lg border border-dashed border-slate-200">
+                      No professional summary section identified in document.
+                    </p>
+                  )}
+                </div>
+
+                {/* 3 Dedicated Tabs Navigation: Skills, Education, Work Experience */}
+                <div className="pt-2 border-t border-slate-200">
+                  <div className="flex border-b border-slate-200 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExtractedTab('skills')}
+                      className={`pb-2.5 px-4 text-xs font-bold transition-colors border-b-2 flex items-center gap-2 ${
+                        extractedTab === 'skills'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Skills</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-100 text-indigo-800">
+                        {extraction.extractedData.skills?.length || 0}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setExtractedTab('education')}
+                      className={`pb-2.5 px-4 text-xs font-bold transition-colors border-b-2 flex items-center gap-2 ${
+                        extractedTab === 'education'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      <span>Education</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700">
+                        {extraction.extractedData.education?.length || 0}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setExtractedTab('experience')}
+                      className={`pb-2.5 px-4 text-xs font-bold transition-colors border-b-2 flex items-center gap-2 ${
+                        extractedTab === 'experience'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Briefcase className="w-3.5 h-3.5" />
+                      <span>Work Experience</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700">
+                        {extraction.extractedData.experience?.length || 0}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* TAB 1: SKILLS */}
+                  {extractedTab === 'skills' && (
+                    <div className="pt-4 space-y-4">
+                      {/* Recruiter Add Skill Action Bar */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div className="flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={newSkillInput}
+                            onChange={(e) => setNewSkillInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddSkill();
+                              }
+                            }}
+                            placeholder="Add missing skill (e.g. Python, Docker, Communication)..."
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <select
+                          value={newSkillCategory}
+                          onChange={(e) => setNewSkillCategory(e.target.value as any)}
+                          className="px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-md text-slate-700"
+                        >
+                          <option value="technical">Technical Skill / Tool</option>
+                          <option value="softSkills">Soft Skill</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleAddSkill}
+                          disabled={!newSkillInput.trim()}
+                          className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Skill</span>
+                        </button>
+                      </div>
+
+                      {/* Categorized Skills View */}
+                      {extraction.extractedData.categorizedSkills && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {/* Programming Languages */}
+                          {(extraction.extractedData.categorizedSkills.programmingLanguages?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Programming Languages</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.programmingLanguages?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-blue-500 hover:text-blue-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Frameworks & Libraries */}
+                          {(extraction.extractedData.categorizedSkills.frameworks?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Frameworks & Libraries</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.frameworks?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-indigo-500 hover:text-indigo-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Cloud Platforms */}
+                          {(extraction.extractedData.categorizedSkills.cloudPlatforms?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Cloud Platforms</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.cloudPlatforms?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-sky-500 hover:text-sky-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Databases */}
+                          {(extraction.extractedData.categorizedSkills.databases?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Databases & Storage</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.databases?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-purple-500 hover:text-purple-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* DevOps & Tools */}
+                          {(extraction.extractedData.categorizedSkills.devOpsTools?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">DevOps & Tooling</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.devOpsTools?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-emerald-500 hover:text-emerald-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Developer Tools */}
+                          {(extraction.extractedData.categorizedSkills.tools?.length || 0) > 0 && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Developer Tools</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {extraction.extractedData.categorizedSkills.tools?.map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-teal-500 hover:text-teal-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Soft Skills */}
+                          {((extraction.extractedData.softSkills?.length || 0) > 0 || (extraction.extractedData.categorizedSkills.softSkills?.length || 0) > 0) && (
+                            <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1.5">
+                              <span className="text-[10px] font-bold uppercase text-slate-500">Soft Skills & Communication</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {(extraction.extractedData.softSkills || extraction.extractedData.categorizedSkills.softSkills || []).map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium">
+                                    <span>{s}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSkill(s)}
+                                      className="text-amber-500 hover:text-amber-800"
+                                      title={`Remove ${s}`}
+                                    >
+                                      &times;
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* All Skills List with Quick Delete Buttons */}
+                      <div className="pt-2">
+                        <span className="text-xs font-bold text-slate-700 block mb-2">
+                          All Extracted Skills (Click &times; to remove incorrect skills)
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(extraction.extractedData.skills || []).map((sk, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200 transition-colors"
+                            >
+                              <span>{sk}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSkill(sk)}
+                                className="text-slate-400 hover:text-rose-600 font-bold ml-0.5"
+                                title={`Remove ${sk}`}
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                          {(!extraction.extractedData.skills || extraction.extractedData.skills.length === 0) && (
+                            <span className="text-slate-400 italic text-xs">No skills identified. Add one above!</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: EDUCATION */}
+                  {extractedTab === 'education' && (
+                    <div className="pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">Educational Qualifications</span>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddEdu}
+                          className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Education</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {(extraction.extractedData.education || []).map((edu, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-slate-300 transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-slate-900 text-sm">{edu.degree}</span>
+                                {edu.status && (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    edu.status === 'Completed'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {edu.status}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-slate-600 font-medium">{edu.institution}</div>
+                              {edu.fieldOfStudy && (
+                                <div className="text-slate-500 text-[11px]">
+                                  Specialization / Major: <span className="text-slate-700 font-medium">{edu.fieldOfStudy}</span>
+                                </div>
+                              )}
+                              <div className="text-slate-400 text-[11px]">
+                                Duration / Graduation: {edu.year || (edu.startDate && edu.endDate ? `${edu.startDate} - ${edu.endDate}` : 'Not specified')}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 self-end sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditEdu(idx)}
+                                className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded border border-slate-200"
+                                title="Edit education"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEdu(idx)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded border border-slate-200"
+                                title="Delete education"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {(!extraction.extractedData.education || extraction.extractedData.education.length === 0) && (
+                          <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                            No educational details detected in resume. Click "Add Education" to add one manually.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: WORK EXPERIENCE */}
+                  {extractedTab === 'experience' && (
+                    <div className="pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-700">Work Experience & Employment History</span>
+                          {extraction.extractedData.totalYearsExperience !== undefined && extraction.extractedData.totalYearsExperience !== null && (
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              Total: {extraction.extractedData.totalYearsExperience} Years
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddExp}
+                          className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Experience</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {(extraction.extractedData.experience || []).map((exp, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-2 hover:border-slate-300 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm">{exp.title}</span>
+                                  {(exp.isCurrent || (exp.duration && /present|current/i.test(exp.duration))) && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                                      Current Role
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-slate-600 font-semibold mt-0.5">{exp.company}</div>
+                                <div className="text-slate-400 text-[11px] mt-0.5">
+                                  Duration: {exp.duration || (exp.startDate && exp.endDate ? `${exp.startDate} - ${exp.endDate}` : 'Not specified')}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditExp(idx)}
+                                  className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded border border-slate-200"
+                                  title="Edit work experience"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteExp(idx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded border border-slate-200"
+                                  title="Delete work experience"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Job Responsibilities */}
+                            {exp.responsibilities && exp.responsibilities.length > 0 && (
+                              <div className="space-y-1 pt-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-500">Responsibilities:</span>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-600 text-xs">
+                                  {exp.responsibilities.map((r, ridx) => (
+                                    <li key={ridx}>{r}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Description fallback if no bullet list */}
+                            {exp.description && (!exp.responsibilities || exp.responsibilities.length === 0) && (
+                              <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line">{exp.description}</p>
+                            )}
+
+                            {/* Technologies & Tools */}
+                            {exp.technologies && exp.technologies.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1 pt-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-500 mr-1">Tech Used:</span>
+                                {exp.technologies.map((t, tidx) => (
+                                  <span key={tidx} className="px-1.5 py-0.5 bg-slate-200/80 text-slate-700 text-[10px] rounded font-medium">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Key Achievements */}
+                            {exp.achievements && exp.achievements.length > 0 && (
+                              <div className="space-y-1 pt-1">
+                                <span className="text-[10px] uppercase font-bold text-amber-700">Key Achievements:</span>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-600 text-xs">
+                                  {exp.achievements.map((ach, aidx) => (
+                                    <li key={aidx}>{ach}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {(!extraction.extractedData.experience || extraction.extractedData.experience.length === 0) && (
+                          <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                            No work experience items detected. Click "Add Experience" to add one manually.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Certifications & Key Projects */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
                   {/* Certifications */}
                   <div className="space-y-2">
                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -899,7 +1806,41 @@ export const ApplicantDetails: React.FC = () => {
                       )}
                     </div>
                   </div>
+
+                  {/* Languages */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-700">Languages</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(extraction.extractedData.languages || []).map((lang, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs border border-slate-200 font-medium">
+                          {lang}
+                        </span>
+                      ))}
+                      {(!extraction.extractedData.languages || extraction.extractedData.languages.length === 0) && (
+                        <span className="text-slate-400 italic text-xs">Not specified</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Collapsible Extracted Raw Text Viewer */}
+                {extraction.extractedData.extractedText && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawText(!showRawText)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                    >
+                      <span>{showRawText ? 'Hide Document Layout Extracted Text' : 'View Document Layout Extracted Text (Azure Read/Layout Output)'}</span>
+                      <ArrowRight className={`w-3 h-3 transform transition-transform ${showRawText ? 'rotate-90' : ''}`} />
+                    </button>
+                    {showRawText && (
+                      <div className="mt-2 p-3 bg-slate-900 text-slate-200 rounded-lg text-[11px] font-mono whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed border border-slate-800">
+                        {extraction.extractedData.extractedText}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-6 text-center text-slate-400 text-xs">
@@ -907,6 +1848,7 @@ export const ApplicantDetails: React.FC = () => {
               </div>
             )}
           </div>
+
 
           {/* Cover Letter */}
           {application.coverLetter && (
@@ -1344,6 +2286,64 @@ export const ApplicantDetails: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Current Job Title</label>
+                  <input
+                    type="text"
+                    value={editForm.currentJobTitle || ''}
+                    onChange={(e) => setEditForm({ ...editForm, currentJobTitle: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    placeholder="e.g. Senior Software Engineer"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Total Years Experience</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={editForm.totalYearsExperience ?? ''}
+                    onChange={(e) => setEditForm({ ...editForm, totalYearsExperience: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    placeholder="e.g. 5"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">LinkedIn Profile</label>
+                  <input
+                    type="text"
+                    value={editForm.linkedInUrl || ''}
+                    onChange={(e) => setEditForm({ ...editForm, linkedInUrl: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    placeholder="https://linkedin.com/in/..."
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">GitHub Profile</label>
+                  <input
+                    type="text"
+                    value={editForm.githubUrl || ''}
+                    onChange={(e) => setEditForm({ ...editForm, githubUrl: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    placeholder="https://github.com/..."
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Portfolio / Website</label>
+                  <input
+                    type="text"
+                    value={editForm.portfolioUrl || ''}
+                    onChange={(e) => setEditForm({ ...editForm, portfolioUrl: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    placeholder="https://portfolio.dev"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Professional Summary</label>
                 <textarea
@@ -1389,6 +2389,25 @@ export const ApplicantDetails: React.FC = () => {
                   }
                   className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   placeholder="AWS Solutions Architect, PMP..."
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Languages (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editForm.languages?.join(', ') || ''}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      languages: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  placeholder="English, Spanish, German..."
                 />
               </div>
 
@@ -1446,6 +2465,301 @@ export const ApplicantDetails: React.FC = () => {
                 Confirm & Overwrite Profile
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recruiter Add/Edit Education Modal */}
+      {showEduModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingEduIndex !== null ? 'Edit Educational Qualification' : 'Add Educational Qualification'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEduModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEduForm} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Degree / Qualification <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={eduFormData.degree}
+                  onChange={(e) => setEduFormData({ ...eduFormData, degree: e.target.value })}
+                  placeholder="e.g. Bachelor of Science in Computer Science"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Institution / University <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={eduFormData.institution}
+                  onChange={(e) => setEduFormData({ ...eduFormData, institution: e.target.value })}
+                  placeholder="e.g. Stanford University"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Field of Study / Major
+                </label>
+                <input
+                  type="text"
+                  value={eduFormData.fieldOfStudy || ''}
+                  onChange={(e) => setEduFormData({ ...eduFormData, fieldOfStudy: e.target.value })}
+                  placeholder="e.g. Software Engineering / Artificial Intelligence"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Graduation Year / Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={eduFormData.year || ''}
+                    onChange={(e) => setEduFormData({ ...eduFormData, year: e.target.value })}
+                    placeholder="e.g. 2018 - 2022"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Education Status
+                  </label>
+                  <select
+                    value={eduFormData.status || 'Completed'}
+                    onChange={(e) => setEduFormData({ ...eduFormData, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="Completed">Completed</option>
+                    <option value="Pursuing">Pursuing / In Progress</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEduModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs"
+                >
+                  {editingEduIndex !== null ? 'Save Changes' : 'Add Education'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Recruiter Add/Edit Work Experience Modal */}
+      {showExpModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingExpIndex !== null ? 'Edit Work Experience' : 'Add Work Experience'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExpModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExpForm} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Job Title / Designation <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={expFormData.title}
+                    onChange={(e) => setExpFormData({ ...expFormData, title: e.target.value })}
+                    placeholder="e.g. Senior Software Engineer"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Company / Organization <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={expFormData.company}
+                    onChange={(e) => setExpFormData({ ...expFormData, company: e.target.value })}
+                    placeholder="e.g. Google LLC"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Duration String
+                </label>
+                <input
+                  type="text"
+                  value={expFormData.duration || ''}
+                  onChange={(e) => setExpFormData({ ...expFormData, duration: e.target.value })}
+                  placeholder="e.g. Jan 2021 - Present"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Start Date</label>
+                  <input
+                    type="text"
+                    value={expFormData.startDate || ''}
+                    onChange={(e) => setExpFormData({ ...expFormData, startDate: e.target.value })}
+                    placeholder="e.g. 2021 or Jan 2021"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">End Date</label>
+                  <input
+                    type="text"
+                    value={expFormData.endDate || ''}
+                    onChange={(e) => setExpFormData({ ...expFormData, endDate: e.target.value })}
+                    placeholder="e.g. Present or 2023"
+                    disabled={expFormData.isCurrent}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isCurrentRole"
+                  checked={Boolean(expFormData.isCurrent)}
+                  onChange={(e) =>
+                    setExpFormData({
+                      ...expFormData,
+                      isCurrent: e.target.checked,
+                      endDate: e.target.checked ? 'Present' : expFormData.endDate,
+                    })
+                  }
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="isCurrentRole" className="font-semibold text-slate-700">
+                  This is the candidate's current employment role
+                </label>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Responsibilities (one per line)
+                </label>
+                <textarea
+                  rows={3}
+                  value={expFormData.responsibilities?.join('\n') || ''}
+                  onChange={(e) =>
+                    setExpFormData({
+                      ...expFormData,
+                      responsibilities: e.target.value.split('\n').filter((l) => l.trim()),
+                    })
+                  }
+                  placeholder="Designed and maintained scalable microservices...&#10;Mentored junior developers..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Technologies Used (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={expFormData.technologies?.join(', ') || ''}
+                  onChange={(e) =>
+                    setExpFormData({
+                      ...expFormData,
+                      technologies: e.target.value
+                        .split(',')
+                        .map((t) => t.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  placeholder="React, TypeScript, Docker, PostgreSQL"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Key Achievements (one per line)
+                </label>
+                <textarea
+                  rows={2}
+                  value={expFormData.achievements?.join('\n') || ''}
+                  onChange={(e) =>
+                    setExpFormData({
+                      ...expFormData,
+                      achievements: e.target.value.split('\n').filter((l) => l.trim()),
+                    })
+                  }
+                  placeholder="Reduced system latency by 40%...&#10;Awarded Top Performer of Q3..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowExpModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs"
+                >
+                  {editingExpIndex !== null ? 'Save Changes' : 'Add Experience'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

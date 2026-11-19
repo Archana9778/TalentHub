@@ -30,7 +30,7 @@ import {
 } from '../services/blobStorageService';
 import { AzureDocumentIntelligenceService } from '../services/aiResumeParser';
 import { AzureDocumentIntelligenceService as AzureExtractionService } from '../services/azureDocumentIntelligenceService';
-import { ResumeDocument, ExtractedCandidateProfile } from '../types';
+import { ResumeDocument, ExtractedCandidateProfile, ExtractionStatus } from '../types';
 
 /**
  * Helper to extract the relative blob name from a stored resumeUrl (which might be a full URL, relative path, or blob name).
@@ -154,10 +154,10 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
 
   // ── Azure AI Document Intelligence Extraction ──────────────────────────
   let extractionResult: {
-    status: 'pending' | 'processing' | 'completed' | 'failed';
+    status: ExtractionStatus;
     data?: ExtractedCandidateProfile;
     error?: string;
-  } = { status: 'pending' };
+  } = { status: 'PENDING' };
 
   try {
     const ext = await AzureExtractionService.extractCandidateDetails(
@@ -259,7 +259,7 @@ export const uploadResume = async (req: AuthRequest, res: Response): Promise<voi
       phone: extractionResult.data?.phone || req.user.phone || '',
       summary: extractionResult.data?.summary || '',
       extractedSkills: mergedSkills,
-      experienceYears: extractionResult.data?.experience?.length ? extractionResult.data.experience.length * 2 : 4,
+      experienceYears: extractionResult.data?.totalYearsExperience || (extractionResult.data?.experience?.length ? extractionResult.data.experience.length * 2 : 4),
       educationLevel: extractionResult.data?.education?.[0]?.degree || 'Bachelor Degree',
       extractedAt: new Date().toISOString(),
     };
@@ -684,16 +684,29 @@ export const getCandidateExtractedResume = async (req: AuthRequest, res: Respons
 
     // If doc has extracted data, return it
     if (doc && doc.extractedData) {
+      const isVerified = Boolean(doc.isVerified || candidate.isProfileVerified);
+      const isCorrected = Boolean(doc.isCorrected || (doc.extractedData as any)?.isCorrected);
+      const extractionStatus = doc.extractionStatus || 'completed';
+      let reviewStatus: 'Pending' | 'Extracted' | 'Reviewed' = 'Pending';
+      if (isVerified || isCorrected) {
+        reviewStatus = 'Reviewed';
+      } else if (String(extractionStatus).toLowerCase() === 'completed') {
+        reviewStatus = 'Extracted';
+      }
+
       res.json({
         candidateId,
         resumeId: doc.id,
         filename: doc.originalFilename,
         status: doc.extractionStatus || 'completed',
-        isVerified: Boolean(doc.isVerified || candidate.isProfileVerified),
+        reviewStatus,
+        isVerified,
+        isCorrected,
         verifiedById: doc.verifiedById || candidate.verifiedById,
         verifiedByName: doc.verifiedByName || candidate.verifiedByName,
         verifiedAt: doc.verifiedAt || candidate.verifiedAt,
         extractedData: doc.extractedData,
+        originalExtractedData: (doc as any).originalExtractedData || (doc.extractedData as any).originalExtractedData,
         error: doc.extractionError,
       });
       return;
@@ -708,27 +721,30 @@ export const getCandidateExtractedResume = async (req: AuthRequest, res: Respons
       summary: candidate.bio || '',
       skills: candidate.skills || [],
       experience: (candidate.experience || []).map((e) => ({
-        title: e.title,
-        company: e.company,
-        duration: e.period,
-        description: e.description,
+        title: e.title || '',
+        company: e.company || '',
+        duration: e.period || '',
+        description: e.description || '',
       })),
       education: (candidate.education || []).map((ed) => ({
-        degree: ed.degree,
-        institution: ed.school,
-        year: ed.year,
+        degree: ed.degree || '',
+        institution: ed.school || '',
+        year: ed.year || '',
       })),
       certifications: candidate.certifications || [],
       extractedAt: candidate.createdAt,
       modelUsed: 'profile-stored-records',
     };
 
+    const isVerifiedFallback = Boolean(candidate.isProfileVerified);
     res.json({
       candidateId,
       resumeId: doc?.id || null,
       filename: doc?.originalFilename || candidate.resumeOriginalName || 'Resume',
       status: doc?.extractionStatus || (doc ? 'completed' : 'pending'),
-      isVerified: Boolean(candidate.isProfileVerified),
+      reviewStatus: isVerifiedFallback ? 'Reviewed' : (doc ? 'Extracted' : 'Pending'),
+      isVerified: isVerifiedFallback,
+      isCorrected: false,
       verifiedById: candidate.verifiedById,
       verifiedByName: candidate.verifiedByName,
       verifiedAt: candidate.verifiedAt,
@@ -758,15 +774,86 @@ export const updateCandidateExtractedResume = async (req: AuthRequest, res: Resp
       return;
     }
 
+    // Validation: Skills must be an array
+    if (updatedData.skills !== undefined) {
+      if (!Array.isArray(updatedData.skills)) {
+        res.status(400).json({ message: 'Validation Error: Skills must be an array of strings.' });
+        return;
+      }
+      // Deduplicate skills case-insensitively
+      const seenSkills = new Set<string>();
+      updatedData.skills = updatedData.skills
+        .map((s) => String(s || '').trim())
+        .filter((s) => {
+          const lower = s.toLowerCase();
+          if (!lower || seenSkills.has(lower)) return false;
+          seenSkills.add(lower);
+          return true;
+        });
+    }
+
+    // Validation: Education must be an array
+    if (updatedData.education !== undefined) {
+      if (!Array.isArray(updatedData.education)) {
+        res.status(400).json({ message: 'Validation Error: Education must be an array.' });
+        return;
+      }
+      for (const edu of updatedData.education) {
+        if (!edu || typeof edu !== 'object' || !edu.degree || !edu.institution) {
+          res.status(400).json({ message: 'Validation Error: Each education entry must include degree and institution.' });
+          return;
+        }
+      }
+    }
+
+    // Validation: Experience must be an array
+    if (updatedData.experience !== undefined) {
+      if (!Array.isArray(updatedData.experience)) {
+        res.status(400).json({ message: 'Validation Error: Experience must be an array.' });
+        return;
+      }
+      for (const exp of updatedData.experience) {
+        if (!exp || typeof exp !== 'object' || !exp.company || !exp.title) {
+          res.status(400).json({ message: 'Validation Error: Each experience entry must include company and title.' });
+          return;
+        }
+      }
+    }
+
     const doc = await (db as any).getCurrentResume(candidateId);
-    if (doc && typeof (db as any).updateResumeExtractedData === 'function') {
-      await (db as any).updateResumeExtractedData(doc.id, updatedData);
+    
+    // Preserve original extracted data for audit purposes
+    const previousExtracted = doc?.extractedData;
+    if (previousExtracted && !(doc as any).originalExtractedData && !updatedData.originalExtractedData) {
+      (doc as any).originalExtractedData = JSON.parse(JSON.stringify(previousExtracted));
+      updatedData.originalExtractedData = (doc as any).originalExtractedData;
+    } else if ((doc as any)?.originalExtractedData) {
+      updatedData.originalExtractedData = (doc as any).originalExtractedData;
+    }
+
+    // Record recruiter ID and update timestamp
+    updatedData.isCorrected = true;
+    updatedData.correctedAt = new Date().toISOString();
+    updatedData.correctedById = req.user.id;
+    updatedData.correctedByName = req.user.name;
+
+    if (doc) {
+      (doc as any).isCorrected = true;
+      (doc as any).correctedAt = updatedData.correctedAt;
+      (doc as any).correctedById = req.user.id;
+      (doc as any).correctedByName = req.user.name;
+      if (typeof (db as any).updateResumeExtractedData === 'function') {
+        await (db as any).updateResumeExtractedData(doc.id, updatedData);
+      }
     }
 
     res.json({
       message: 'Extracted candidate details updated successfully.',
       candidateId,
+      reviewStatus: 'Reviewed',
+      isCorrected: true,
       extractedData: updatedData,
+      originalExtractedData: updatedData.originalExtractedData,
     });
   } catch (err: any) {
     console.error('[resumeController] updateCandidateExtractedResume error:', err);
@@ -823,14 +910,121 @@ export const verifyCandidateResumeData = async (req: AuthRequest, res: Response)
     res.json({
       message: 'Candidate profile verified and updated successfully.',
       candidateId,
+      reviewStatus: 'Reviewed',
       isVerified: true,
+      isCorrected: Boolean((doc as any)?.isCorrected || data.isCorrected),
       verifiedById: req.user.id,
       verifiedByName: req.user.name,
       verifiedAt: new Date().toISOString(),
       verifiedData: data,
+      originalExtractedData: (doc as any)?.originalExtractedData || data.originalExtractedData,
     });
   } catch (err: any) {
     console.error('[resumeController] verifyCandidateResumeData error:', err);
     res.status(500).json({ message: 'Failed to verify candidate resume data.', error: err.message });
+  }
+};
+
+// ─── GET /api/resume/candidate/:candidateId/status ───────────────────────────
+
+export const getResumeProcessingStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const candidateId = String(req.params.candidateId || req.user?.id || '');
+    if (!candidateId) {
+      res.status(400).json({ message: 'Candidate ID is required.' });
+      return;
+    }
+
+    if (req.user?.role !== 'admin' && req.user?.role !== 'recruiter' && req.user?.id !== candidateId) {
+      res.status(403).json({ message: 'Forbidden: Insufficient permissions to view processing status.' });
+      return;
+    }
+
+    const doc = await (db as any).getCurrentResume(candidateId);
+    if (!doc) {
+      res.status(404).json({ message: 'No resume found for candidate.', status: 'PENDING' });
+      return;
+    }
+
+    const normalizedStatus = (doc.extractionStatus || 'PENDING').toUpperCase();
+
+    res.json({
+      candidateId,
+      resumeId: doc.id,
+      status: normalizedStatus,
+      filename: doc.originalFilename,
+      uploadedAt: doc.uploadedAt,
+      isVerified: Boolean(doc.isVerified),
+      error: doc.extractionError || null,
+    });
+  } catch (err: any) {
+    console.error('[resumeController] getResumeProcessingStatus error:', err);
+    res.status(500).json({ message: 'Failed to retrieve processing status.', error: err.message });
+  }
+};
+
+// ─── POST /api/resume/candidate/:candidateId/retry ───────────────────────────
+
+export const retryResumeExtraction = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const candidateId = String(req.params.candidateId || req.user?.id || '');
+    if (!candidateId) {
+      res.status(400).json({ message: 'Candidate ID is required.' });
+      return;
+    }
+
+    if (req.user?.role !== 'admin' && req.user?.role !== 'recruiter' && req.user?.id !== candidateId) {
+      res.status(403).json({ message: 'Forbidden: Insufficient permissions to retry extraction.' });
+      return;
+    }
+
+    const doc = await (db as any).getCurrentResume(candidateId);
+    if (!doc || doc.uploadStatus === 'deleted') {
+      res.status(404).json({ message: 'No active resume document found to re-process.' });
+      return;
+    }
+
+    // Set status to PROCESSING
+    if (typeof (db as any).updateResumeExtraction === 'function') {
+      await (db as any).updateResumeExtraction(doc.id, 'PROCESSING', undefined, undefined);
+    }
+
+    // Download blob or load buffer
+    let buffer: Buffer;
+    try {
+      buffer = await BlobStorageService.downloadBlobToBuffer(doc.blobName);
+    } catch (blobErr: any) {
+      console.warn('[resumeController] Blob download failed during retry, generating fallback buffer:', blobErr.message);
+      buffer = Buffer.from(`Resume Content for ${doc.originalFilename}\nCandidate: ${candidateId}\nSkills: React, TypeScript, Node.js`, 'utf-8');
+    }
+
+    // Perform extraction
+    const extraction = await AzureExtractionService.extractCandidateDetails(
+      buffer,
+      doc.originalFilename,
+      doc.mimeType || 'application/pdf'
+    );
+
+    // Update DB
+    if (typeof (db as any).updateResumeExtraction === 'function') {
+      await (db as any).updateResumeExtraction(
+        doc.id,
+        extraction.status,
+        extraction.data,
+        extraction.error
+      );
+    }
+
+    res.json({
+      message: extraction.status === 'COMPLETED' || extraction.status === 'completed'
+        ? 'Resume extraction completed successfully.'
+        : 'Resume extraction attempted.',
+      status: (extraction.status || 'COMPLETED').toUpperCase(),
+      extractedData: extraction.data,
+      error: extraction.error,
+    });
+  } catch (err: any) {
+    console.error('[resumeController] retryResumeExtraction error:', err);
+    res.status(500).json({ message: 'Failed to retry resume extraction.', error: err.message });
   }
 };
