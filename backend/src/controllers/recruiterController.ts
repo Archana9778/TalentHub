@@ -77,8 +77,8 @@ export const addRecruiter = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const assignedCompanyRole: CompanyRole =
-      rawCompanyRole === 'admin' || rawRole === 'admin' ? 'admin' : 'recruiter';
+    // Newly invited or added HR members must always default to Regular HR
+    const assignedCompanyRole: CompanyRole = 'recruiter';
     const assignedStatus: UserStatus = rawStatus === 'inactive' ? 'inactive' : 'active';
     const resolvedPhone = contactNumber || phone || '';
     const resolvedDesignation = designation || title || 'Technical Recruiter';
@@ -106,6 +106,31 @@ export const addRecruiter = async (req: AuthRequest, res: Response): Promise<voi
     };
 
     await db.createUser(newRecruiter);
+
+    try {
+      await db.createActivityLog({
+        id: `act-${uuidv4().substring(0, 8)}`,
+        companyId: company.id,
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: 'CREATE',
+        module: 'RECRUITERS',
+        recordId: newRecruiter.id,
+        recordName: newRecruiter.name,
+        oldValues: null,
+        newValues: {
+          id: newRecruiter.id,
+          name: newRecruiter.name,
+          email: newRecruiter.email,
+          companyRole: newRecruiter.companyRole,
+          designation: newRecruiter.designation,
+          status: newRecruiter.status,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    } catch (logErr) {
+      console.error('Failed to log recruiter creation activity:', logErr);
+    }
 
     const { password: _, ...safeRecruiter } = newRecruiter;
     res.status(201).json({
@@ -289,6 +314,17 @@ export const updateRecruiter = async (req: AuthRequest, res: Response): Promise<
     // Only company admins or platform admin can change companyRole or status
     if (req.user.role === 'admin' || (req.user.role === 'recruiter' && req.user.companyRole === 'admin')) {
       if (companyRole !== undefined) {
+        // Prevent demoting the sole active Company Admin of the company
+        if (target.id === req.user.id && companyRole !== 'admin' && target.companyRole === 'admin') {
+          const companyRecruiters = await db.getRecruiters(target.companyId);
+          const companyAdmins = companyRecruiters.filter((r) => r.companyRole === 'admin' && r.status === 'active');
+          if (companyAdmins.length <= 1) {
+            res.status(400).json({
+              message: 'Cannot demote the sole active company administrator account.',
+            });
+            return;
+          }
+        }
         updates.companyRole = companyRole;
       }
       if (status !== undefined) {
@@ -300,6 +336,34 @@ export const updateRecruiter = async (req: AuthRequest, res: Response): Promise<
     if (!updated) {
       res.status(500).json({ message: 'Failed to update recruiter details.' });
       return;
+    }
+
+    try {
+      const oldValues: Record<string, any> = {};
+      const newValues: Record<string, any> = {};
+      for (const key of Object.keys(updates) as (keyof User)[]) {
+        if (key !== 'password' && key !== 'updatedAt' && updates[key] !== undefined && updates[key] !== (target as any)[key]) {
+          oldValues[key] = (target as any)[key];
+          newValues[key] = updates[key];
+        }
+      }
+      if (Object.keys(newValues).length > 0) {
+        await db.createActivityLog({
+          id: `act-${uuidv4().substring(0, 8)}`,
+          companyId: target.companyId || req.user.companyId || '',
+          actorUserId: req.user.id,
+          actorName: req.user.name,
+          action: 'UPDATE',
+          module: 'RECRUITERS',
+          recordId: target.id,
+          recordName: updates.name || target.name,
+          oldValues,
+          newValues,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (logErr) {
+      console.error('Failed to log recruiter update activity:', logErr);
     }
 
     // Update recruiter name in jobs if name changed
@@ -372,6 +436,28 @@ export const updateRecruiterStatus = async (req: AuthRequest, res: Response): Pr
     }
 
     const updated = await db.updateUser(id, { status: status as UserStatus });
+    if (!updated) {
+      res.status(500).json({ message: 'Failed to update recruiter status.' });
+      return;
+    }
+
+    try {
+      await db.createActivityLog({
+        id: `act-${uuidv4().substring(0, 8)}`,
+        companyId: target.companyId || req.user.companyId || '',
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: 'UPDATE',
+        module: 'RECRUITERS',
+        recordId: target.id,
+        recordName: target.name,
+        oldValues: { status: target.status },
+        newValues: { status },
+        createdAt: new Date().toISOString(),
+      });
+    } catch (logErr) {
+      console.error('Failed to log recruiter status update activity:', logErr);
+    }
     if (!updated) {
       res.status(500).json({ message: 'Failed to update recruiter status.' });
       return;

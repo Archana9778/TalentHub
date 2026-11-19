@@ -6,6 +6,8 @@ import {
   deleteUser,
   getReportedJobs,
   updateReportStatus,
+  getRecruiters,
+  updateCompanyStatus,
 } from '../controllers/adminController';
 import { authenticateToken, requireRoles } from '../middleware/auth';
 
@@ -20,6 +22,8 @@ router.patch('/users/:id', updateUserStatus);
 router.delete('/users/:id', deleteUser);
 router.get('/reported-jobs', getReportedJobs);
 router.patch('/reported-jobs/:id', updateReportStatus);
+router.get('/recruiters', getRecruiters);
+router.patch('/companies/:id/status', updateCompanyStatus);
 
 export default router;
 

@@ -290,7 +290,7 @@ export const Register: React.FC = () => {
             {role === 'recruiter' && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Company / Organization <span className="text-rose-500">*</span>
+                  New Company / Organization Name <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
@@ -305,17 +305,22 @@ export const Register: React.FC = () => {
                         setFieldErrors(copy);
                       }
                     }}
-                    placeholder="e.g. CloudScale Technologies"
+                    placeholder="e.g. Acme Recruiting Inc."
                     required
                     aria-invalid={!!fieldErrors.companyName}
-                    aria-describedby={fieldErrors.companyName ? 'comp-error' : undefined}
+                    aria-describedby={fieldErrors.companyName ? 'comp-error' : 'comp-hint'}
                     className={`saas-input pl-9 text-xs ${fieldErrors.companyName ? 'border-rose-400 focus:border-rose-500' : ''}`}
                   />
                 </div>
-                {fieldErrors.companyName && (
+                {fieldErrors.companyName ? (
                   <p id="comp-error" className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>{fieldErrors.companyName}</span>
+                  </p>
+                ) : (
+                  <p id="comp-hint" className="mt-1 text-[11px] text-slate-400">
+                    This creates a <strong>new company</strong>. You'll be assigned as its Company Admin.
+                    If joining an existing company, ask your Company Admin to add you from Recruiter Management.
                   </p>
                 )}
               </div>

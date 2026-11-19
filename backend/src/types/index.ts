@@ -16,6 +16,15 @@ export interface UserExperience {
   period?: string;
   createdAt?: string;
   updatedAt?: string;
+  title: string;
+  company: string;
+  period?: string;
+  description?: string;
+  location?: string;
+  employmentType?: string;
+  startDate?: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
 }
 
 export interface UserEducation {
@@ -63,6 +72,14 @@ export interface CandidateExperience {
   description?: string;
   createdAt?: string;
   updatedAt?: string;
+  degree: string;
+  school: string;
+  year?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  description?: string;
 }
 
 export interface User {
@@ -94,6 +111,11 @@ export interface User {
   resumeUrl?: string;
   resumeOriginalName?: string;
   parsedResumeData?: ParsedResumeData;
+  extractedProfile?: ExtractedCandidateProfile;
+  isProfileVerified?: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -135,6 +157,37 @@ export interface RevokedToken {
   createdAt: string;
 }
 
+export interface ExtractedExperienceItem {
+  company: string;
+  title: string;
+  duration: string;
+  description?: string;
+}
+
+export interface ExtractedEducationItem {
+  degree: string;
+  institution: string;
+  year: string;
+}
+
+export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ExtractedCandidateProfile {
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  summary: string;
+  skills: string[];
+  experience: ExtractedExperienceItem[];
+  education: ExtractedEducationItem[];
+  certifications: string[];
+  extractedAt: string;
+  rawTextPreview?: string;
+  confidence?: number;
+  modelUsed?: string;
+}
+
 export interface ParsedResumeData {
   fullName: string;
   email: string;
@@ -160,6 +213,7 @@ export interface Company {
   industry: string;
   size: string;
   verified: boolean;
+  status?: 'active' | 'suspended';
   createdAt: string;
   updatedAt?: string;
 }
@@ -170,6 +224,7 @@ export interface JobCategory {
   description: string;
   icon: string;
   jobCount: number;
+  isActive?: boolean;
 }
 
 export type WorkplaceType = 'Remote' | 'On-site' | 'Hybrid';
@@ -202,6 +257,8 @@ export interface Job {
   isFeatured: boolean;
   applicantsCount: number;
   viewsCount: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -327,6 +384,11 @@ export interface ReportedJob {
   reason: string;
   details: string;
   status: 'pending' | 'resolved' | 'dismissed';
+  reviewedByUserId?: string;
+  reviewedByName?: string;
+  adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+  adminReason?: string;
+  reviewedAt?: string;
   createdAt: string;
 }
 
@@ -396,6 +458,51 @@ export interface ResumeDocument {
   checksumSha256: string;
   uploadStatus: ResumeUploadStatus;
   isCurrent: boolean;
+  extractionStatus?: ExtractionStatus;
+  extractedData?: ExtractedCandidateProfile;
+  extractionError?: string;
+  isVerified?: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
   uploadedAt: string;
   createdAt: string;
+}
+
+// ─── Activity Log / Audit Trail ─────────────────────────────────────────────
+
+export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE';
+
+export interface ActivityLog {
+  id: string;
+  companyId: string;
+  actorUserId: string;
+  actorName: string;
+  action: ActivityAction;
+  module: string;
+  recordId: string;
+  recordName: string;
+  oldValues?: Record<string, any> | null;
+  newValues?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface ActivityLogFilter {
+  companyId?: string;
+  action?: ActivityAction | string;
+  module?: string;
+  actor?: string;
+  actorUserId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ActivityLogsResponse {
+  logs: ActivityLog[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

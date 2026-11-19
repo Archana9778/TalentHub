@@ -4,6 +4,7 @@ export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
   id?: string;
+
   candidateId?: string;
   title: string;
   company: string;
@@ -12,7 +13,8 @@ export interface UserExperience {
   startDate?: string;
   endDate?: string;
   isCurrent?: boolean;
-  description: string;
+  currentlyWorking?: boolean;
+  description?: string;
   period?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -63,6 +65,58 @@ export interface CandidateExperience {
   description?: string;
   createdAt?: string;
   updatedAt?: string;
+  degree: string;
+  school: string;
+  year?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  description?: string;
+}
+
+export interface ExtractedExperienceItem {
+  company: string;
+  title: string;
+  duration: string;
+  description?: string;
+}
+
+export interface ExtractedEducationItem {
+  degree: string;
+  institution: string;
+  year: string;
+}
+
+export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ExtractedCandidateProfile {
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  summary: string;
+  skills: string[];
+  experience: ExtractedExperienceItem[];
+  education: ExtractedEducationItem[];
+  certifications: string[];
+  extractedAt: string;
+  rawTextPreview?: string;
+  confidence?: number;
+  modelUsed?: string;
+}
+
+export interface CandidateExtractionResponse {
+  candidateId: string;
+  resumeId: string | null;
+  filename: string;
+  status: ExtractionStatus;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
+  extractedData: ExtractedCandidateProfile;
+  error?: string;
 }
 
 export interface ParsedResumeData {
@@ -101,6 +155,11 @@ export interface User {
   resumeUrl?: string;
   resumeOriginalName?: string;
   parsedResumeData?: ParsedResumeData;
+  extractedProfile?: ExtractedCandidateProfile;
+  isProfileVerified?: boolean;
+  verifiedById?: string;
+  verifiedByName?: string;
+  verifiedAt?: string;
   lastLoginAt?: string;
   createdAt: string;
   updatedAt?: string;
@@ -141,6 +200,7 @@ export interface Company {
   industry: string;
   size: string;
   verified: boolean;
+  status?: 'active' | 'suspended';
   createdAt: string;
   updatedAt?: string;
 }
@@ -151,6 +211,7 @@ export interface JobCategory {
   description: string;
   icon: string;
   jobCount: number;
+  isActive?: boolean;
 }
 
 export type WorkplaceType = 'Remote' | 'On-site' | 'Hybrid';
@@ -183,6 +244,8 @@ export interface Job {
   isFeatured: boolean;
   applicantsCount: number;
   viewsCount: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -308,6 +371,12 @@ export interface ReportedJob {
   reason: string;
   details: string;
   status: 'pending' | 'resolved' | 'dismissed';
+  reviewedByUserId?: string;
+  reviewedByName?: string;
+  adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+  adminReason?: string;
+  reviewedAt?: string;
+  currentJobStatus?: JobStatus;
   createdAt: string;
 }
 
@@ -336,4 +405,42 @@ export interface SystemStats {
   stageCounts: Record<ApplicationStage, number>;
   topSkillsInDemand: { skill: string; count: number }[];
   timeToHireDaysAverage: number;
+}
+
+// ─── Activity Log / Audit Trail ─────────────────────────────────────────────
+
+export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE';
+
+export interface ActivityLog {
+  id: string;
+  companyId: string;
+  actorUserId: string;
+  actorName: string;
+  action: ActivityAction;
+  module: string;
+  recordId: string;
+  recordName: string;
+  oldValues?: Record<string, any> | null;
+  newValues?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface ActivityLogFilter {
+  companyId?: string;
+  action?: ActivityAction | string;
+  module?: string;
+  actor?: string;
+  actorUserId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ActivityLogsResponse {
+  logs: ActivityLog[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

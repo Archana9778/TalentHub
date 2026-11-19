@@ -4,36 +4,52 @@ import {
   Plus,
   Trash2,
   CheckCircle2,
+  AlertCircle,
   Briefcase,
   Code2,
   Cloud,
   BrainCircuit,
   ShieldCheck,
   LayoutDashboard,
+  Search,
+  Edit2,
+  Power,
   X,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { JobCategory } from '../../types';
 import { Loading } from '../../components/Loading';
 
+const ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
+  Code2,
+  Cloud,
+  BrainCircuit,
+  ShieldCheck,
+  Briefcase,
+  LayoutDashboard,
+};
+
 export const Categories: React.FC = () => {
   const [categories, setCategories] = useState<JobCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Modal
+  // Modal State
   const [showModal, setShowModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<JobCategory | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('Code2');
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const fetchCats = async () => {
     try {
-      const res = await api.getCategories();
+      const res = await api.getCategories({ includeInactive: true });
       setCategories(res.categories);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Failed to fetch categories.' });
     } finally {
       setLoading(false);
     }
@@ -43,35 +59,93 @@ export const Categories: React.FC = () => {
     fetchCats();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+    setEditingCategory(null);
+    setName('');
+    setDescription('');
+    setIcon('Code2');
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (cat: JobCategory) => {
+    setEditingCategory(cat);
+    setName(cat.name);
+    setDescription(cat.description || '');
+    setIcon(cat.icon || 'Code2');
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      setFormError('Category name is required.');
+      return;
+    }
     setSubmitting(true);
+    setFormError(null);
+
     try {
-      const res = await api.createCategory({ name, description, icon });
-      setCategories([...categories, res.category]);
+      if (editingCategory) {
+        const res = await api.updateCategory(editingCategory.id, {
+          name: name.trim(),
+          description: description.trim(),
+          icon,
+        });
+        setCategories(categories.map((c) => (c.id === editingCategory.id ? res.category : c)));
+        setFeedback({ type: 'success', message: `Category "${res.category.name}" updated successfully.` });
+      } else {
+        const res = await api.createCategory({
+          name: name.trim(),
+          description: description.trim(),
+          icon,
+        });
+        setCategories([...categories, res.category]);
+        setFeedback({ type: 'success', message: `New category "${res.category.name}" created successfully.` });
+      }
       setShowModal(false);
-      setName('');
-      setDescription('');
-      setFeedback('New category added.');
-      setTimeout(() => setFeedback(null), 2500);
-    } catch (err) {
-      console.error(err);
+      setTimeout(() => setFeedback(null), 3000);
+    } catch (err: any) {
+      setFormError(err?.message || 'An error occurred while saving the category.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this category?')) return;
+  const handleToggleStatus = async (cat: JobCategory) => {
     try {
-      await api.deleteCategory(id);
-      setCategories(categories.filter((c) => c.id !== id));
-      setFeedback('Category deleted.');
-      setTimeout(() => setFeedback(null), 2500);
-    } catch (err) {
-      console.error(err);
+      const res = await api.toggleCategoryStatus(cat.id);
+      setCategories(categories.map((c) => (c.id === cat.id ? res.category : c)));
+      setFeedback({
+        type: 'success',
+        message: `Category "${cat.name}" has been ${res.category.isActive ? 'activated' : 'deactivated'}.`,
+      });
+      setTimeout(() => setFeedback(null), 3000);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Failed to toggle status.' });
+      setTimeout(() => setFeedback(null), 4000);
     }
   };
+
+  const handleDelete = async (cat: JobCategory) => {
+    if (!window.confirm(`Are you sure you want to permanently delete category "${cat.name}"?`)) return;
+    try {
+      await api.deleteCategory(cat.id);
+      setCategories(categories.filter((c) => c.id !== cat.id));
+      setFeedback({ type: 'success', message: `Category "${cat.name}" removed.` });
+      setTimeout(() => setFeedback(null), 3000);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Failed to delete category.' });
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  };
+
+  const filteredCategories = categories.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.description.toLowerCase().includes(search.toLowerCase())
+  );
 
   if (loading) return <Loading message="Loading job classification taxonomy..." />;
 
@@ -79,17 +153,18 @@ export const Categories: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Job Categories Taxonomy
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <FolderTree className="w-6 h-6 text-emerald-600" />
+            <span>Job Categories Taxonomy</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Organize engineering job classifications across cloud, full-stack, AI, and security domains.
+            Organize engineering job classifications, monitor active job counts, and safely manage taxonomy lifecycle.
           </p>
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs shrink-0"
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs shrink-0 transition"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Category</span>
@@ -97,99 +172,227 @@ export const Categories: React.FC = () => {
       </div>
 
       {feedback && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{feedback}</span>
+        <div
+          className={`p-3.5 border rounded-xl flex items-center gap-2.5 text-xs font-semibold ${
+            feedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          {feedback.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
+          <span>{feedback.message}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {categories.map((cat) => (
-          <div
-            key={cat.id}
-            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-emerald-300 transition-colors"
-          >
-            <div>
-              <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                  <FolderTree className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">
-                  {cat.jobCount || 0} Openings
-                </span>
-              </div>
-
-              <h2 className="font-bold text-slate-900 text-sm mt-3">{cat.name}</h2>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                {cat.description}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
-              <button
-                onClick={() => handleDelete(cat.id)}
-                className="text-slate-400 hover:text-rose-600 p-1"
-                title="Delete category"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search categories..."
+            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+        <div className="text-xs text-slate-500 font-medium self-end sm:self-center">
+          Showing <span className="font-bold text-slate-700">{filteredCategories.length}</span> of{' '}
+          <span className="font-bold text-slate-700">{categories.length}</span> categories
+        </div>
       </div>
 
+      {/* Categories Grid / Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+              <tr>
+                <th className="py-3 px-4">Category</th>
+                <th className="py-3 px-4">Description</th>
+                <th className="py-3 px-4 text-center">Associated Jobs</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    No categories found matching your query.
+                  </td>
+                </tr>
+              ) : (
+                filteredCategories.map((cat) => {
+                  const IconComp = ICON_MAP[cat.icon] || Briefcase;
+                  const isActive = cat.isActive !== false;
+
+                  return (
+                    <tr key={cat.id} className="hover:bg-slate-50/70 transition">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-xl shrink-0 ${isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                            <IconComp className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 text-sm block">{cat.name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{cat.id}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
+                        {cat.description || <span className="text-slate-400 italic">No description provided</span>}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs bg-slate-100 text-slate-700">
+                          {cat.jobCount} {cat.jobCount === 1 ? 'Job' : 'Jobs'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            isActive
+                              ? 'bg-emerald-100/70 text-emerald-800'
+                              : 'bg-rose-100/70 text-rose-800'
+                          }`}
+                        >
+                          {isActive ? 'Active' : 'Deactivated'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            onClick={() => openEditModal(cat)}
+                            title="Edit Category Details"
+                            className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleToggleStatus(cat)}
+                            title={isActive ? 'Deactivate Category' : 'Activate Category'}
+                            className={`p-1.5 rounded-lg transition ${
+                              isActive
+                                ? 'text-amber-600 hover:bg-amber-50'
+                                : 'text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                          >
+                            <Power className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(cat)}
+                            title={cat.jobCount > 0 ? 'Cannot delete: Category has linked jobs' : 'Permanently Delete'}
+                            disabled={cat.jobCount > 0}
+                            className={`p-1.5 rounded-lg transition ${
+                              cat.jobCount > 0
+                                ? 'text-slate-300 cursor-not-allowed'
+                                : 'text-rose-500 hover:bg-rose-50'
+                            }`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-bold text-slate-900">Add New Category</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base">
+                {editingCategory ? 'Edit Category' : 'Create Job Category'}
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 rounded-lg p-1"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Category Name *
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Category Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Site Reliability & Observability"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  placeholder="e.g. Artificial Intelligence & ML"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Description
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
                 <textarea
                   rows={3}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Summary of roles classified under this category..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800"
+                  placeholder="Brief description of skills and roles grouped under this taxonomy category..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Display Icon</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {Object.keys(ICON_MAP).map((iconKey) => {
+                    const Comp = ICON_MAP[iconKey];
+                    const isSelected = icon === iconKey;
+                    return (
+                      <button
+                        key={iconKey}
+                        type="button"
+                        onClick={() => setIcon(iconKey)}
+                        className={`p-2.5 rounded-xl border flex items-center justify-center transition ${
+                          isSelected
+                            ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-xs ring-2 ring-emerald-500/20'
+                            : 'border-slate-200 hover:bg-slate-50 text-slate-500'
+                        }`}
+                      >
+                        <Comp className="w-5 h-5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition shadow-xs"
                 >
-                  {submitting ? 'Saving...' : 'Add Category'}
+                  {submitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
                 </button>
               </div>
             </form>
@@ -199,4 +402,3 @@ export const Categories: React.FC = () => {
     </div>
   );
 };
-

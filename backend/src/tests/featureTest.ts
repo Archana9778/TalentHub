@@ -1,4 +1,4 @@
-process.env.NODE_ENV = 'test';
+import './testEnv';
 import http from 'http';
 import { Duplex } from 'stream';
 import { app } from '../server';

@@ -2,6 +2,8 @@ import axios, { AxiosError } from 'axios';
 import {
   User,
   CandidateProfile,
+  UserEducation,
+  UserExperience,
   Job,
   Application,
   Company,
@@ -16,6 +18,10 @@ import {
   SkillComparisonResult,
   CandidateEducation,
   CandidateExperience,
+  ActivityLogFilter,
+  ActivityLogsResponse,
+  ExtractedCandidateProfile,
+  CandidateExtractionResponse,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -161,36 +167,95 @@ export const api = {
     const res = await apiClient.post<{ message: string; education: CandidateEducation }>(
       '/candidate/education',
       data
+  addCandidateSkill: async (skill: string) => {
+    const res = await apiClient.post<{ message: string; skills: string[] }>(
+      '/candidate/skills',
+      { skill }
     );
     return res.data;
   },
 
-  updateEducation: async (
-    id: string,
-    data: Partial<Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
-  ) => {
-    const res = await apiClient.put<{ message: string; education: CandidateEducation }>(
-      `/candidate/education/${id}`,
-      data
+  removeCandidateSkill: async (skill: string) => {
+    const res = await apiClient.delete<{ message: string; skills: string[] }>(
+      `/candidate/skills/${encodeURIComponent(skill)}`
     );
     return res.data;
   },
 
-  deleteEducation: async (id: string) => {
-    const res = await apiClient.delete<{ message: string }>(`/candidate/education/${id}`);
+updateEducation: async (
+  id: string,
+  data: Partial<Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
+) => {
+  const res = await apiClient.put<{ message: string; education: CandidateEducation }>(
+    `/candidate/education/${id}`,
+    data
+  );
+  return res.data;
+},
+
+addCandidateEducation: async (edu: Partial<UserEducation>) => {
+  const res = await apiClient.post<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+    '/candidate/education',
+    edu
+  );
+  return res.data;
+},
+
+deleteEducation: async (id: string) => {
+  const res = await apiClient.delete<{ message: string }>(`/candidate/education/${id}`);
+  return res.data;
+},
+
+// --- Candidate Work Experience ---
+getExperience: async () => {
+  const res = await apiClient.get<{ experience: CandidateExperience[] }>('/candidate/experience');
+  return res.data;
+},
+
+addExperience: async (
+  data: Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>
+) => {
+  const res = await apiClient.post<{ message: string; experience: CandidateExperience }>(
+    '/candidate/experience',
+    data
+  );
+  return res.data;
+},
+
+updateCandidateEducation: async (id: string, edu: Partial<UserEducation>) => {
+  const res = await apiClient.put<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+    `/candidate/education/${encodeURIComponent(id)}`,
+    edu
+  );
+  return res.data;
+},
+
+deleteCandidateEducation: async (id: string) => {
+  const res = await apiClient.delete<{ message: string; education: UserEducation[] }>(
+    `/candidate/education/${encodeURIComponent(id)}`
+  );
+  return res.data;
+},
+
+addCandidateExperience: async (exp: Partial<UserExperience>) => {
+  const res = await apiClient.post<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
+    '/candidate/experience',
+    exp
+  );
+  return res.data;
+},
+
+  deleteCandidateEducation: async (id: string) => {
+    const res = await apiClient.delete<{ message: string; education: UserEducation[] }>(
+      `/candidate/education/${encodeURIComponent(id)}`
+    );
     return res.data;
   },
 
-  // --- Candidate Work Experience ---
-  getExperience: async () => {
-    const res = await apiClient.get<{ experience: CandidateExperience[] }>('/candidate/experience');
-    return res.data;
-  },
-
-  addExperience: async (data: Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
-    const res = await apiClient.post<{ message: string; experience: CandidateExperience }>(
+  addCandidateExperience: async (exp: Partial<UserExperience>) => {
+    const res = await apiClient.post<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
       '/candidate/experience',
-      data
+      exp
     );
     return res.data;
   },
@@ -202,14 +267,27 @@ export const api = {
     const res = await apiClient.put<{ message: string; experience: CandidateExperience }>(
       `/candidate/experience/${id}`,
       data
+  updateCandidateExperience: async (id: string, exp: Partial<UserExperience>) => {
+    const res = await apiClient.put<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
+      `/candidate/experience/${encodeURIComponent(id)}`,
+      exp
     );
     return res.data;
   },
 
-  deleteExperience: async (id: string) => {
-    const res = await apiClient.delete<{ message: string }>(`/candidate/experience/${id}`);
-    return res.data;
-  },
+ deleteExperience: async (id: string) => {
+  const res = await apiClient.delete<{ message: string }>(
+    `/candidate/experience/${id}`
+  );
+  return res.data;
+},
+
+deleteCandidateExperience: async (id: string) => {
+  const res = await apiClient.delete<{ message: string; experience: UserExperience[] }>(
+    `/candidate/experience/${encodeURIComponent(id)}`
+  );
+  return res.data;
+},
 
   uploadResume: async (file: File, onProgress?: (pct: number) => void) => {
     const formData = new FormData();
@@ -264,6 +342,43 @@ export const api = {
       return res.data;
     }
     const res = await apiClient.post('/resume/parse', {});
+    return res.data;
+  },
+
+  getCandidateExtractedResume: async (candidateId: string) => {
+    const res = await apiClient.get<CandidateExtractionResponse>(`/resume/candidate/${candidateId}/extracted`);
+    return res.data;
+  },
+
+  updateCandidateExtractedResume: async (candidateId: string, data: ExtractedCandidateProfile) => {
+    const res = await apiClient.put<{
+      message: string;
+      candidateId: string;
+      extractedData: ExtractedCandidateProfile;
+    }>(`/resume/candidate/${candidateId}/extracted`, data);
+    return res.data;
+  },
+
+  verifyCandidateResumeData: async (
+    candidateId: string,
+    data: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true,
+    confirmOverwrite: boolean = false
+  ) => {
+    const res = await apiClient.post<{
+      message: string;
+      candidateId: string;
+      isVerified: boolean;
+      verifiedById: string;
+      verifiedByName: string;
+      verifiedAt: string;
+      verifiedData: ExtractedCandidateProfile;
+      requiresConfirmation?: boolean;
+    }>(`/resume/candidate/${candidateId}/verify`, {
+      data,
+      overwriteProfile,
+      confirmOverwrite,
+    });
     return res.data;
   },
 
@@ -462,8 +577,8 @@ export const api = {
   },
 
   // --- Companies ---
-  getCompanies: async () => {
-    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies');
+  getCompanies: async (params?: { search?: string; status?: string }) => {
+    const res = await apiClient.get<{ total: number; companies: Company[] }>('/companies', { params });
     return res.data;
   },
 
@@ -483,6 +598,13 @@ export const api = {
 
   updateCompany: async (id: string, updates: Partial<Company>) => {
     const res = await apiClient.put<{ message: string; company: Company }>(`/companies/${id}`, updates);
+    return res.data;
+  },
+
+  updateCompanyStatus: async (id: string, status: 'active' | 'suspended') => {
+    const res = await apiClient.patch<{ message: string; company: Company }>(`/admin/companies/${id}/status`, {
+      status,
+    });
     return res.data;
   },
 
@@ -557,8 +679,8 @@ export const api = {
   },
 
   // --- Categories ---
-  getCategories: async () => {
-    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories');
+  getCategories: async (params?: { includeInactive?: boolean }) => {
+    const res = await apiClient.get<{ total: number; categories: JobCategory[] }>('/categories', { params });
     return res.data;
   },
 
@@ -569,6 +691,11 @@ export const api = {
 
   updateCategory: async (id: string, updates: Partial<JobCategory>) => {
     const res = await apiClient.put<{ message: string; category: JobCategory }>(`/categories/${id}`, updates);
+    return res.data;
+  },
+
+  toggleCategoryStatus: async (id: string) => {
+    const res = await apiClient.patch<{ message: string; category: JobCategory }>(`/categories/${id}/toggle`);
     return res.data;
   },
 
@@ -621,19 +748,34 @@ export const api = {
     return res.data;
   },
 
-  getReportedJobs: async () => {
-    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs');
+  getAdminRecruiters: async (params?: { search?: string; companyId?: string }) => {
+    const res = await apiClient.get<{ total: number; recruiters: User[] }>('/admin/recruiters', { params });
+    return res.data;
+  },
+
+  getReportedJobs: async (params?: { status?: string; search?: string }) => {
+    const res = await apiClient.get<{ total: number; reports: ReportedJob[] }>('/admin/reported-jobs', { params });
     return res.data;
   },
 
   updateReportStatus: async (
     id: string,
-    payload: { status: 'pending' | 'resolved' | 'dismissed'; removeJob?: boolean }
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction?: 'deactivate_job' | 'restore_job' | 'dismiss' | 'resolve';
+      adminReason?: string;
+    }
   ) => {
     const res = await apiClient.patch<{ message: string; report: ReportedJob }>(
       `/admin/reported-jobs/${id}`,
       payload
     );
+    return res.data;
+  },
+
+  // --- Activity Logs ---
+  getActivityLogs: async (params?: ActivityLogFilter) => {
+    const res = await apiClient.get<ActivityLogsResponse>('/activity-logs', { params });
     return res.data;
   },
 };

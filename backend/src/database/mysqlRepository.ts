@@ -13,11 +13,28 @@ import {
   ResumeDocument,
   CandidateEducation,
   CandidateExperience,
+  ActivityLog,
+  ActivityLogFilter,
+  CompanyRole,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 
 export class MySqlRepository {
   private get pool() {
     return mysqlDb.getPool();
+  }
+
+  constructor() {
+    this.mapUser = this.mapUser.bind(this);
+    this.mapCompany = this.mapCompany.bind(this);
+    this.mapCategory = this.mapCategory.bind(this);
+    this.mapJob = this.mapJob.bind(this);
+    this.mapApplication = this.mapApplication.bind(this);
+    this.mapReportedJob = this.mapReportedJob.bind(this);
+    this.mapJobAlert = this.mapJobAlert.bind(this);
+    this.mapActivityLog = this.mapActivityLog.bind(this);
+    this.parseJson = this.parseJson.bind(this);
   }
 
   // --- Users & Profiles ---
@@ -31,7 +48,7 @@ export class MySqlRepository {
         c.bio as candidate_bio, c.date_of_birth, c.gender, c.resume_url, c.resume_original_name, c.skills_json,
         c.experience_json, c.education_json,
         r.title as recruiter_title, r.location as recruiter_location, r.phone as recruiter_phone,
-        r.bio as recruiter_bio, r.company_id, r.company_name
+        r.bio as recruiter_bio, r.company_id, r.company_name, r.company_role as recruiter_company_role
       FROM users u
       LEFT JOIN candidates c ON u.id = c.user_id
       LEFT JOIN recruiters r ON u.id = r.user_id
@@ -104,9 +121,9 @@ export class MySqlRepository {
       } else if (user.role === 'recruiter') {
         await conn.query(
           `INSERT INTO recruiters (
-            id, user_id, company_id, company_name, title, location, phone, bio,
+            id, user_id, company_id, company_name, title, location, phone, bio, company_role,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
             user.id,
             user.id,
@@ -116,6 +133,7 @@ export class MySqlRepository {
             user.location || null,
             user.phone || null,
             user.bio || null,
+            user.companyRole || 'recruiter',
           ]
         );
       }
@@ -230,16 +248,17 @@ export class MySqlRepository {
           updates.phone !== undefined ||
           updates.bio !== undefined ||
           updates.companyId !== undefined ||
-          updates.companyName !== undefined;
+          updates.companyName !== undefined ||
+          updates.companyRole !== undefined;
 
         if (hasRecruiterFields) {
           const [recRows] = await conn.query<any[]>('SELECT id FROM recruiters WHERE user_id = ?', [id]);
           if (recRows.length === 0) {
             await conn.query(
               `INSERT INTO recruiters (
-                id, user_id, company_id, company_name, title, location, phone, bio,
+                id, user_id, company_id, company_name, title, location, phone, bio, company_role,
                 created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
               [
                 id,
                 id,
@@ -249,6 +268,7 @@ export class MySqlRepository {
                 updates.location || current.location || null,
                 updates.phone || current.phone || null,
                 updates.bio || current.bio || null,
+                updates.companyRole || current.companyRole || 'recruiter',
               ]
             );
           } else {
@@ -260,6 +280,7 @@ export class MySqlRepository {
             if (updates.bio !== undefined) { recFields.push('bio = ?'); recValues.push(updates.bio); }
             if (updates.companyId !== undefined) { recFields.push('company_id = ?'); recValues.push(updates.companyId); }
             if (updates.companyName !== undefined) { recFields.push('company_name = ?'); recValues.push(updates.companyName); }
+            if (updates.companyRole !== undefined) { recFields.push('company_role = ?'); recValues.push(updates.companyRole); }
 
             if (recFields.length > 0) {
               recValues.push(id);
@@ -669,8 +690,20 @@ export class MySqlRepository {
   }
 
   // --- Companies ---
-  async getCompanies(): Promise<Company[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM companies ORDER BY created_at DESC');
+  async getCompanies(params?: { search?: string; status?: string }): Promise<Company[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    if (params?.search) {
+      conditions.push('(LOWER(name) LIKE ? OR LOWER(industry) LIKE ? OR LOWER(location) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    if (params?.status && params.status !== 'all') {
+      conditions.push('status = ?');
+      values.push(params.status);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [rows] = await this.pool.query<any[]>(`SELECT * FROM companies ${where} ORDER BY created_at DESC`, values);
     return rows.map(this.mapCompany);
   }
 
@@ -679,10 +712,19 @@ export class MySqlRepository {
     return rows.length > 0 ? this.mapCompany(rows[0]) : undefined;
   }
 
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    const trimmed = name.trim();
+    const [rows] = await this.pool.query<any[]>(
+      'SELECT * FROM companies WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1',
+      [trimmed]
+    );
+    return rows.length > 0 ? this.mapCompany(rows[0]) : undefined;
+  }
+
   async createCompany(company: Company): Promise<Company> {
     await this.pool.query(
-      `INSERT INTO companies (id, name, description, logo, website, location, industry, company_size, verified)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO companies (id, name, description, logo, website, location, industry, company_size, verified, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         company.id,
         company.name,
@@ -693,9 +735,102 @@ export class MySqlRepository {
         company.industry || null,
         company.size || null,
         company.verified ? 1 : 0,
+        company.status || 'active',
       ]
     );
     return company;
+  }
+
+  async registerRecruiterWithCompany(user: User, company: Company): Promise<{ user: User; company: Company }> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // Trimmed, case-insensitive lock check to prevent simultaneous duplicate company creation
+      const [existing] = await conn.query<any[]>(
+        'SELECT id FROM companies WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) FOR UPDATE',
+        [company.name.trim()]
+      );
+
+      if (existing.length > 0) {
+        await conn.rollback();
+        const err: any = new Error(
+          'A company with this name already exists. To join an existing organization, please have your Company Administrator add your account from Recruiter Management.'
+        );
+        err.code = 'COMPANY_ALREADY_EXISTS';
+        throw err;
+      }
+
+      await conn.query(
+        `INSERT INTO companies (id, name, description, logo, website, location, industry, company_size, verified, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          company.id,
+          company.name.trim(),
+          company.description || null,
+          company.logo || null,
+          company.website || null,
+          company.location || null,
+          company.industry || null,
+          company.size || null,
+          company.verified ? 1 : 0,
+          company.status || 'active',
+        ]
+      );
+
+      await conn.query(
+        `INSERT INTO users (
+          id, email, password_hash, name, role, status, avatar_url,
+          parsed_resume_data_json, token_version, last_login_at, password_changed_at,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          user.id,
+          user.email.trim().toLowerCase(),
+          user.password || '',
+          user.name.trim(),
+          'recruiter',
+          user.status || 'active',
+          user.avatarUrl || null,
+          null,
+          user.tokenVersion || 1,
+          user.lastLoginAt ? new Date(user.lastLoginAt) : null,
+          null,
+        ]
+      );
+
+      await conn.query(
+        `INSERT INTO recruiters (
+          id, user_id, company_id, company_name, title, location, phone, bio, company_role,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          user.id,
+          user.id,
+          company.id,
+          company.name.trim(),
+          user.title || 'Talent Acquisition',
+          user.location || company.location || 'Remote',
+          user.phone || null,
+          user.bio || null,
+          'admin', // First authorized recruiter creating a new company is Company Admin
+        ]
+      );
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const createdUser = await this.getUserById(user.id);
+    const createdCompany = await this.getCompanyById(company.id);
+    return {
+      user: createdUser || { ...user, companyId: company.id, companyName: company.name, companyRole: 'admin' },
+      company: createdCompany || company,
+    };
   }
 
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
@@ -713,6 +848,7 @@ export class MySqlRepository {
     if (updates.industry !== undefined) { fields.push('industry = ?'); values.push(updates.industry); }
     if (updates.size !== undefined) { fields.push('company_size = ?'); values.push(updates.size); }
     if (updates.verified !== undefined) { fields.push('verified = ?'); values.push(updates.verified ? 1 : 0); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
 
     if (fields.length > 0) {
       values.push(id);
@@ -728,20 +864,43 @@ export class MySqlRepository {
   }
 
   // --- Categories ---
-  async getCategories(): Promise<JobCategory[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM job_categories ORDER BY name ASC');
+  async getCategories(includeInactive = false): Promise<JobCategory[]> {
+    let sql = `
+      SELECT jc.*,
+        COUNT(j.id) AS live_job_count
+      FROM job_categories jc
+      LEFT JOIN jobs j ON j.category_id = jc.id AND j.status = 'active'
+      ${includeInactive ? '' : 'WHERE (jc.is_active IS NULL OR jc.is_active = 1)'}
+      GROUP BY jc.id
+      ORDER BY jc.name ASC
+    `;
+    const [rows] = await this.pool.query<any[]>(sql);
     return rows.map(this.mapCategory);
   }
 
   async getCategoryById(id: string): Promise<JobCategory | undefined> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM job_categories WHERE id = ?', [id]);
+    const [rows] = await this.pool.query<any[]>(`
+      SELECT jc.*, COUNT(j.id) AS live_job_count
+      FROM job_categories jc
+      LEFT JOIN jobs j ON j.category_id = jc.id AND j.status = 'active'
+      WHERE jc.id = ?
+      GROUP BY jc.id
+    `, [id]);
+    return rows.length > 0 ? this.mapCategory(rows[0]) : undefined;
+  }
+
+  async getCategoryByName(name: string, excludeId?: string): Promise<JobCategory | undefined> {
+    let sql = 'SELECT * FROM job_categories WHERE LOWER(name) = LOWER(?)';
+    const params: any[] = [name];
+    if (excludeId) { sql += ' AND id != ?'; params.push(excludeId); }
+    const [rows] = await this.pool.query<any[]>(sql, params);
     return rows.length > 0 ? this.mapCategory(rows[0]) : undefined;
   }
 
   async createCategory(category: JobCategory): Promise<JobCategory> {
     await this.pool.query(
-      `INSERT INTO job_categories (id, name, description, icon, job_count) VALUES (?, ?, ?, ?, ?)`,
-      [category.id, category.name, category.description || null, category.icon || 'Briefcase', category.jobCount || 0]
+      `INSERT INTO job_categories (id, name, description, icon, job_count, is_active) VALUES (?, ?, ?, ?, ?, ?)`,
+      [category.id, category.name, category.description || null, category.icon || 'Briefcase', category.jobCount || 0, category.isActive !== false ? 1 : 0]
     );
     return category;
   }
@@ -757,6 +916,7 @@ export class MySqlRepository {
     if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
     if (updates.icon !== undefined) { fields.push('icon = ?'); values.push(updates.icon); }
     if (updates.jobCount !== undefined) { fields.push('job_count = ?'); values.push(updates.jobCount); }
+    if (updates.isActive !== undefined) { fields.push('is_active = ?'); values.push(updates.isActive ? 1 : 0); }
 
     if (fields.length > 0) {
       values.push(id);
@@ -771,14 +931,28 @@ export class MySqlRepository {
     return result.affectedRows > 0;
   }
 
+  async getCategoryJobCount(id: string): Promise<number> {
+    const [rows] = await this.pool.query<any[]>(
+      "SELECT COUNT(*) AS cnt FROM jobs WHERE category_id = ?",
+      [id]
+    );
+    return Number(rows?.[0]?.cnt || 0);
+  }
+
   // --- Jobs ---
-  async getJobs(): Promise<Job[]> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM jobs ORDER BY created_at DESC');
+  async getJobs(includeDeleted: boolean = false): Promise<Job[]> {
+    const sql = includeDeleted
+      ? 'SELECT * FROM jobs ORDER BY created_at DESC'
+      : 'SELECT * FROM jobs WHERE deleted_at IS NULL ORDER BY created_at DESC';
+    const [rows] = await this.pool.query<any[]>(sql);
     return rows.map(this.mapJob);
   }
 
-  async getJobById(id: string): Promise<Job | undefined> {
-    const [rows] = await this.pool.query<any[]>('SELECT * FROM jobs WHERE id = ?', [id]);
+  async getJobById(id: string, includeDeleted: boolean = false): Promise<Job | undefined> {
+    const sql = includeDeleted
+      ? 'SELECT * FROM jobs WHERE id = ?'
+      : 'SELECT * FROM jobs WHERE id = ? AND deleted_at IS NULL';
+    const [rows] = await this.pool.query<any[]>(sql, [id]);
     return rows.length > 0 ? this.mapJob(rows[0]) : undefined;
   }
 
@@ -824,53 +998,292 @@ export class MySqlRepository {
     return job;
   }
 
+  async createJobWithAudit(job: Job, audit: ActivityLog): Promise<Job> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO jobs (
+          id, title, company_id, company_name, company_logo, recruiter_id, recruiter_name,
+          category_id, category_name, location, workplace_type, job_type, experience_level,
+          salary_min, salary_max, salary_currency, description, requirements_json, skills_json,
+          benefits_json, status, is_featured, applicants_count, views_count, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          job.id,
+          job.title,
+          job.companyId,
+          job.companyName,
+          job.companyLogo || null,
+          job.recruiterId,
+          job.recruiterName,
+          job.categoryId,
+          job.categoryName,
+          job.location,
+          job.workplaceType,
+          job.jobType,
+          job.experienceLevel,
+          job.salaryMin,
+          job.salaryMax,
+          job.salaryCurrency || 'USD',
+          job.description,
+          job.requirements ? JSON.stringify(job.requirements) : JSON.stringify([]),
+          job.skills ? JSON.stringify(job.skills) : JSON.stringify([]),
+          job.benefits ? JSON.stringify(job.benefits) : JSON.stringify([]),
+          job.status,
+          job.isFeatured ? 1 : 0,
+          job.applicantsCount || 0,
+          job.viewsCount || 0,
+          job.expiresAt ? new Date(job.expiresAt) : null,
+        ]
+      );
+
+      await conn.query('UPDATE job_categories SET job_count = job_count + 1 WHERE id = ?', [job.categoryId]);
+
+      await conn.query(
+        `INSERT INTO activity_logs (
+          id, company_id, actor_user_id, actor_name, action, module, record_id, record_name, old_values, new_values, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          audit.id,
+          audit.companyId,
+          audit.actorUserId,
+          audit.actorName,
+          audit.action,
+          audit.module,
+          audit.recordId,
+          audit.recordName,
+          audit.oldValues ? JSON.stringify(audit.oldValues) : null,
+          audit.newValues ? JSON.stringify(audit.newValues) : null,
+          audit.createdAt ? new Date(audit.createdAt) : new Date(),
+        ]
+      );
+
+      await conn.commit();
+      return job;
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
   async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    return this.updateJobWithAudit(id, updates, null);
+  }
+
+  async updateJobWithAudit(id: string, updates: Partial<Job>, audit: ActivityLog | null): Promise<Job | undefined> {
     const current = await this.getJobById(id);
     if (!current) return undefined;
 
-    const fields: string[] = [];
-    const values: any[] = [];
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
-    if (updates.companyId !== undefined) { fields.push('company_id = ?'); values.push(updates.companyId); }
-    if (updates.companyName !== undefined) { fields.push('company_name = ?'); values.push(updates.companyName); }
-    if (updates.companyLogo !== undefined) { fields.push('company_logo = ?'); values.push(updates.companyLogo); }
-    if (updates.categoryId !== undefined) { fields.push('category_id = ?'); values.push(updates.categoryId); }
-    if (updates.categoryName !== undefined) { fields.push('category_name = ?'); values.push(updates.categoryName); }
-    if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
-    if (updates.workplaceType !== undefined) { fields.push('workplace_type = ?'); values.push(updates.workplaceType); }
-    if (updates.jobType !== undefined) { fields.push('job_type = ?'); values.push(updates.jobType); }
-    if (updates.experienceLevel !== undefined) { fields.push('experience_level = ?'); values.push(updates.experienceLevel); }
-    if (updates.salaryMin !== undefined) { fields.push('salary_min = ?'); values.push(updates.salaryMin); }
-    if (updates.salaryMax !== undefined) { fields.push('salary_max = ?'); values.push(updates.salaryMax); }
-    if (updates.salaryCurrency !== undefined) { fields.push('salary_currency = ?'); values.push(updates.salaryCurrency); }
-    if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
-    if (updates.requirements !== undefined) { fields.push('requirements_json = ?'); values.push(JSON.stringify(updates.requirements)); }
-    if (updates.skills !== undefined) { fields.push('skills_json = ?'); values.push(JSON.stringify(updates.skills)); }
-    if (updates.benefits !== undefined) { fields.push('benefits_json = ?'); values.push(JSON.stringify(updates.benefits)); }
-    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
-    if (updates.isFeatured !== undefined) { fields.push('is_featured = ?'); values.push(updates.isFeatured ? 1 : 0); }
-    if (updates.applicantsCount !== undefined) { fields.push('applicants_count = ?'); values.push(updates.applicantsCount); }
-    if (updates.viewsCount !== undefined) { fields.push('views_count = ?'); values.push(updates.viewsCount); }
+      const fields: string[] = [];
+      const values: any[] = [];
 
-    if (fields.length > 0) {
-      values.push(id);
-      await this.pool.query(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`, values);
+      if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
+      if (updates.companyId !== undefined) { fields.push('company_id = ?'); values.push(updates.companyId); }
+      if (updates.companyName !== undefined) { fields.push('company_name = ?'); values.push(updates.companyName); }
+      if (updates.companyLogo !== undefined) { fields.push('company_logo = ?'); values.push(updates.companyLogo); }
+      if (updates.recruiterId !== undefined) { fields.push('recruiter_id = ?'); values.push(updates.recruiterId); }
+      if (updates.recruiterName !== undefined) { fields.push('recruiter_name = ?'); values.push(updates.recruiterName); }
+      if (updates.categoryId !== undefined) { fields.push('category_id = ?'); values.push(updates.categoryId); }
+      if (updates.categoryName !== undefined) { fields.push('category_name = ?'); values.push(updates.categoryName); }
+      if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
+      if (updates.workplaceType !== undefined) { fields.push('workplace_type = ?'); values.push(updates.workplaceType); }
+      if (updates.jobType !== undefined) { fields.push('job_type = ?'); values.push(updates.jobType); }
+      if (updates.experienceLevel !== undefined) { fields.push('experience_level = ?'); values.push(updates.experienceLevel); }
+      if (updates.salaryMin !== undefined) { fields.push('salary_min = ?'); values.push(updates.salaryMin); }
+      if (updates.salaryMax !== undefined) { fields.push('salary_max = ?'); values.push(updates.salaryMax); }
+      if (updates.salaryCurrency !== undefined) { fields.push('salary_currency = ?'); values.push(updates.salaryCurrency); }
+      if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+      if (updates.requirements !== undefined) { fields.push('requirements_json = ?'); values.push(JSON.stringify(updates.requirements)); }
+      if (updates.skills !== undefined) { fields.push('skills_json = ?'); values.push(JSON.stringify(updates.skills)); }
+      if (updates.benefits !== undefined) { fields.push('benefits_json = ?'); values.push(JSON.stringify(updates.benefits)); }
+      if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+      if (updates.isFeatured !== undefined) { fields.push('is_featured = ?'); values.push(updates.isFeatured ? 1 : 0); }
+      if (updates.applicantsCount !== undefined) { fields.push('applicants_count = ?'); values.push(updates.applicantsCount); }
+      if (updates.viewsCount !== undefined) { fields.push('views_count = ?'); values.push(updates.viewsCount); }
+
+      if (fields.length > 0) {
+        values.push(id);
+        await conn.query(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`, values);
+      }
+
+      if (audit) {
+        await conn.query(
+          `INSERT INTO activity_logs (
+            id, company_id, actor_user_id, actor_name, action, module, record_id, record_name, old_values, new_values, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            audit.id,
+            audit.companyId,
+            audit.actorUserId,
+            audit.actorName,
+            audit.action,
+            audit.module,
+            audit.recordId,
+            audit.recordName,
+            audit.oldValues ? JSON.stringify(audit.oldValues) : null,
+            audit.newValues ? JSON.stringify(audit.newValues) : null,
+            audit.createdAt ? new Date(audit.createdAt) : new Date(),
+          ]
+        );
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
     }
 
     return this.getJobById(id);
   }
 
-  async deleteJob(id: string): Promise<boolean> {
+  async deleteJob(id: string, deletedBy?: string): Promise<boolean> {
     const job = await this.getJobById(id);
     if (!job) return false;
 
-    const [result] = await this.pool.query<any>('DELETE FROM jobs WHERE id = ?', [id]);
+    const [result] = await this.pool.query<any>(
+      'UPDATE jobs SET deleted_at = NOW(), deleted_by = ? WHERE id = ? AND deleted_at IS NULL',
+      [deletedBy || null, id]
+    );
     if (result.affectedRows > 0) {
       await this.pool.query('UPDATE job_categories SET job_count = GREATEST(0, job_count - 1) WHERE id = ?', [job.categoryId]);
       return true;
     }
     return false;
+  }
+
+  async deleteJobWithAudit(id: string, deletedBy: string, audit: ActivityLog): Promise<boolean> {
+    const job = await this.getJobById(id);
+    if (!job) return false;
+
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [result] = await conn.query<any>(
+        'UPDATE jobs SET deleted_at = NOW(), deleted_by = ? WHERE id = ? AND deleted_at IS NULL',
+        [deletedBy, id]
+      );
+      if (result.affectedRows === 0) {
+        await conn.rollback();
+        return false;
+      }
+
+      await conn.query('UPDATE job_categories SET job_count = GREATEST(0, job_count - 1) WHERE id = ?', [job.categoryId]);
+
+      await conn.query(
+        `INSERT INTO activity_logs (
+          id, company_id, actor_user_id, actor_name, action, module, record_id, record_name, old_values, new_values, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          audit.id,
+          audit.companyId,
+          audit.actorUserId,
+          audit.actorName,
+          audit.action,
+          audit.module,
+          audit.recordId,
+          audit.recordName,
+          audit.oldValues ? JSON.stringify(audit.oldValues) : null,
+          audit.newValues ? JSON.stringify(audit.newValues) : null,
+          audit.createdAt ? new Date(audit.createdAt) : new Date(),
+        ]
+      );
+
+      await conn.commit();
+      return true;
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  // --- Activity Logs ---
+  async createActivityLog(audit: ActivityLog): Promise<ActivityLog> {
+    await this.pool.query(
+      `INSERT INTO activity_logs (
+        id, company_id, actor_user_id, actor_name, action, module, record_id, record_name, old_values, new_values, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        audit.id,
+        audit.companyId,
+        audit.actorUserId,
+        audit.actorName,
+        audit.action,
+        audit.module,
+        audit.recordId,
+        audit.recordName,
+        audit.oldValues ? JSON.stringify(audit.oldValues) : null,
+        audit.newValues ? JSON.stringify(audit.newValues) : null,
+        audit.createdAt ? new Date(audit.createdAt) : new Date(),
+      ]
+    );
+    return audit;
+  }
+
+  async getActivityLogs(filters?: ActivityLogFilter): Promise<{ logs: ActivityLog[]; total: number }> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+
+    if (filters?.companyId) {
+      conditions.push('company_id = ?');
+      values.push(filters.companyId);
+    }
+    if (filters?.action && filters.action !== 'all') {
+      conditions.push('action = ?');
+      values.push(filters.action);
+    }
+    if (filters?.module && filters.module !== 'all') {
+      conditions.push('module = ?');
+      values.push(filters.module);
+    }
+    if (filters?.actorUserId) {
+      conditions.push('actor_user_id = ?');
+      values.push(filters.actorUserId);
+    }
+    if (filters?.actor) {
+      conditions.push('(LOWER(actor_name) LIKE ? OR actor_user_id = ?)');
+      const q = `%${filters.actor.toLowerCase()}%`;
+      values.push(q, filters.actor);
+    }
+    if (filters?.startDate) {
+      conditions.push('created_at >= ?');
+      values.push(new Date(filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push('created_at <= ?');
+      values.push(new Date(filters.endDate));
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [countRows] = await this.pool.query<any[]>(`SELECT COUNT(*) as count FROM activity_logs ${where}`, values);
+    const total = countRows[0]?.count ? Number(countRows[0].count) : 0;
+
+    const page = Math.max(1, filters?.page || 1);
+    const limit = Math.max(1, Math.min(100, filters?.limit || 20));
+    const offset = (page - 1) * limit;
+
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT * FROM activity_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...values, limit, offset]
+    );
+
+    return {
+      logs: rows.map(this.mapActivityLog),
+      total,
+    };
   }
 
   async incrementJobViews(id: string): Promise<void> {
@@ -1069,6 +1482,101 @@ export class MySqlRepository {
     await this.pool.query('UPDATE reported_jobs SET status = ? WHERE id = ?', [status, id]);
     const [rows] = await this.pool.query<any[]>('SELECT * FROM reported_jobs WHERE id = ?', [id]);
     return rows.length > 0 ? this.mapReportedJob(rows[0]) : undefined;
+  }
+
+  async updateReportedJobWithAction(
+    id: string,
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction: string;
+      adminReason: string;
+      reviewedByUserId: string;
+      reviewedByName: string;
+    }
+  ): Promise<ReportedJob | undefined> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `UPDATE reported_jobs SET
+          status = ?,
+          admin_action = ?,
+          admin_reason = ?,
+          reviewed_by_user_id = ?,
+          reviewed_by_name = ?,
+          reviewed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [payload.status, payload.adminAction, payload.adminReason,
+         payload.reviewedByUserId, payload.reviewedByName, id]
+      );
+
+      // Modify the referenced job based on the admin action
+      const [repRows] = await conn.query<any[]>('SELECT job_id FROM reported_jobs WHERE id = ?', [id]);
+      if (repRows.length > 0) {
+        const jobId = repRows[0].job_id;
+        if (payload.adminAction === 'deactivate_job') {
+          await conn.query("UPDATE jobs SET status = 'closed' WHERE id = ?", [jobId]);
+        } else if (payload.adminAction === 'restore_job') {
+          await conn.query("UPDATE jobs SET status = 'active' WHERE id = ?", [jobId]);
+        }
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const [rows] = await this.pool.query<any[]>('SELECT * FROM reported_jobs WHERE id = ?', [id]);
+    return rows.length > 0 ? this.mapReportedJob(rows[0]) : undefined;
+  }
+
+  async getReportedJobsFiltered(params?: { status?: string; search?: string }): Promise<ReportedJob[]> {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    if (params?.status && params.status !== 'all') {
+      conditions.push('rj.status = ?');
+      values.push(params.status);
+    }
+    if (params?.search) {
+      conditions.push('(LOWER(rj.job_title) LIKE ? OR LOWER(rj.company_name) LIKE ? OR LOWER(rj.reported_by_name) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [rows] = await this.pool.query<any[]>(
+      `SELECT rj.*, j.status AS current_job_status
+       FROM reported_jobs rj
+       LEFT JOIN jobs j ON j.id = rj.job_id
+       ${where}
+       ORDER BY rj.created_at DESC`,
+      values
+    );
+    return rows.map((row) => ({
+      ...this.mapReportedJob(row),
+    }));
+  }
+
+  async getRecruiters(params?: { search?: string; companyId?: string }): Promise<User[]> {
+    const conditions: string[] = ["u.role = 'recruiter'"];
+    const values: any[] = [];
+    if (params?.search) {
+      conditions.push('(LOWER(u.name) LIKE ? OR LOWER(u.email) LIKE ? OR LOWER(r.company_name) LIKE ?)');
+      const q = `%${params.search.toLowerCase()}%`;
+      values.push(q, q, q);
+    }
+    if (params?.companyId) {
+      conditions.push('r.company_id = ?');
+      values.push(params.companyId);
+    }
+    const [rows] = await this.pool.query<any[]>(
+      `${this.userSelectSql} WHERE ${conditions.join(' AND ')} ORDER BY u.created_at DESC`,
+      values
+    );
+    return rows.map((r) => this.mapUser(r));
   }
 
   // --- Job Alerts ---
@@ -1290,6 +1798,118 @@ export class MySqlRepository {
     );
   }
 
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    try {
+      await this.pool.query(
+        `UPDATE resume_documents
+         SET extraction_status = ?, extracted_data_json = ?, extraction_error = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [status, extractedData ? JSON.stringify(extractedData) : null, error || null, docId]
+      );
+    } catch (err) {
+      console.warn('[TalentHub MySQL] Warning updating extraction status:', err);
+    }
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    try {
+      await this.pool.query(
+        `UPDATE resume_documents SET extracted_data_json = ?, updated_at = NOW() WHERE id = ?`,
+        [JSON.stringify(extractedData), docId]
+      );
+    } catch (err) {
+      console.warn('[TalentHub MySQL] Warning updating extracted data:', err);
+    }
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true
+  ): Promise<void> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        `UPDATE resume_documents
+         SET is_verified = 1, verified_by_id = ?, verified_by_name = ?, verified_at = NOW(),
+             extracted_data_json = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [recruiterId, recruiterName, JSON.stringify(verifiedData), docId]
+      );
+
+      if (overwriteProfile) {
+        const fields: string[] = [];
+        const values: any[] = [];
+        if (verifiedData.skills) {
+          fields.push('skills_json = ?');
+          values.push(JSON.stringify(verifiedData.skills));
+        }
+        if (verifiedData.summary) {
+          fields.push('bio = ?');
+          values.push(verifiedData.summary);
+        }
+        if (verifiedData.phone) {
+          fields.push('phone = ?');
+          values.push(verifiedData.phone);
+        }
+        if (verifiedData.location) {
+          fields.push('location = ?');
+          values.push(verifiedData.location);
+        }
+        if (verifiedData.experience?.length) {
+          fields.push('experience_json = ?');
+          values.push(
+            JSON.stringify(
+              verifiedData.experience.map((e) => ({
+                title: e.title,
+                company: e.company,
+                period: e.duration,
+                description: e.description || '',
+              }))
+            )
+          );
+          fields.push('title = ?');
+          values.push(verifiedData.experience[0].title);
+        }
+        if (verifiedData.education?.length) {
+          fields.push('education_json = ?');
+          values.push(
+            JSON.stringify(
+              verifiedData.education.map((e) => ({
+                degree: e.degree,
+                school: e.institution,
+                year: e.year,
+              }))
+            )
+          );
+        }
+        if (fields.length > 0) {
+          values.push(candidateId);
+          await conn.query(`UPDATE candidates SET ${fields.join(', ')} WHERE user_id = ?`, values);
+        }
+      }
+
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
   // --- Mappers ---
   private parseJson<T>(value: any, fallback: T): T {
     if (value === null || value === undefined) return fallback;
@@ -1313,6 +1933,13 @@ export class MySqlRepository {
       checksumSha256: r.checksum_sha256,
       uploadStatus: r.upload_status,
       isCurrent: Boolean(r.is_current),
+      extractionStatus: r.extraction_status || 'completed',
+      extractedData: this.parseJson(r.extracted_data_json, undefined),
+      extractionError: r.extraction_error || undefined,
+      isVerified: Boolean(r.is_verified),
+      verifiedById: r.verified_by_id || undefined,
+      verifiedByName: r.verified_by_name || undefined,
+      verifiedAt: r.verified_at ? new Date(r.verified_at).toISOString() : undefined,
       uploadedAt: r.uploaded_at ? new Date(r.uploaded_at).toISOString() : new Date().toISOString(),
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
     };
@@ -1336,6 +1963,9 @@ export class MySqlRepository {
       password: row.password_hash,
       name: row.name,
       role: row.role,
+      companyRole: isRecruiter
+        ? ((row.recruiter_company_role || row.company_role || 'recruiter') as CompanyRole)
+        : (row.role === 'admin' ? 'admin' : undefined),
       status: row.status,
       avatarUrl: row.avatar_url || undefined,
       title: (isCandidate ? row.candidate_title : row.recruiter_title) || row.title || undefined,
@@ -1371,6 +2001,7 @@ export class MySqlRepository {
       industry: row.industry || '',
       size: row.company_size || '',
       verified: Boolean(row.verified),
+      status: (row.status as 'active' | 'suspended') || 'active',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     };
   }
@@ -1381,7 +2012,8 @@ export class MySqlRepository {
       name: row.name,
       description: row.description || '',
       icon: row.icon || 'Briefcase',
-      jobCount: Number(row.job_count || 0),
+      jobCount: Number(row.live_job_count ?? row.job_count ?? 0),
+      isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
     };
   }
 
@@ -1419,6 +2051,8 @@ export class MySqlRepository {
       isFeatured: Boolean(row.is_featured),
       applicantsCount: Number(row.applicants_count || 0),
       viewsCount: Number(row.views_count || 0),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at).toISOString() : null,
+      deletedBy: row.deleted_by || null,
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : '',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
       updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
@@ -1477,6 +2111,11 @@ export class MySqlRepository {
       reason: row.reason,
       details: row.details || '',
       status: row.status,
+      reviewedByUserId: row.reviewed_by_user_id || undefined,
+      reviewedByName: row.reviewed_by_name || undefined,
+      adminAction: row.admin_action || undefined,
+      adminReason: row.admin_reason || undefined,
+      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     };
   }
@@ -1492,6 +2131,22 @@ export class MySqlRepository {
       jobType: row.job_type || 'all',
       frequency: row.frequency || 'daily',
       isActive: Boolean(row.is_active),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  private mapActivityLog(row: any): ActivityLog {
+    return {
+      id: row.id,
+      companyId: row.company_id,
+      actorUserId: row.actor_user_id,
+      actorName: row.actor_name,
+      action: row.action,
+      module: row.module,
+      recordId: row.record_id,
+      recordName: row.record_name,
+      oldValues: this.parseJson(row.old_values, null),
+      newValues: this.parseJson(row.new_values, null),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     };
   }

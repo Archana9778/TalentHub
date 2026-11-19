@@ -42,6 +42,7 @@ interface DatabaseSchema {
   passwordResetTokens: PasswordResetToken[];
   revokedTokens: RevokedToken[];
   resumeDocuments: ResumeDocument[];
+  activityLogs: ActivityLog[];
 }
 
 class DatabaseManager {
@@ -62,6 +63,7 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     if (config.dbMode === 'json') this.initJson();
   }
@@ -101,6 +103,7 @@ class DatabaseManager {
         if (!Array.isArray(this.data.passwordResetTokens)) this.data.passwordResetTokens = [];
         if (!Array.isArray(this.data.revokedTokens)) this.data.revokedTokens = [];
         if (!Array.isArray(this.data.resumeDocuments)) this.data.resumeDocuments = [];
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
         if (!Array.isArray(this.data.applicationStageHistory)) {
           this.data.applicationStageHistory = [...initialApplicationStageHistory];
         }
@@ -135,6 +138,11 @@ class DatabaseManager {
 
     if (!Array.isArray(this.data.revokedTokens)) {
       this.data.revokedTokens = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.activityLogs)) {
+      this.data.activityLogs = [];
       modified = true;
     }
 
@@ -217,11 +225,12 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     this.persistJson();
   }
 
-  private persistJson() {
+  private persistJson(rethrow = false) {
     try {
       const payload = JSON.stringify(this.data, null, 2);
       const tempPath = `${this.filePath}.tmp`;
@@ -234,6 +243,7 @@ class DatabaseManager {
       }
     } catch (err) {
       console.error('[TalentHub DB] Failed to persist data to disk:', err);
+      if (rethrow) throw err;
     }
   }
 
@@ -592,19 +602,51 @@ class DatabaseManager {
   }
 
   async getRecruiters(companyId?: string): Promise<User[]> {
+  async getRecruiters(paramsOrCompanyId?: string | { search?: string; companyId?: string }): Promise<User[]> {
+    const params = typeof paramsOrCompanyId === 'string'
+      ? { companyId: paramsOrCompanyId }
+      : (paramsOrCompanyId || {});
+
+    if (this.isMysql) return mysqlRepository.getRecruiters(params);
+
     const allUsers = await this.getUsers();
     let recruiters = allUsers.filter((u) => u.role === 'recruiter');
-    if (companyId) {
-      recruiters = recruiters.filter((u) => u.companyId === companyId);
+
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      recruiters = recruiters.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.companyName && u.companyName.toLowerCase().includes(q))
+      );
     }
+
+    if (params.companyId) {
+      recruiters = recruiters.filter((u) => u.companyId === params.companyId);
+    }
+
     return recruiters;
   }
   // ==========================================
   // COMPANIES
   // ==========================================
-  async getCompanies(): Promise<Company[]> {
-    if (this.isMysql) return mysqlRepository.getCompanies();
-    return this.data.companies;
+  async getCompanies(params?: { search?: string; status?: string }): Promise<Company[]> {
+    if (this.isMysql) return mysqlRepository.getCompanies(params);
+    let companies = this.data.companies;
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      companies = companies.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.industry.toLowerCase().includes(q) ||
+          c.location.toLowerCase().includes(q)
+      );
+    }
+    if (params?.status && params.status !== 'all') {
+      companies = companies.filter((c) => (c.status || 'active') === params.status);
+    }
+    return companies;
   }
 
   async getCompanyById(id: string): Promise<Company | undefined> {
@@ -612,11 +654,41 @@ class DatabaseManager {
     return this.data.companies.find((c) => c.id === id);
   }
 
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    if (this.isMysql) return mysqlRepository.getCompanyByName(name);
+    const normalized = name.trim().toLowerCase();
+    return this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+  }
+
   async createCompany(company: Company): Promise<Company> {
     if (this.isMysql) return mysqlRepository.createCompany(company);
     this.data.companies.push(company);
     this.persistJson();
     return company;
+  }
+
+  async registerRecruiterWithCompany(user: User, company: Company): Promise<{ user: User; company: Company }> {
+    if (this.isMysql) return mysqlRepository.registerRecruiterWithCompany(user, company);
+    const normalized = company.name.trim().toLowerCase();
+    const existing = this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+    if (existing) {
+      const err: any = new Error(
+        'A company with this name already exists. To join an existing organization, please have your Company Administrator add your account from Recruiter Management.'
+      );
+      err.code = 'COMPANY_ALREADY_EXISTS';
+      throw err;
+    }
+    this.data.companies.push(company);
+    const recruiterUser: User = {
+      ...user,
+      role: 'recruiter',
+      companyId: company.id,
+      companyName: company.name,
+      companyRole: 'admin',
+    };
+    this.data.users.push(recruiterUser);
+    this.persistJson();
+    return { user: recruiterUser, company };
   }
 
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
@@ -646,14 +718,28 @@ class DatabaseManager {
   // ==========================================
   // CATEGORIES
   // ==========================================
-  async getCategories(): Promise<JobCategory[]> {
-    if (this.isMysql) return mysqlRepository.getCategories();
-    return this.data.categories;
+  async getCategories(includeInactive = false): Promise<JobCategory[]> {
+    if (this.isMysql) return mysqlRepository.getCategories(includeInactive);
+    let cats = this.data.categories;
+    if (!includeInactive) cats = cats.filter((c) => c.isActive !== false);
+    return cats;
   }
 
   async getCategoryById(id: string): Promise<JobCategory | undefined> {
     if (this.isMysql) return mysqlRepository.getCategoryById(id);
     return this.data.categories.find((c) => c.id === id);
+  }
+
+  async getCategoryByName(name: string, excludeId?: string): Promise<JobCategory | undefined> {
+    if (this.isMysql) return mysqlRepository.getCategoryByName(name, excludeId);
+    return this.data.categories.find(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && (!excludeId || c.id !== excludeId)
+    );
+  }
+
+  async getCategoryJobCount(id: string): Promise<number> {
+    if (this.isMysql) return mysqlRepository.getCategoryJobCount(id);
+    return this.data.jobs.filter((j) => j.categoryId === id).length;
   }
 
   async createCategory(category: JobCategory): Promise<JobCategory> {
@@ -686,14 +772,14 @@ class DatabaseManager {
   // ==========================================
   // JOBS
   // ==========================================
-  async getJobs(): Promise<Job[]> {
-    if (this.isMysql) return mysqlRepository.getJobs();
-    return this.data.jobs;
+  async getJobs(includeDeleted: boolean = false): Promise<Job[]> {
+    if (this.isMysql) return mysqlRepository.getJobs(includeDeleted);
+    return includeDeleted ? [...this.data.jobs] : this.data.jobs.filter((j) => !j.deletedAt);
   }
 
-  async getJobById(id: string): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.getJobById(id);
-    return this.data.jobs.find((j) => j.id === id);
+  async getJobById(id: string, includeDeleted: boolean = false): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.getJobById(id, includeDeleted);
+    return this.data.jobs.find((j) => j.id === id && (includeDeleted || !j.deletedAt));
   }
 
   async createJob(job: Job): Promise<Job> {
@@ -705,28 +791,173 @@ class DatabaseManager {
     return job;
   }
 
-  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.updateJob(id, updates);
-    const idx = this.data.jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return undefined;
-    this.data.jobs[idx] = {
-      ...this.data.jobs[idx],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.persistJson();
-    return this.data.jobs[idx];
+  async createJobWithAudit(job: Job, audit: ActivityLog): Promise<Job> {
+    if (this.isMysql) return mysqlRepository.createJobWithAudit(job, audit);
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    // In-memory transactional rollback safety
+    const backupJobs = [...this.data.jobs];
+    const backupCategories = this.data.categories.map((c) => ({ ...c }));
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs.unshift(job);
+      const cat = this.data.categories.find((c) => c.id === job.categoryId);
+      if (cat) cat.jobCount = (cat.jobCount || 0) + 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return job;
+    } catch (err) {
+      this.data.jobs = backupJobs;
+      this.data.categories = backupCategories;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
   }
 
-  async deleteJob(id: string): Promise<boolean> {
-    if (this.isMysql) return mysqlRepository.deleteJob(id);
-    const job = this.data.jobs.find((j) => j.id === id);
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    return this.updateJobWithAudit(id, updates, null);
+  }
+
+  async updateJobWithAudit(id: string, updates: Partial<Job>, audit: ActivityLog | null): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.updateJobWithAudit(id, updates, audit);
+
+    const idx = this.data.jobs.findIndex((j) => j.id === id && !j.deletedAt);
+    if (idx === -1) return undefined;
+
+    if (audit && (!audit.id || !audit.companyId || !audit.action)) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const backupJob = { ...this.data.jobs[idx] };
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs[idx] = {
+        ...this.data.jobs[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (audit) {
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+        this.data.activityLogs.unshift(audit);
+      }
+
+      this.persistJson(true);
+      return this.data.jobs[idx];
+    } catch (err) {
+      this.data.jobs[idx] = backupJob;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  async deleteJob(id: string, deletedBy?: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJob(id, deletedBy);
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
     if (!job) return false;
+    job.deletedAt = new Date().toISOString();
+    job.deletedBy = deletedBy || 'system';
     const cat = this.data.categories.find((c) => c.id === job.categoryId);
     if (cat && cat.jobCount > 0) cat.jobCount -= 1;
-    this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
     this.persistJson();
     return true;
+  }
+
+  async deleteJobWithAudit(id: string, deletedBy: string, audit: ActivityLog): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobWithAudit(id, deletedBy, audit);
+
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
+    if (!job) return false;
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const prevDeletedAt = job.deletedAt;
+    const prevDeletedBy = job.deletedBy;
+    const cat = this.data.categories.find((c) => c.id === job.categoryId);
+    const prevCatCount = cat ? cat.jobCount : 0;
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      job.deletedAt = new Date().toISOString();
+      job.deletedBy = deletedBy;
+      if (cat && cat.jobCount > 0) cat.jobCount -= 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return true;
+    } catch (err) {
+      job.deletedAt = prevDeletedAt;
+      job.deletedBy = prevDeletedBy;
+      if (cat) cat.jobCount = prevCatCount;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  // ==========================================
+  // ACTIVITY LOGS
+  // ==========================================
+  async createActivityLog(audit: ActivityLog): Promise<ActivityLog> {
+    if (this.isMysql) return mysqlRepository.createActivityLog(audit);
+    if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+    this.data.activityLogs.unshift(audit);
+    this.persistJson();
+    return audit;
+  }
+
+  async getActivityLogs(filters?: ActivityLogFilter): Promise<{ logs: ActivityLog[]; total: number }> {
+    if (this.isMysql) return mysqlRepository.getActivityLogs(filters);
+
+    let logs = [...(this.data.activityLogs || [])];
+
+    if (filters?.companyId) {
+      logs = logs.filter((l) => l.companyId === filters.companyId);
+    }
+    if (filters?.action && filters.action !== 'all') {
+      logs = logs.filter((l) => l.action.toUpperCase() === filters.action?.toUpperCase());
+    }
+    if (filters?.module && filters.module !== 'all') {
+      logs = logs.filter((l) => l.module.toLowerCase() === filters.module?.toLowerCase());
+    }
+    if (filters?.actorUserId) {
+      logs = logs.filter((l) => l.actorUserId === filters.actorUserId);
+    }
+    if (filters?.actor) {
+      const q = filters.actor.toLowerCase();
+      logs = logs.filter((l) => l.actorName.toLowerCase().includes(q) || l.actorUserId.toLowerCase() === q);
+    }
+    if (filters?.startDate) {
+      const start = new Date(filters.startDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() >= start);
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() <= end);
+    }
+
+    logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = logs.length;
+    const page = Math.max(1, filters?.page || 1);
+    const limit = Math.max(1, Math.min(100, filters?.limit || 20));
+    const offset = (page - 1) * limit;
+
+    return {
+      logs: logs.slice(offset, offset + limit),
+      total,
+    };
   }
 
   async incrementJobViews(id: string): Promise<void> {
@@ -891,6 +1122,59 @@ class DatabaseManager {
     return this.data.reportedJobs[idx];
   }
 
+  async updateReportedJobWithAction(
+    id: string,
+    payload: {
+      status: 'resolved' | 'dismissed';
+      adminAction: string;
+      adminReason: string;
+      reviewedByUserId: string;
+      reviewedByName: string;
+    }
+  ): Promise<ReportedJob | undefined> {
+    if (this.isMysql) return mysqlRepository.updateReportedJobWithAction(id, payload);
+    const idx = this.data.reportedJobs.findIndex((r) => r.id === id);
+    if (idx === -1) return undefined;
+    const rep = this.data.reportedJobs[idx];
+    rep.status = payload.status;
+    rep.adminAction = payload.adminAction as ReportedJob['adminAction'];
+    rep.adminReason = payload.adminReason;
+    rep.reviewedByUserId = payload.reviewedByUserId;
+    rep.reviewedByName = payload.reviewedByName;
+    rep.reviewedAt = new Date().toISOString();
+    // Update job status
+    const jobIdx = this.data.jobs.findIndex((j) => j.id === rep.jobId);
+    if (jobIdx !== -1) {
+      if (payload.adminAction === 'deactivate_job') {
+        this.data.jobs[jobIdx].status = 'closed';
+      } else if (payload.adminAction === 'restore_job') {
+        this.data.jobs[jobIdx].status = 'active';
+      }
+    }
+    this.persistJson();
+    return this.data.reportedJobs[idx];
+  }
+
+  async getReportedJobsFiltered(params?: { status?: string; search?: string }): Promise<ReportedJob[]> {
+    if (this.isMysql) return mysqlRepository.getReportedJobsFiltered(params);
+    let reports = this.data.reportedJobs;
+    if (params?.status && params.status !== 'all') {
+      reports = reports.filter((r) => r.status === params.status);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      reports = reports.filter(
+        (r) =>
+          r.jobTitle.toLowerCase().includes(q) ||
+          r.companyName.toLowerCase().includes(q) ||
+          r.reportedByName.toLowerCase().includes(q)
+      );
+    }
+    return reports;
+  }
+
+
+
   // ==========================================
   // JOB ALERTS
   // ==========================================
@@ -1054,6 +1338,114 @@ class DatabaseManager {
       doc.isCurrent = false;
       this.persistJson();
     }
+  }
+
+  async updateResumeExtraction(
+    docId: string,
+    status: ExtractionStatus,
+    extractedData?: ExtractedCandidateProfile,
+    error?: string
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.updateResumeExtraction(docId, status, extractedData, error);
+    }
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractionStatus = status;
+      if (extractedData) doc.extractedData = extractedData;
+      if (error !== undefined) doc.extractionError = error;
+      this.persistJson();
+    }
+  }
+
+  async updateResumeExtractedData(
+    docId: string,
+    extractedData: ExtractedCandidateProfile
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.updateResumeExtractedData(docId, extractedData);
+    }
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.extractedData = extractedData;
+      this.persistJson();
+    }
+  }
+
+  async verifyResumeExtraction(
+    docId: string,
+    candidateId: string,
+    recruiterId: string,
+    recruiterName: string,
+    verifiedData: ExtractedCandidateProfile,
+    overwriteProfile: boolean = true
+  ): Promise<void> {
+    if (this.isMysql) {
+      return mysqlRepository.verifyResumeExtraction(
+        docId,
+        candidateId,
+        recruiterId,
+        recruiterName,
+        verifiedData,
+        overwriteProfile
+      );
+    }
+    const now = new Date().toISOString();
+    this.data.resumeDocuments = this.data.resumeDocuments || [];
+    const doc = this.data.resumeDocuments.find((d) => d.id === docId);
+    if (doc) {
+      doc.isVerified = true;
+      doc.verifiedById = recruiterId;
+      doc.verifiedByName = recruiterName;
+      doc.verifiedAt = now;
+      doc.extractedData = verifiedData;
+    }
+
+    const uIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (uIdx !== -1) {
+      this.data.users[uIdx].isProfileVerified = true;
+      this.data.users[uIdx].verifiedById = recruiterId;
+      this.data.users[uIdx].verifiedByName = recruiterName;
+      this.data.users[uIdx].verifiedAt = now;
+      this.data.users[uIdx].extractedProfile = verifiedData;
+
+      if (overwriteProfile) {
+        if (verifiedData.skills?.length) {
+          this.data.users[uIdx].skills = verifiedData.skills;
+        }
+        if (verifiedData.summary) {
+          this.data.users[uIdx].bio = verifiedData.summary;
+        }
+        if (verifiedData.phone) {
+          this.data.users[uIdx].phone = verifiedData.phone;
+        }
+        if (verifiedData.location) {
+          this.data.users[uIdx].location = verifiedData.location;
+        }
+        if (verifiedData.experience?.length) {
+          this.data.users[uIdx].experience = verifiedData.experience.map((e) => ({
+            title: e.title,
+            company: e.company,
+            period: e.duration,
+            description: e.description || '',
+          }));
+          this.data.users[uIdx].title = verifiedData.experience[0].title;
+        }
+        if (verifiedData.education?.length) {
+          this.data.users[uIdx].education = verifiedData.education.map((e) => ({
+            degree: e.degree,
+            school: e.institution,
+            year: e.year,
+          }));
+        }
+        if (verifiedData.certifications) {
+          this.data.users[uIdx].certifications = verifiedData.certifications;
+        }
+      }
+    }
+    this.persistJson();
   }
 }
 
