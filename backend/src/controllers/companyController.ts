@@ -57,6 +57,14 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // Prevent an existing recruiter from creating another company and changing their association
+    if (req.user.role === 'recruiter' && req.user.companyId) {
+      res.status(403).json({
+        message: 'Forbidden: You are already associated with an existing company and cannot create another company.',
+      });
+      return;
+    }
+
     const {
       name,
       description,
@@ -74,6 +82,15 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
     // Form validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       res.status(400).json({ message: 'Company name is required.' });
+      return;
+    }
+
+    // Check trimmed, case-insensitive duplicate company name
+    const existing = await db.getCompanyByName(name.trim());
+    if (existing) {
+      res.status(409).json({
+        message: 'A company with this name already exists.',
+      });
       return;
     }
 
@@ -119,6 +136,30 @@ export const createCompany = async (req: AuthRequest, res: Response): Promise<vo
       });
     }
 
+    try {
+      await db.createActivityLog({
+        id: `act-${uuidv4().substring(0, 8)}`,
+        companyId: newCompany.id,
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: 'CREATE',
+        module: 'COMPANY',
+        recordId: newCompany.id,
+        recordName: newCompany.name,
+        oldValues: null,
+        newValues: {
+          id: newCompany.id,
+          name: newCompany.name,
+          industry: newCompany.industry,
+          location: newCompany.location,
+          email: newCompany.email,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    } catch (logErr) {
+      console.error('Failed to log company creation activity:', logErr);
+    }
+
     res.status(201).json({
       message: 'Company created successfully.',
       company: newCompany,
@@ -145,11 +186,17 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Cross-company isolation & RBAC:
-    // Admin can edit any company; recruiter can only edit their own company if they have company admin role or belong to it
+    // Admin can edit any company; recruiter can only edit their own company if they have company admin role
     if (req.user.role !== 'admin') {
       if (req.user.companyId !== id) {
         res.status(403).json({
           message: 'Forbidden: You do not have permission to manage accounts or details for another company.',
+        });
+        return;
+      }
+      if (req.user.companyRole !== 'admin') {
+        res.status(403).json({
+          message: 'Forbidden: Only company administrators can update company details.',
         });
         return;
       }
@@ -170,9 +217,18 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
     } = req.body;
 
     // Validation
-    if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
-      res.status(400).json({ message: 'Company name cannot be empty.' });
-      return;
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        res.status(400).json({ message: 'Company name cannot be empty.' });
+        return;
+      }
+      if (name.trim().toLowerCase() !== target.name.trim().toLowerCase()) {
+        const existing = await db.getCompanyByName(name.trim());
+        if (existing && existing.id !== id) {
+          res.status(409).json({ message: 'A company with this name already exists.' });
+          return;
+        }
+      }
     }
 
     if (description !== undefined && (typeof description !== 'string' || description.trim().length === 0)) {
@@ -203,6 +259,34 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
     };
 
     const updated = await db.updateCompany(id, updates);
+
+    try {
+      const oldValues: Record<string, any> = {};
+      const newValues: Record<string, any> = {};
+      for (const key of Object.keys(updates) as (keyof Company)[]) {
+        if (key !== 'updatedAt' && updates[key] !== undefined && updates[key] !== (target as any)[key]) {
+          oldValues[key] = (target as any)[key];
+          newValues[key] = updates[key];
+        }
+      }
+      if (Object.keys(newValues).length > 0) {
+        await db.createActivityLog({
+          id: `act-${uuidv4().substring(0, 8)}`,
+          companyId: id,
+          actorUserId: req.user.id,
+          actorName: req.user.name,
+          action: 'UPDATE',
+          module: 'COMPANY',
+          recordId: id,
+          recordName: updates.name || target.name,
+          oldValues,
+          newValues,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (logErr) {
+      console.error('Failed to log company update activity:', logErr);
+    }
 
     // If company name was updated, update associated jobs and users
     if (name && name.trim() !== target.name) {

@@ -4,6 +4,18 @@ export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
   id?: string;
+  candidateId?: string;
+  title: string;
+  company: string;
+  employmentType?: string;
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  description: string;
+  period?: string;
+  createdAt?: string;
+  updatedAt?: string;
   title: string;
   company: string;
   period?: string;
@@ -17,6 +29,49 @@ export interface UserExperience {
 
 export interface UserEducation {
   id?: string;
+  candidateId?: string;
+  degree: string;
+  institution?: string;
+  school?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  grade?: string;
+  description?: string;
+  year?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CandidateEducation {
+  id: string;
+  candidateId: string;
+  institution: string;
+  degree: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  grade?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CandidateExperience {
+  id: string;
+  candidateId: string;
+  company: string;
+  title: string;
+  employmentType?: string;
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
   degree: string;
   school: string;
   year?: string;
@@ -286,6 +341,8 @@ export interface Job {
   isFeatured: boolean;
   applicantsCount: number;
   viewsCount: number;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -499,4 +556,42 @@ export interface ResumeDocument {
   verifiedAt?: string;
   uploadedAt: string;
   createdAt: string;
+}
+
+// ─── Activity Log / Audit Trail ─────────────────────────────────────────────
+
+export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE';
+
+export interface ActivityLog {
+  id: string;
+  companyId: string;
+  actorUserId: string;
+  actorName: string;
+  action: ActivityAction;
+  module: string;
+  recordId: string;
+  recordName: string;
+  oldValues?: Record<string, any> | null;
+  newValues?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface ActivityLogFilter {
+  companyId?: string;
+  action?: ActivityAction | string;
+  module?: string;
+  actor?: string;
+  actorUserId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ActivityLogsResponse {
+  logs: ActivityLog[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

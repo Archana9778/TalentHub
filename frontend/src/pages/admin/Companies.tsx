@@ -15,6 +15,7 @@ import {
   Users,
   Briefcase,
   ShieldAlert,
+  Shield,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Company, User } from '../../types';
@@ -431,6 +432,7 @@ export const Companies: React.FC = () => {
                 <tr>
                   <th className="py-3 px-4">Recruiter</th>
                   <th className="py-3 px-4">Affiliated Company</th>
+                  <th className="py-3 px-4">Company Role</th>
                   <th className="py-3 px-4">Job Title & Contact</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -439,7 +441,7 @@ export const Companies: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredRecruiters.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
                       No recruiters found matching the active criteria.
                     </td>
                   </tr>
@@ -447,6 +449,7 @@ export const Companies: React.FC = () => {
                   filteredRecruiters.map((rec) => {
                     const isSuspended = rec.status === 'suspended';
                     const hasCompany = Boolean(rec.companyName || rec.companyId);
+                    const isCompanyAdmin = rec.companyRole === 'admin';
 
                     return (
                       <tr key={rec.id} className="hover:bg-slate-50/70 transition">
@@ -465,6 +468,19 @@ export const Companies: React.FC = () => {
                           ) : (
                             <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-amber-200">
                               No Company Affiliated
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {isCompanyAdmin ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                              <Shield className="w-3 h-3 text-purple-600" />
+                              Company Admin
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              <Briefcase className="w-3 h-3 text-blue-600" />
+                              Regular HR
                             </span>
                           )}
                         </td>

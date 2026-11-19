@@ -31,6 +31,7 @@ import { ManageJobs } from './pages/recruiter/ManageJobs';
 import { CreateJob } from './pages/recruiter/CreateJob';
 import { Applicants } from './pages/recruiter/Applicants';
 import { ApplicantDetails } from './pages/recruiter/ApplicantDetails';
+import { ActivityLogPage } from './pages/recruiter/ActivityLog';
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -80,6 +81,7 @@ export const App: React.FC = () => {
               <Route path="applicants/:id" element={<ApplicantDetails />} />
               <Route path="applications" element={<Navigate to="/recruiter/applicants" replace />} />
               <Route path="applications/:id" element={<ApplicantDetails />} />
+              <Route path="activity-logs" element={<ActivityLogPage />} />
             </Route>
           </Route>
 
@@ -92,6 +94,7 @@ export const App: React.FC = () => {
               <Route path="companies" element={<Companies />} />
               <Route path="categories" element={<Categories />} />
               <Route path="reported-jobs" element={<ReportedJobs />} />
+              <Route path="activity-logs" element={<ActivityLogPage />} />
             </Route>
           </Route>
 

@@ -37,8 +37,8 @@
       "avatarUrl": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
       "bio": "Hiring top engineering talent for cloud infrastructure and distributed systems.",
       "createdAt": "2026-01-15T09:30:00Z",
-      "lastLoginAt": "2026-11-11T08:57:17.143Z",
-      "updatedAt": "2026-11-11T08:57:17.143Z"
+      "lastLoginAt": "2026-11-19T13:03:41.512Z",
+      "updatedAt": "2026-11-19T13:03:41.512Z"
     },
     {
       "id": "user-recruiter-2",
@@ -84,7 +84,7 @@
     },
     {
       "id": "user-candidate-1",
-      "email": "candidate.senior@talenthub.com",
+      "email": "candidate@talenthub.com",
       "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
       "name": "Jane Candidate Senior",
       "role": "candidate",
@@ -152,8 +152,8 @@
         "extractedAt": "2026-01-22T14:30:00Z"
       },
       "createdAt": "2026-01-22T11:00:00Z",
-      "lastLoginAt": "2026-11-11T08:57:16.931Z",
-      "updatedAt": "2026-11-11T08:57:17.166Z",
+      "lastLoginAt": "2026-11-19T13:03:41.406Z",
+      "updatedAt": "2026-11-19T13:03:41.700Z",
       "dateOfBirth": "1993-05-18",
       "gender": "Female"
     },
@@ -200,7 +200,9 @@
       ],
       "resumeUrl": "/uploads/resumes/sample-david-chen.pdf",
       "resumeOriginalName": "David_Chen_DevOps.pdf",
-      "createdAt": "2026-01-25T14:00:00Z"
+      "createdAt": "2026-01-25T14:00:00Z",
+      "lastLoginAt": "2026-11-19T13:03:41.601Z",
+      "updatedAt": "2026-11-19T13:03:41.601Z"
     },
     {
       "id": "user-candidate-3",
@@ -264,6 +266,27 @@
       "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Elena%20Rostova",
       "createdAt": "2026-11-11T08:57:10.414Z",
       "updatedAt": "2026-11-11T08:57:10.440Z"
+    },
+    {
+      "id": "user-beb3b7fe",
+      "email": "archana12@gmail.com",
+      "password": "$2a$10$MJ01AtdIhiZmpAUuDzWofOsqGXzEDhHyovy0bu.xiE9usllf7YjwG",
+      "name": "Archana",
+      "role": "candidate",
+      "status": "active",
+      "tokenVersion": 1,
+      "lastLoginAt": "2026-11-11T09:51:41.945Z",
+      "title": "mm",
+      "location": "kerala",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Archana",
+      "skills": [
+        "React",
+        "TypeScript",
+        "Node.js"
+      ],
+      "experience": [],
+      "education": [],
+      "createdAt": "2026-11-11T09:51:41.946Z"
     }
   ],
   "companies": [

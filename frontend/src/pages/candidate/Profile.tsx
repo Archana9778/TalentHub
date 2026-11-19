@@ -22,6 +22,10 @@ import {
   Download,
   Award,
   GraduationCap,
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { CandidateProfile, CandidateEducation, CandidateExperience } from '../../types';
   Building,
   Check,
   AlertTriangle,
@@ -132,12 +136,52 @@ const ResumeCard: React.FC<{
 export const Profile: React.FC = () => {
   const { user, updateCurrentUser } = useAuth();
 
-  // Navigation tab state: 'personal' | 'resume' | 'skills'
-  const [activeTab, setActiveTab] = useState<'personal' | 'resume' | 'skills'>('personal');
+  // Navigation tab state: 'personal' | 'education' | 'experience' | 'resume' | 'skills'
+  const [activeTab, setActiveTab] = useState<'personal' | 'education' | 'experience' | 'resume' | 'skills'>('personal');
 
   // Candidate Profile state fetched from backend
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Education state
+  const [educationList, setEducationList] = useState<CandidateEducation[]>([]);
+  const [loadingEducation, setLoadingEducation] = useState(false);
+  const [educationModalOpen, setEducationModalOpen] = useState(false);
+  const [editingEducationId, setEditingEducationId] = useState<string | null>(null);
+  const [educationForm, setEducationForm] = useState({
+    institution: '',
+    degree: '',
+    fieldOfStudy: '',
+    startDate: '',
+    endDate: '',
+    isCurrent: false,
+    grade: '',
+    description: '',
+  });
+  const [educationErrors, setEducationErrors] = useState<Record<string, string>>({});
+  const [savingEducation, setSavingEducation] = useState(false);
+  const [confirmDeleteEduId, setConfirmDeleteEduId] = useState<string | null>(null);
+  const [deletingEdu, setDeletingEdu] = useState(false);
+
+  // Experience state
+  const [experienceList, setExperienceList] = useState<CandidateExperience[]>([]);
+  const [loadingExperience, setLoadingExperience] = useState(false);
+  const [experienceModalOpen, setExperienceModalOpen] = useState(false);
+  const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
+  const [experienceForm, setExperienceForm] = useState({
+    company: '',
+    title: '',
+    employmentType: 'Full-time',
+    location: '',
+    startDate: '',
+    endDate: '',
+    isCurrent: false,
+    description: '',
+  });
+  const [experienceErrors, setExperienceErrors] = useState<Record<string, string>>({});
+  const [savingExperience, setSavingExperience] = useState(false);
+  const [confirmDeleteExpId, setConfirmDeleteExpId] = useState<string | null>(null);
+  const [deletingExp, setDeletingExp] = useState(false);
 
   // Edit Mode state for Personal Information
   const [isEditing, setIsEditing] = useState(false);
@@ -300,11 +344,257 @@ export const Profile: React.FC = () => {
     }
   };
 
+  const fetchEducation = async () => {
+    try {
+      setLoadingEducation(true);
+      const res = await api.getEducation();
+      if (res?.education) {
+        setEducationList(res.education);
+      }
+    } catch (err: any) {
+      console.error('Failed to load education records:', err);
+    } finally {
+      setLoadingEducation(false);
+    }
+  };
+
+  const fetchExperience = async () => {
+    try {
+      setLoadingExperience(true);
+      const res = await api.getExperience();
+      if (res?.experience) {
+        setExperienceList(res.experience);
+      }
+    } catch (err: any) {
+      console.error('Failed to load experience records:', err);
+    } finally {
+      setLoadingExperience(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
+    fetchEducation();
+    fetchExperience();
   }, []);
 
-  // Load resume history and extraction status on mount
+  // ── Education Handlers ──────────────────────────────────────────────────────
+  const openAddEducation = () => {
+    setEditingEducationId(null);
+    setEducationForm({
+      institution: '',
+      degree: '',
+      fieldOfStudy: '',
+      startDate: '',
+      endDate: '',
+      isCurrent: false,
+      grade: '',
+      description: '',
+    });
+    setEducationErrors({});
+    setEducationModalOpen(true);
+  };
+
+  const openEditEducation = (edu: CandidateEducation) => {
+    setEditingEducationId(edu.id);
+    setEducationForm({
+      institution: edu.institution || '',
+      degree: edu.degree || '',
+      fieldOfStudy: edu.fieldOfStudy || '',
+      startDate: edu.startDate || '',
+      endDate: edu.endDate || '',
+      isCurrent: Boolean(edu.isCurrent),
+      grade: edu.grade || '',
+      description: edu.description || '',
+    });
+    setEducationErrors({});
+    setEducationModalOpen(true);
+  };
+
+  const validateEducationForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!educationForm.institution.trim()) {
+      errs.institution = 'Institution / School name is required.';
+    } else if (educationForm.institution.trim().length > 200) {
+      errs.institution = 'Institution name cannot exceed 200 characters.';
+    }
+    if (!educationForm.degree.trim()) {
+      errs.degree = 'Degree or qualification is required.';
+    } else if (educationForm.degree.trim().length > 150) {
+      errs.degree = 'Degree cannot exceed 150 characters.';
+    }
+    setEducationErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSaveEducation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateEducationForm()) return;
+
+    try {
+      setSavingEducation(true);
+      setSaveError(null);
+      const payload = {
+        institution: educationForm.institution.trim(),
+        degree: educationForm.degree.trim(),
+        fieldOfStudy: educationForm.fieldOfStudy.trim() || undefined,
+        startDate: educationForm.startDate.trim() || undefined,
+        endDate: educationForm.isCurrent ? undefined : (educationForm.endDate.trim() || undefined),
+        isCurrent: educationForm.isCurrent,
+        grade: educationForm.grade.trim() || undefined,
+        description: educationForm.description.trim() || undefined,
+      };
+
+      if (editingEducationId) {
+        const res = await api.updateEducation(editingEducationId, payload);
+        if (res?.education) {
+          setEducationList((prev) =>
+            prev.map((item) => (item.id === editingEducationId ? res.education : item))
+          );
+        }
+        setSuccessMessage('Educational qualification updated successfully.');
+      } else {
+        const res = await api.addEducation(payload);
+        if (res?.education) {
+          setEducationList((prev) => [...prev, res.education]);
+        }
+        setSuccessMessage('Educational qualification added successfully.');
+      }
+
+      setEducationModalOpen(false);
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save educational qualification.');
+    } finally {
+      setSavingEducation(false);
+    }
+  };
+
+  const handleDeleteEducation = async (id: string) => {
+    try {
+      setDeletingEdu(true);
+      setSaveError(null);
+      await api.deleteEducation(id);
+      setEducationList((prev) => prev.filter((item) => item.id !== id));
+      setConfirmDeleteEduId(null);
+      setSuccessMessage('Educational qualification deleted successfully.');
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to delete educational qualification.');
+    } finally {
+      setDeletingEdu(false);
+    }
+  };
+
+  // ── Work Experience Handlers ────────────────────────────────────────────────
+  const openAddExperience = () => {
+    setEditingExperienceId(null);
+    setExperienceForm({
+      company: '',
+      title: '',
+      employmentType: 'Full-time',
+      location: '',
+      startDate: '',
+      endDate: '',
+      isCurrent: false,
+      description: '',
+    });
+    setExperienceErrors({});
+    setExperienceModalOpen(true);
+  };
+
+  const openEditExperience = (exp: CandidateExperience) => {
+    setEditingExperienceId(exp.id);
+    setExperienceForm({
+      company: exp.company || '',
+      title: exp.title || '',
+      employmentType: exp.employmentType || 'Full-time',
+      location: exp.location || '',
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      isCurrent: Boolean(exp.isCurrent),
+      description: exp.description || '',
+    });
+    setExperienceErrors({});
+    setExperienceModalOpen(true);
+  };
+
+  const validateExperienceForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!experienceForm.company.trim()) {
+      errs.company = 'Company name is required.';
+    } else if (experienceForm.company.trim().length > 200) {
+      errs.company = 'Company name cannot exceed 200 characters.';
+    }
+    if (!experienceForm.title.trim()) {
+      errs.title = 'Job title / Designation is required.';
+    } else if (experienceForm.title.trim().length > 150) {
+      errs.title = 'Job title cannot exceed 150 characters.';
+    }
+    setExperienceErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSaveExperience = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateExperienceForm()) return;
+
+    try {
+      setSavingExperience(true);
+      setSaveError(null);
+      const payload = {
+        company: experienceForm.company.trim(),
+        title: experienceForm.title.trim(),
+        employmentType: experienceForm.employmentType.trim() || undefined,
+        location: experienceForm.location.trim() || undefined,
+        startDate: experienceForm.startDate.trim() || undefined,
+        endDate: experienceForm.isCurrent ? undefined : (experienceForm.endDate.trim() || undefined),
+        isCurrent: experienceForm.isCurrent,
+        description: experienceForm.description.trim() || '',
+      };
+
+      if (editingExperienceId) {
+        const res = await api.updateExperience(editingExperienceId, payload);
+        if (res?.experience) {
+          setExperienceList((prev) =>
+            prev.map((item) => (item.id === editingExperienceId ? res.experience : item))
+          );
+        }
+        setSuccessMessage('Work experience record updated successfully.');
+      } else {
+        const res = await api.addExperience(payload);
+        if (res?.experience) {
+          setExperienceList((prev) => [...prev, res.experience]);
+        }
+        setSuccessMessage('Work experience record added successfully.');
+      }
+
+      setExperienceModalOpen(false);
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save work experience record.');
+    } finally {
+      setSavingExperience(false);
+    }
+  };
+
+  const handleDeleteExperience = async (id: string) => {
+    try {
+      setDeletingExp(true);
+      setSaveError(null);
+      await api.deleteExperience(id);
+      setExperienceList((prev) => prev.filter((item) => item.id !== id));
+      setConfirmDeleteExpId(null);
+      setSuccessMessage('Work experience record deleted successfully.');
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to delete work experience record.');
+    } finally {
+      setDeletingExp(false);
+    }
+  };
+
+  // Load resume history on mount
   useEffect(() => {
     if (user?.role !== 'candidate') return;
     setHistoryLoading(true);
@@ -792,11 +1082,11 @@ export const Profile: React.FC = () => {
 
       {/* Tab Navigation */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-3 sm:space-x-4">
+        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('personal')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'personal'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -808,8 +1098,57 @@ export const Profile: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setActiveTab('education')}
+            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'education'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span>Education</span>
+            {educationList.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">
+                {educationList.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('experience')}
+            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'experience'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Briefcase className="w-4 h-4" />
+            <span>Work Experience</span>
+            {experienceList.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">
+                {experienceList.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('skills')}
+            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'skills'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Skills</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('resume')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
+            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'resume'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -817,19 +1156,6 @@ export const Profile: React.FC = () => {
           >
             <FileText className="w-4 h-4" />
             <span>Resume &amp; Documents</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('skills')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors ${
-              activeTab === 'skills'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Skills &amp; Qualifications</span>
           </button>
         </nav>
       </div>
@@ -1194,6 +1520,276 @@ export const Profile: React.FC = () => {
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 2: EDUCATIONAL QUALIFICATIONS                                        */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'education' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-blue-600" />
+                  <span>Educational Qualifications</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Add and manage your academic degrees, diplomas, fields of study, and qualifications.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={openAddEducation}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Education</span>
+              </button>
+            </div>
+
+            {loadingEducation ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                <RefreshCw className="w-5 h-5 text-blue-600 animate-spin mx-auto mb-2" />
+                <span>Loading educational qualifications from database…</span>
+              </div>
+            ) : educationList.length === 0 ? (
+              <div className="py-12 px-4 border-2 border-dashed border-slate-200 rounded-2xl text-center space-y-3 bg-slate-50/50">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div className="max-w-sm mx-auto">
+                  <p className="text-sm font-bold text-slate-800">No educational qualifications added yet</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Showcase your academic background to recruiters by adding your degrees, coursework, or certifications.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAddEducation}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Your First Qualification</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {educationList.map((edu) => (
+                  <div
+                    key={edu.id}
+                    className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-xs flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                          {edu.degree}
+                        </h3>
+                        {edu.fieldOfStudy && (
+                          <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[11px] font-semibold">
+                            {edu.fieldOfStudy}
+                          </span>
+                        )}
+                        {edu.isCurrent && (
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                            Currently Studying
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                        <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{edu.institution}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500">
+                        {(edu.startDate || edu.endDate || edu.isCurrent) && (
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>
+                              {edu.startDate || 'Start'} &ndash;{' '}
+                              {edu.isCurrent ? 'Present' : (edu.endDate || 'End')}
+                            </span>
+                          </div>
+                        )}
+                        {edu.grade && (
+                          <div className="flex items-center gap-1 font-medium text-slate-600">
+                            <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>Grade / CGPA: {edu.grade}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {edu.description && (
+                        <p className="text-xs text-slate-600 leading-relaxed pt-1 whitespace-pre-line">
+                          {edu.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => openEditEducation(edu)}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Edit Qualification"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteEduId(edu.id)}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Delete Qualification"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* TAB 3: WORK EXPERIENCE                                                   */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'experience' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-blue-600" />
+                  <span>Work Experience</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Add and manage your professional career history, job responsibilities, and achievements.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={openAddExperience}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Experience</span>
+              </button>
+            </div>
+
+            {loadingExperience ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                <RefreshCw className="w-5 h-5 text-blue-600 animate-spin mx-auto mb-2" />
+                <span>Loading work experience records from database…</span>
+              </div>
+            ) : experienceList.length === 0 ? (
+              <div className="py-12 px-4 border-2 border-dashed border-slate-200 rounded-2xl text-center space-y-3 bg-slate-50/50">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Briefcase className="w-6 h-6" />
+                </div>
+                <div className="max-w-sm mx-auto">
+                  <p className="text-sm font-bold text-slate-800">No work experience added yet</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Highlight your career accomplishments, designations, and responsibilities to stand out to hiring managers.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAddExperience}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Your First Experience</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {experienceList.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-xs flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                          {exp.title}
+                        </h3>
+                        {exp.employmentType && (
+                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-semibold">
+                            {exp.employmentType}
+                          </span>
+                        )}
+                        {exp.isCurrent && (
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                            Currently Working
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs font-semibold text-slate-700 flex flex-wrap items-center gap-3">
+                        <span className="flex items-center gap-1.5">
+                          <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{exp.company}</span>
+                        </span>
+                        {exp.location && (
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{exp.location}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {(exp.startDate || exp.endDate || exp.isCurrent) && (
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>
+                            {exp.startDate || 'Start'} &ndash;{' '}
+                            {exp.isCurrent ? 'Present' : (exp.endDate || 'Present')}
+                          </span>
+                        </div>
+                      )}
+
+                      {exp.description && (
+                        <p className="text-xs text-slate-600 leading-relaxed pt-1 whitespace-pre-line">
+                          {exp.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => openEditExperience(exp)}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Edit Experience"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteExpId(exp.id)}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Delete Experience"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2055,6 +2651,493 @@ export const Profile: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 1: ADD / EDIT EDUCATION                                            */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {educationModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-5 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <GraduationCap className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingEducationId ? 'Edit Educational Qualification' : 'Add Educational Qualification'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEducationModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEducation} className="space-y-4">
+              {/* Institution / University */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Institution / School / University <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={educationForm.institution}
+                  onChange={(e) => setEducationForm({ ...educationForm, institution: e.target.value })}
+                  placeholder="e.g. Stanford University or MIT"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 ${
+                    educationErrors.institution
+                      ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/30'
+                      : 'border-slate-200 focus:ring-blue-500'
+                  }`}
+                />
+                {educationErrors.institution && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1">{educationErrors.institution}</p>
+                )}
+              </div>
+
+              {/* Degree & Field of Study */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Degree / Qualification <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={educationForm.degree}
+                    onChange={(e) => setEducationForm({ ...educationForm, degree: e.target.value })}
+                    placeholder="e.g. Bachelor of Science"
+                    className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 ${
+                      educationErrors.degree
+                        ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/30'
+                        : 'border-slate-200 focus:ring-blue-500'
+                    }`}
+                  />
+                  {educationErrors.degree && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1">{educationErrors.degree}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Field of Study
+                  </label>
+                  <input
+                    type="text"
+                    value={educationForm.fieldOfStudy}
+                    onChange={(e) => setEducationForm({ ...educationForm, fieldOfStudy: e.target.value })}
+                    placeholder="e.g. Computer Science"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Start Date, End Date, Currently Studying */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="text"
+                      value={educationForm.startDate}
+                      onChange={(e) => setEducationForm({ ...educationForm, startDate: e.target.value })}
+                      placeholder="e.g. 2018 or Sep 2018"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="text"
+                      disabled={educationForm.isCurrent}
+                      value={educationForm.isCurrent ? 'Present' : educationForm.endDate}
+                      onChange={(e) => setEducationForm({ ...educationForm, endDate: e.target.value })}
+                      placeholder="e.g. 2022 or May 2022"
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        educationForm.isCurrent ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={educationForm.isCurrent}
+                    onChange={(e) => setEducationForm({ ...educationForm, isCurrent: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span>I am currently studying here</span>
+                </label>
+              </div>
+
+              {/* Grade / Percentage / CGPA */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Grade / CGPA / Percentage
+                </label>
+                <input
+                  type="text"
+                  value={educationForm.grade}
+                  onChange={(e) => setEducationForm({ ...educationForm, grade: e.target.value })}
+                  placeholder="e.g. 3.8 / 4.0 or 85% or First Class with Distinction"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Activities / Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={educationForm.description}
+                  onChange={(e) => setEducationForm({ ...educationForm, description: e.target.value })}
+                  placeholder="Relevant courses, academic projects, honors, or extracurricular activities..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEducationModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingEducation}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-colors"
+                >
+                  {savingEducation ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{editingEducationId ? 'Update Qualification' : 'Save Qualification'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 2: DELETE EDUCATION CONFIRMATION                                   */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {confirmDeleteEduId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Educational Qualification</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Are you sure you want to remove this qualification?</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This entry will be permanently removed from your profile and database. You can add it back later if needed.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteEduId(null)}
+                disabled={deletingEdu}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteEducation(confirmDeleteEduId)}
+                disabled={deletingEdu}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                {deletingEdu ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting…</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 3: ADD / EDIT WORK EXPERIENCE                                      */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {experienceModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-5 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingExperienceId ? 'Edit Work Experience' : 'Add Work Experience'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExperienceModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExperience} className="space-y-4">
+              {/* Job Title & Company */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Job Title / Designation <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={experienceForm.title}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, title: e.target.value })}
+                    placeholder="e.g. Senior Software Engineer"
+                    className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 ${
+                      experienceErrors.title
+                        ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/30'
+                        : 'border-slate-200 focus:ring-blue-500'
+                    }`}
+                  />
+                  {experienceErrors.title && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1">{experienceErrors.title}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Company Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={experienceForm.company}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, company: e.target.value })}
+                    placeholder="e.g. TechCorp Solutions"
+                    className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 ${
+                      experienceErrors.company
+                        ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/30'
+                        : 'border-slate-200 focus:ring-blue-500'
+                    }`}
+                  />
+                  {experienceErrors.company && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1">{experienceErrors.company}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Employment Type & Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Employment Type
+                  </label>
+                  <select
+                    value={experienceForm.employmentType}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, employmentType: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                    <option value="Freelance">Freelance</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={experienceForm.location}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, location: e.target.value })}
+                    placeholder="e.g. San Francisco, CA or Remote"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Start Date, End Date, Currently Working */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="text"
+                      value={experienceForm.startDate}
+                      onChange={(e) => setExperienceForm({ ...experienceForm, startDate: e.target.value })}
+                      placeholder="e.g. 2021 or Jan 2021"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="text"
+                      disabled={experienceForm.isCurrent}
+                      value={experienceForm.isCurrent ? 'Present' : experienceForm.endDate}
+                      onChange={(e) => setExperienceForm({ ...experienceForm, endDate: e.target.value })}
+                      placeholder="e.g. 2024 or Oct 2024"
+                      className={`w-full px-3.5 py-2.5 border rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        experienceForm.isCurrent ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={experienceForm.isCurrent}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, isCurrent: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span>I currently work here</span>
+                </label>
+              </div>
+
+              {/* Job Responsibilities / Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Job Responsibilities &amp; Achievements
+                </label>
+                <textarea
+                  rows={4}
+                  value={experienceForm.description}
+                  onChange={(e) => setExperienceForm({ ...experienceForm, description: e.target.value })}
+                  placeholder="Describe key responsibilities, leadership, technologies used, and business impacts achieved..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setExperienceModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={savingExperience}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-colors"
+                >
+                  {savingExperience ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{editingExperienceId ? 'Update Experience' : 'Save Experience'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 4: DELETE EXPERIENCE CONFIRMATION                                  */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {confirmDeleteExpId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Work Experience</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Are you sure you want to remove this experience record?</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This record will be permanently deleted from your candidate profile and database. You can add it back later if needed.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteExpId(null)}
+                disabled={deletingExp}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteExperience(confirmDeleteExpId)}
+                disabled={deletingExp}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                {deletingExp ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting…</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -305,6 +305,15 @@ export const updateCandidateProfile = async (req: AuthRequest, res: Response): P
   }
 };
 
+// ==========================================
+// CANDIDATE EDUCATION CONTROLLERS
+// ==========================================
+
+/**
+ * GET /api/candidate/education
+ * Retrieves all education records for the authenticated candidate.
+ */
+export const getCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
 // ─── Technical Skills Endpoints ───────────────────────────────────────────────
 
 /**
@@ -318,6 +327,24 @@ export const addSkill = async (req: AuthRequest, res: Response): Promise<void> =
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
+    if (req.user.role !== 'candidate' && req.user.role !== 'admin') {
+      res.status(403).json({ message: 'Forbidden: Access restricted to candidates.' });
+      return;
+    }
+
+    const education = await db.getCandidateEducation(req.user.id);
+    res.json({ education });
+  } catch (error: any) {
+    console.error('[Candidate Education] Error retrieving education:', error);
+    res.status(500).json({ message: 'Server error while retrieving education records.', error: error.message });
+  }
+};
+
+/**
+ * POST /api/candidate/education
+ * Creates a new education record for the authenticated candidate.
+ */
+export const addCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
     if (req.user.role !== 'candidate') {
       res.status(403).json({ message: 'Forbidden: Only candidates can manage technical skills.' });
       return;
@@ -372,6 +399,83 @@ export const removeSkill = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
     if (req.user.role !== 'candidate') {
+      res.status(403).json({ message: 'Forbidden: Only candidates can add education records.' });
+      return;
+    }
+
+    const {
+      institution,
+      school,
+      degree,
+      fieldOfStudy,
+      startDate,
+      endDate,
+      isCurrent,
+      grade,
+      description,
+    } = req.body;
+
+    const finalInstitution = (institution || school || '').trim();
+    if (!finalInstitution) {
+      res.status(400).json({ message: 'Institution / School name is required.' });
+      return;
+    }
+    if (finalInstitution.length > 200) {
+      res.status(400).json({ message: 'Institution name cannot exceed 200 characters.' });
+      return;
+    }
+
+    const finalDegree = (degree || '').trim();
+    if (!finalDegree) {
+      res.status(400).json({ message: 'Degree or qualification is required.' });
+      return;
+    }
+    if (finalDegree.length > 150) {
+      res.status(400).json({ message: 'Degree cannot exceed 150 characters.' });
+      return;
+    }
+
+    if (fieldOfStudy && String(fieldOfStudy).trim().length > 150) {
+      res.status(400).json({ message: 'Field of study cannot exceed 150 characters.' });
+      return;
+    }
+
+    if (grade && String(grade).trim().length > 50) {
+      res.status(400).json({ message: 'Grade / CGPA cannot exceed 50 characters.' });
+      return;
+    }
+
+    if (description && String(description).trim().length > 3000) {
+      res.status(400).json({ message: 'Description cannot exceed 3000 characters.' });
+      return;
+    }
+
+    const newRecord = await db.createCandidateEducation(req.user.id, {
+      institution: finalInstitution,
+      degree: finalDegree,
+      fieldOfStudy: fieldOfStudy ? String(fieldOfStudy).trim() : undefined,
+      startDate: startDate ? String(startDate).trim() : undefined,
+      endDate: isCurrent ? undefined : (endDate ? String(endDate).trim() : undefined),
+      isCurrent: Boolean(isCurrent),
+      grade: grade ? String(grade).trim() : undefined,
+      description: description ? String(description).trim() : undefined,
+    });
+
+    res.status(201).json({
+      message: 'Education record added successfully.',
+      education: newRecord,
+    });
+  } catch (error: any) {
+    console.error('[Candidate Education] Error adding education:', error);
+    res.status(500).json({ message: 'Server error while adding education record.', error: error.message });
+  }
+};
+
+/**
+ * PUT/PATCH /api/candidate/education/:id
+ * Updates an existing education record belonging to the authenticated candidate.
+ */
+export const updateCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
       res.status(403).json({ message: 'Forbidden: Only candidates can manage technical skills.' });
       return;
     }
@@ -476,328 +580,401 @@ export const updateEducation = async (req: AuthRequest, res: Response): Promise<
       return;
     }
     if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage educational qualifications.' });
+      res.status(403).json({ message: 'Forbidden: Only candidates can update education records.' });
       return;
     }
 
-    const { id } = req.params;
-    const { degree, school, fieldOfStudy, startDate, endDate, year, grade, description } = req.body;
-
-    if (degree !== undefined && (typeof degree !== 'string' || !degree.trim())) {
-      res.status(400).json({ message: 'Degree or qualification cannot be empty.' });
-      return;
-    }
-    if (school !== undefined && (typeof school !== 'string' || !school.trim())) {
-      res.status(400).json({ message: 'Institution or school name cannot be empty.' });
+    const id = typeof req.params.id === 'string' ? req.params.id : String(req.params.id);
+    if (!id) {
+      res.status(400).json({ message: 'Education ID is required.' });
       return;
     }
 
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
+    const existing = await db.getCandidateEducationById(id, req.user.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Education record not found or does not belong to you.' });
       return;
     }
 
-    const currentEdu = user.education || [];
-    const idx = currentEdu.findIndex((e) => e.id === id);
-    if (idx === -1) {
-      res.status(404).json({ message: 'Educational qualification entry not found.' });
-      return;
+    const {
+      institution,
+      school,
+      degree,
+      fieldOfStudy,
+      startDate,
+      endDate,
+      isCurrent,
+      grade,
+      description,
+    } = req.body;
+
+    const updates: any = {};
+
+    if (institution !== undefined || school !== undefined) {
+      const inst = (institution !== undefined ? institution : school || '').trim();
+      if (!inst) {
+        res.status(400).json({ message: 'Institution cannot be empty.' });
+        return;
+      }
+      if (inst.length > 200) {
+        res.status(400).json({ message: 'Institution cannot exceed 200 characters.' });
+        return;
+      }
+      updates.institution = inst;
     }
 
-    const existing = currentEdu[idx];
-    const updatedEntry: UserEducation = {
-      ...existing,
-      ...(degree !== undefined && { degree: degree.trim() }),
-      ...(school !== undefined && { school: school.trim() }),
-      ...(fieldOfStudy !== undefined && { fieldOfStudy: fieldOfStudy ? fieldOfStudy.trim() : undefined }),
-      ...(startDate !== undefined && { startDate: startDate ? startDate.trim() : undefined }),
-      ...(endDate !== undefined && { endDate: endDate ? endDate.trim() : undefined }),
-      ...(year !== undefined && { year: year ? year.trim() : (endDate ? String(endDate).substring(0, 4) : 'N/A') }),
-      ...(grade !== undefined && { grade: grade ? grade.trim() : undefined }),
-      ...(description !== undefined && { description: description ? description.trim() : undefined }),
-    };
+    if (degree !== undefined) {
+      const deg = String(degree).trim();
+      if (!deg) {
+        res.status(400).json({ message: 'Degree cannot be empty.' });
+        return;
+      }
+      if (deg.length > 150) {
+        res.status(400).json({ message: 'Degree cannot exceed 150 characters.' });
+        return;
+      }
+      updates.degree = deg;
+    }
 
-    const updatedEdu = [...currentEdu];
-    updatedEdu[idx] = updatedEntry;
-    await db.updateUser(req.user.id, { education: updatedEdu });
+    if (fieldOfStudy !== undefined) {
+      const fos = String(fieldOfStudy).trim();
+      if (fos.length > 150) {
+        res.status(400).json({ message: 'Field of study cannot exceed 150 characters.' });
+        return;
+      }
+      updates.fieldOfStudy = fos || undefined;
+    }
 
-    res.status(200).json({
-      message: 'Educational qualification updated successfully.',
-      education: updatedEdu,
-      entry: updatedEntry,
+    if (startDate !== undefined) updates.startDate = startDate ? String(startDate).trim() : undefined;
+    if (endDate !== undefined) updates.endDate = endDate ? String(endDate).trim() : undefined;
+    if (isCurrent !== undefined) {
+      updates.isCurrent = Boolean(isCurrent);
+      if (updates.isCurrent) updates.endDate = undefined;
+    }
+    if (grade !== undefined) {
+      const grd = String(grade).trim();
+      if (grd.length > 50) {
+        res.status(400).json({ message: 'Grade cannot exceed 50 characters.' });
+        return;
+      }
+      updates.grade = grd || undefined;
+    }
+    if (description !== undefined) {
+      const desc = String(description).trim();
+      if (desc.length > 3000) {
+        res.status(400).json({ message: 'Description cannot exceed 3000 characters.' });
+        return;
+      }
+      updates.description = desc || undefined;
+    }
+
+    const updated = await db.updateCandidateEducation(id, req.user.id, updates);
+    res.json({
+      message: 'Education record updated successfully.',
+      education: updated,
     });
   } catch (error: any) {
     console.error('[Candidate Education] Error updating education:', error);
-    res.status(500).json({ message: 'Server error while updating education.', error: error.message });
+    res.status(500).json({ message: 'Server error while updating education record.', error: error.message });
   }
 };
 
 /**
  * DELETE /api/candidate/education/:id
- * Deletes an educational qualification entry.
+ * Deletes an education record belonging to the authenticated candidate.
  */
-export const deleteEducation = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
     if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage educational qualifications.' });
+      res.status(403).json({ message: 'Forbidden: Only candidates can delete education records.' });
       return;
     }
 
-    const { id } = req.params;
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
+    const id = typeof req.params.id === 'string' ? req.params.id : String(req.params.id);
+    if (!id) {
+      res.status(400).json({ message: 'Education ID is required.' });
       return;
     }
 
-    const currentEdu = user.education || [];
-    const exists = currentEdu.some((e) => e.id === id);
-    if (!exists) {
-      res.status(404).json({ message: 'Educational qualification entry not found.' });
+    const existing = await db.getCandidateEducationById(id, req.user.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Education record not found or does not belong to you.' });
       return;
     }
 
-    const updatedEdu = currentEdu.filter((e) => e.id !== id);
-    await db.updateUser(req.user.id, { education: updatedEdu });
+    const deleted = await db.deleteCandidateEducation(id, req.user.id);
+    if (!deleted) {
+      res.status(404).json({ message: 'Education record not found.' });
+      return;
+    }
 
-    res.status(200).json({
-      message: 'Educational qualification deleted successfully.',
-      education: updatedEdu,
-    });
+    res.json({ message: 'Education record deleted successfully.' });
   } catch (error: any) {
     console.error('[Candidate Education] Error deleting education:', error);
-    res.status(500).json({ message: 'Server error while deleting education.', error: error.message });
+    res.status(500).json({ message: 'Server error while deleting education record.', error: error.message });
   }
 };
 
-// ─── Work Experience Endpoints ────────────────────────────────────────────────
+// ==========================================
+// CANDIDATE WORK EXPERIENCE CONTROLLERS
+// ==========================================
+
+/**
+ * GET /api/candidate/experience
+ * Retrieves all work experience records for the authenticated candidate.
+ */
+export const getCandidateExperience = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized: Authentication required.' });
+      return;
+    }
+    if (req.user.role !== 'candidate' && req.user.role !== 'admin') {
+      res.status(403).json({ message: 'Forbidden: Access restricted to candidates.' });
+      return;
+    }
+
+    const experience = await db.getCandidateExperience(req.user.id);
+    res.json({ experience });
+  } catch (error: any) {
+    console.error('[Candidate Experience] Error retrieving experience:', error);
+    res.status(500).json({ message: 'Server error while retrieving work experience records.', error: error.message });
+  }
+};
 
 /**
  * POST /api/candidate/experience
- * Adds a new work experience entry.
+ * Creates a new work experience record for the authenticated candidate.
  */
-export const addExperience = async (req: AuthRequest, res: Response): Promise<void> => {
+export const addCandidateExperience = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
     if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage work experience.' });
+      res.status(403).json({ message: 'Forbidden: Only candidates can add work experience records.' });
       return;
     }
 
     const {
-      title,
       company,
+      title,
       employmentType,
       location,
       startDate,
       endDate,
-      currentlyWorking,
+      isCurrent,
       description,
-      period,
     } = req.body;
 
-    if (!title || typeof title !== 'string' || !title.trim()) {
-      res.status(400).json({ message: 'Job title is required.' });
-      return;
-    }
-    if (!company || typeof company !== 'string' || !company.trim()) {
+    const finalCompany = (company || '').trim();
+    if (!finalCompany) {
       res.status(400).json({ message: 'Company name is required.' });
       return;
     }
-
-    // Validate dates if both provided and not currently working
-    const isCurrent = Boolean(currentlyWorking);
-    if (startDate && endDate && !isCurrent) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end < start) {
-        res.status(400).json({ message: 'End date cannot be earlier than start date.' });
-        return;
-      }
-    }
-
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
+    if (finalCompany.length > 200) {
+      res.status(400).json({ message: 'Company name cannot exceed 200 characters.' });
       return;
     }
 
-    const computedPeriod =
-      period && typeof period === 'string' && period.trim()
-        ? period.trim()
-        : `${startDate || ''} - ${isCurrent ? 'Present' : (endDate || '')}`.trim() || 'N/A';
+    const finalTitle = (title || '').trim();
+    if (!finalTitle) {
+      res.status(400).json({ message: 'Job title / Designation is required.' });
+      return;
+    }
+    if (finalTitle.length > 150) {
+      res.status(400).json({ message: 'Job title cannot exceed 150 characters.' });
+      return;
+    }
 
-    const newEntry: UserExperience = {
-      id: `exp-${uuidv4()}`,
-      title: title.trim(),
-      company: company.trim(),
-      employmentType: employmentType && typeof employmentType === 'string' ? employmentType.trim() : undefined,
-      location: location && typeof location === 'string' ? location.trim() : undefined,
-      startDate: startDate && typeof startDate === 'string' ? startDate.trim() : undefined,
-      endDate: isCurrent ? undefined : (endDate && typeof endDate === 'string' ? endDate.trim() : undefined),
-      currentlyWorking: isCurrent,
-      period: computedPeriod,
-      description: description && typeof description === 'string' ? description.trim() : '',
-    };
+    if (employmentType && String(employmentType).trim().length > 50) {
+      res.status(400).json({ message: 'Employment type cannot exceed 50 characters.' });
+      return;
+    }
 
-    const currentExp = user.experience || [];
-    const updatedExp = [...currentExp, newEntry];
-    await db.updateUser(req.user.id, { experience: updatedExp });
+    if (location && String(location).trim().length > 150) {
+      res.status(400).json({ message: 'Location cannot exceed 150 characters.' });
+      return;
+    }
+
+    if (description && String(description).trim().length > 5000) {
+      res.status(400).json({ message: 'Job description cannot exceed 5000 characters.' });
+      return;
+    }
+
+    const newRecord = await db.createCandidateExperience(req.user.id, {
+      company: finalCompany,
+      title: finalTitle,
+      employmentType: employmentType ? String(employmentType).trim() : undefined,
+      location: location ? String(location).trim() : undefined,
+      startDate: startDate ? String(startDate).trim() : undefined,
+      endDate: isCurrent ? undefined : (endDate ? String(endDate).trim() : undefined),
+      isCurrent: Boolean(isCurrent),
+      description: description ? String(description).trim() : '',
+    });
 
     res.status(201).json({
-      message: 'Work experience added successfully.',
-      experience: updatedExp,
-      entry: newEntry,
+      message: 'Work experience record added successfully.',
+      experience: newRecord,
     });
   } catch (error: any) {
     console.error('[Candidate Experience] Error adding experience:', error);
-    res.status(500).json({ message: 'Server error while adding experience.', error: error.message });
+    res.status(500).json({ message: 'Server error while adding work experience record.', error: error.message });
   }
 };
 
 /**
- * PUT /api/candidate/experience/:id
- * Updates an existing work experience entry.
+ * PUT/PATCH /api/candidate/experience/:id
+ * Updates an existing work experience record belonging to the authenticated candidate.
  */
-export const updateExperience = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateCandidateExperience = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
     if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage work experience.' });
+      res.status(403).json({ message: 'Forbidden: Only candidates can update work experience records.' });
       return;
     }
 
-    const { id } = req.params;
+    const id = typeof req.params.id === 'string' ? req.params.id : String(req.params.id);
+    if (!id) {
+      res.status(400).json({ message: 'Experience ID is required.' });
+      return;
+    }
+
+    const existing = await db.getCandidateExperienceById(id, req.user.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Work experience record not found or does not belong to you.' });
+      return;
+    }
+
     const {
-      title,
       company,
+      title,
       employmentType,
       location,
       startDate,
       endDate,
-      currentlyWorking,
+      isCurrent,
       description,
-      period,
     } = req.body;
 
-    if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
-      res.status(400).json({ message: 'Job title cannot be empty.' });
-      return;
-    }
-    if (company !== undefined && (typeof company !== 'string' || !company.trim())) {
-      res.status(400).json({ message: 'Company name cannot be empty.' });
-      return;
-    }
+    const updates: any = {};
 
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
-      return;
-    }
-
-    const currentExp = user.experience || [];
-    const idx = currentExp.findIndex((e) => e.id === id);
-    if (idx === -1) {
-      res.status(404).json({ message: 'Work experience entry not found.' });
-      return;
-    }
-
-    const existing = currentExp[idx];
-    const isCurrent = currentlyWorking !== undefined ? Boolean(currentlyWorking) : Boolean(existing.currentlyWorking);
-    const effStartDate = startDate !== undefined ? startDate : existing.startDate;
-    const effEndDate = isCurrent ? undefined : (endDate !== undefined ? endDate : existing.endDate);
-
-    if (effStartDate && effEndDate && !isCurrent) {
-      const start = new Date(effStartDate);
-      const end = new Date(effEndDate);
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end < start) {
-        res.status(400).json({ message: 'End date cannot be earlier than start date.' });
+    if (company !== undefined) {
+      const comp = String(company).trim();
+      if (!comp) {
+        res.status(400).json({ message: 'Company name cannot be empty.' });
         return;
       }
+      if (comp.length > 200) {
+        res.status(400).json({ message: 'Company name cannot exceed 200 characters.' });
+        return;
+      }
+      updates.company = comp;
     }
 
-    const computedPeriod =
-      period !== undefined
-        ? (typeof period === 'string' ? period.trim() : 'N/A')
-        : `${effStartDate || ''} - ${isCurrent ? 'Present' : (effEndDate || '')}`.trim() || existing.period || 'N/A';
+    if (title !== undefined) {
+      const tit = String(title).trim();
+      if (!tit) {
+        res.status(400).json({ message: 'Job title cannot be empty.' });
+        return;
+      }
+      if (tit.length > 150) {
+        res.status(400).json({ message: 'Job title cannot exceed 150 characters.' });
+        return;
+      }
+      updates.title = tit;
+    }
 
-    const updatedEntry: UserExperience = {
-      ...existing,
-      ...(title !== undefined && { title: title.trim() }),
-      ...(company !== undefined && { company: company.trim() }),
-      ...(employmentType !== undefined && { employmentType: employmentType ? employmentType.trim() : undefined }),
-      ...(location !== undefined && { location: location ? location.trim() : undefined }),
-      ...(startDate !== undefined && { startDate: startDate ? startDate.trim() : undefined }),
-      ...(endDate !== undefined && { endDate: isCurrent ? undefined : (endDate ? endDate.trim() : undefined) }),
-      ...(currentlyWorking !== undefined && { currentlyWorking: isCurrent }),
-      period: computedPeriod,
-      ...(description !== undefined && { description: description ? description.trim() : '' }),
-    };
+    if (employmentType !== undefined) {
+      const et = String(employmentType).trim();
+      if (et.length > 50) {
+        res.status(400).json({ message: 'Employment type cannot exceed 50 characters.' });
+        return;
+      }
+      updates.employmentType = et || undefined;
+    }
 
-    const updatedExp = [...currentExp];
-    updatedExp[idx] = updatedEntry;
-    await db.updateUser(req.user.id, { experience: updatedExp });
+    if (location !== undefined) {
+      const loc = String(location).trim();
+      if (loc.length > 150) {
+        res.status(400).json({ message: 'Location cannot exceed 150 characters.' });
+        return;
+      }
+      updates.location = loc || undefined;
+    }
 
-    res.status(200).json({
-      message: 'Work experience updated successfully.',
-      experience: updatedExp,
-      entry: updatedEntry,
+    if (startDate !== undefined) updates.startDate = startDate ? String(startDate).trim() : undefined;
+    if (endDate !== undefined) updates.endDate = endDate ? String(endDate).trim() : undefined;
+    if (isCurrent !== undefined) {
+      updates.isCurrent = Boolean(isCurrent);
+      if (updates.isCurrent) updates.endDate = undefined;
+    }
+    if (description !== undefined) {
+      const desc = String(description).trim();
+      if (desc.length > 5000) {
+        res.status(400).json({ message: 'Job description cannot exceed 5000 characters.' });
+        return;
+      }
+      updates.description = desc;
+    }
+
+    const updated = await db.updateCandidateExperience(id, req.user.id, updates);
+    res.json({
+      message: 'Work experience record updated successfully.',
+      experience: updated,
     });
   } catch (error: any) {
     console.error('[Candidate Experience] Error updating experience:', error);
-    res.status(500).json({ message: 'Server error while updating experience.', error: error.message });
+    res.status(500).json({ message: 'Server error while updating work experience record.', error: error.message });
   }
 };
 
 /**
  * DELETE /api/candidate/experience/:id
- * Deletes a work experience entry.
+ * Deletes a work experience record belonging to the authenticated candidate.
  */
-export const deleteExperience = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteCandidateExperience = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
     if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage work experience.' });
+      res.status(403).json({ message: 'Forbidden: Only candidates can delete work experience records.' });
       return;
     }
 
-    const { id } = req.params;
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
+    const id = typeof req.params.id === 'string' ? req.params.id : String(req.params.id);
+    if (!id) {
+      res.status(400).json({ message: 'Experience ID is required.' });
       return;
     }
 
-    const currentExp = user.experience || [];
-    const exists = currentExp.some((e) => e.id === id);
-    if (!exists) {
-      res.status(404).json({ message: 'Work experience entry not found.' });
+    const existing = await db.getCandidateExperienceById(id, req.user.id);
+    if (!existing) {
+      res.status(404).json({ message: 'Work experience record not found or does not belong to you.' });
       return;
     }
 
-    const updatedExp = currentExp.filter((e) => e.id !== id);
-    await db.updateUser(req.user.id, { experience: updatedExp });
+    const deleted = await db.deleteCandidateExperience(id, req.user.id);
+    if (!deleted) {
+      res.status(404).json({ message: 'Work experience record not found.' });
+      return;
+    }
 
-    res.status(200).json({
-      message: 'Work experience deleted successfully.',
-      experience: updatedExp,
-    });
+    res.json({ message: 'Work experience record deleted successfully.' });
   } catch (error: any) {
     console.error('[Candidate Experience] Error deleting experience:', error);
-    res.status(500).json({ message: 'Server error while deleting experience.', error: error.message });
+    res.status(500).json({ message: 'Server error while deleting work experience record.', error: error.message });
   }
 };
+

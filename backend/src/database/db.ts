@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import {
   User,
   Company,
@@ -12,8 +13,8 @@ import {
   PasswordResetToken,
   RevokedToken,
   ResumeDocument,
-  ExtractionStatus,
-  ExtractedCandidateProfile,
+  CandidateEducation,
+  CandidateExperience,
 } from '../types';
 import {
   initialUsers,
@@ -41,6 +42,7 @@ interface DatabaseSchema {
   passwordResetTokens: PasswordResetToken[];
   revokedTokens: RevokedToken[];
   resumeDocuments: ResumeDocument[];
+  activityLogs: ActivityLog[];
 }
 
 class DatabaseManager {
@@ -61,6 +63,7 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     if (config.dbMode === 'json') this.initJson();
   }
@@ -100,6 +103,7 @@ class DatabaseManager {
         if (!Array.isArray(this.data.passwordResetTokens)) this.data.passwordResetTokens = [];
         if (!Array.isArray(this.data.revokedTokens)) this.data.revokedTokens = [];
         if (!Array.isArray(this.data.resumeDocuments)) this.data.resumeDocuments = [];
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
         if (!Array.isArray(this.data.applicationStageHistory)) {
           this.data.applicationStageHistory = [...initialApplicationStageHistory];
         }
@@ -134,6 +138,11 @@ class DatabaseManager {
 
     if (!Array.isArray(this.data.revokedTokens)) {
       this.data.revokedTokens = [];
+      modified = true;
+    }
+
+    if (!Array.isArray(this.data.activityLogs)) {
+      this.data.activityLogs = [];
       modified = true;
     }
 
@@ -216,11 +225,12 @@ class DatabaseManager {
       passwordResetTokens: [],
       revokedTokens: [],
       resumeDocuments: [],
+      activityLogs: [],
     };
     this.persistJson();
   }
 
-  private persistJson() {
+  private persistJson(rethrow = false) {
     try {
       const payload = JSON.stringify(this.data, null, 2);
       const tempPath = `${this.filePath}.tmp`;
@@ -233,6 +243,7 @@ class DatabaseManager {
       }
     } catch (err) {
       console.error('[TalentHub DB] Failed to persist data to disk:', err);
+      if (rethrow) throw err;
     }
   }
 
@@ -285,6 +296,312 @@ class DatabaseManager {
     return false;
   }
 
+  // ==========================================
+  // CANDIDATE EDUCATION
+  // ==========================================
+  async getCandidateEducation(candidateId: string): Promise<CandidateEducation[]> {
+    if (this.isMysql) return mysqlRepository.getCandidateEducation(candidateId);
+    const user = this.data.users.find((u) => u.id === candidateId);
+    if (!user || !Array.isArray(user.education)) return [];
+    return user.education.map((e, idx) => ({
+      id: e.id || `edu-${candidateId}-${idx + 1}`,
+      candidateId,
+      institution: e.institution || e.school || '',
+      degree: e.degree || '',
+      fieldOfStudy: e.fieldOfStudy || undefined,
+      startDate: e.startDate || undefined,
+      endDate: e.endDate || undefined,
+      isCurrent: Boolean(e.isCurrent),
+      grade: e.grade || undefined,
+      description: e.description || undefined,
+      createdAt: e.createdAt || user.createdAt,
+      updatedAt: e.updatedAt || user.updatedAt,
+    }));
+  }
+
+  async getCandidateEducationById(id: string, candidateId: string): Promise<CandidateEducation | undefined> {
+    if (this.isMysql) return mysqlRepository.getCandidateEducationById(id, candidateId);
+    const list = await this.getCandidateEducation(candidateId);
+    return list.find((e) => e.id === id);
+  }
+
+  async createCandidateEducation(
+    candidateId: string,
+    data: {
+      institution: string;
+      degree: string;
+      fieldOfStudy?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      grade?: string;
+      description?: string;
+    }
+  ): Promise<CandidateEducation> {
+    if (this.isMysql) return mysqlRepository.createCandidateEducation(candidateId, data);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1) throw new Error('Candidate not found.');
+
+    const newId = `edu-${uuidv4().substring(0, 8)}`;
+    const now = new Date().toISOString();
+    const newRecord: CandidateEducation = {
+      id: newId,
+      candidateId,
+      institution: data.institution,
+      degree: data.degree,
+      fieldOfStudy: data.fieldOfStudy,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: Boolean(data.isCurrent),
+      grade: data.grade,
+      description: data.description,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (!Array.isArray(this.data.users[userIdx].education)) {
+      this.data.users[userIdx].education = [];
+    }
+
+    this.data.users[userIdx].education!.push({
+      ...newRecord,
+      school: data.institution,
+      year: data.startDate && data.endDate ? `${data.startDate} - ${data.endDate}` : (data.endDate || data.startDate || ''),
+    });
+    this.persistJson();
+    return newRecord;
+  }
+
+  async updateCandidateEducation(
+    id: string,
+    candidateId: string,
+    updates: Partial<{
+      institution: string;
+      degree: string;
+      fieldOfStudy?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      grade?: string;
+      description?: string;
+    }>
+  ): Promise<CandidateEducation | undefined> {
+    if (this.isMysql) return mysqlRepository.updateCandidateEducation(id, candidateId, updates);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1 || !Array.isArray(this.data.users[userIdx].education)) return undefined;
+
+    const eduIdx = this.data.users[userIdx].education!.findIndex(
+      (e, idx) => (e.id || `edu-${candidateId}-${idx + 1}`) === id
+    );
+    if (eduIdx === -1) return undefined;
+
+    const current = this.data.users[userIdx].education![eduIdx];
+    const now = new Date().toISOString();
+    const updatedEdu = {
+      ...current,
+      id: current.id || id,
+      candidateId,
+      institution: updates.institution !== undefined ? updates.institution : (current.institution || current.school || ''),
+      school: updates.institution !== undefined ? updates.institution : (current.school || current.institution || ''),
+      degree: updates.degree !== undefined ? updates.degree : current.degree,
+      fieldOfStudy: updates.fieldOfStudy !== undefined ? updates.fieldOfStudy : current.fieldOfStudy,
+      startDate: updates.startDate !== undefined ? updates.startDate : current.startDate,
+      endDate: updates.endDate !== undefined ? updates.endDate : current.endDate,
+      isCurrent: updates.isCurrent !== undefined ? Boolean(updates.isCurrent) : Boolean(current.isCurrent),
+      grade: updates.grade !== undefined ? updates.grade : current.grade,
+      description: updates.description !== undefined ? updates.description : current.description,
+      updatedAt: now,
+    };
+
+    this.data.users[userIdx].education![eduIdx] = updatedEdu;
+    this.persistJson();
+
+    return {
+      id: updatedEdu.id,
+      candidateId,
+      institution: updatedEdu.institution,
+      degree: updatedEdu.degree,
+      fieldOfStudy: updatedEdu.fieldOfStudy,
+      startDate: updatedEdu.startDate,
+      endDate: updatedEdu.endDate,
+      isCurrent: updatedEdu.isCurrent,
+      grade: updatedEdu.grade,
+      description: updatedEdu.description,
+      createdAt: updatedEdu.createdAt || current.createdAt,
+      updatedAt: updatedEdu.updatedAt,
+    };
+  }
+
+  async deleteCandidateEducation(id: string, candidateId: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteCandidateEducation(id, candidateId);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1 || !Array.isArray(this.data.users[userIdx].education)) return false;
+
+    const initialLen = this.data.users[userIdx].education!.length;
+    this.data.users[userIdx].education = this.data.users[userIdx].education!.filter(
+      (e, idx) => (e.id || `edu-${candidateId}-${idx + 1}`) !== id
+    );
+
+    if (this.data.users[userIdx].education!.length !== initialLen) {
+      this.persistJson();
+      return true;
+    }
+    return false;
+  }
+
+  // ==========================================
+  // CANDIDATE EXPERIENCE
+  // ==========================================
+  async getCandidateExperience(candidateId: string): Promise<CandidateExperience[]> {
+    if (this.isMysql) return mysqlRepository.getCandidateExperience(candidateId);
+    const user = this.data.users.find((u) => u.id === candidateId);
+    if (!user || !Array.isArray(user.experience)) return [];
+    return user.experience.map((e, idx) => ({
+      id: e.id || `exp-${candidateId}-${idx + 1}`,
+      candidateId,
+      company: e.company || '',
+      title: e.title || '',
+      employmentType: e.employmentType || undefined,
+      location: e.location || undefined,
+      startDate: e.startDate || undefined,
+      endDate: e.endDate || undefined,
+      isCurrent: Boolean(e.isCurrent),
+      description: e.description || '',
+      createdAt: e.createdAt || user.createdAt,
+      updatedAt: e.updatedAt || user.updatedAt,
+    }));
+  }
+
+  async getCandidateExperienceById(id: string, candidateId: string): Promise<CandidateExperience | undefined> {
+    if (this.isMysql) return mysqlRepository.getCandidateExperienceById(id, candidateId);
+    const list = await this.getCandidateExperience(candidateId);
+    return list.find((e) => e.id === id);
+  }
+
+  async createCandidateExperience(
+    candidateId: string,
+    data: {
+      company: string;
+      title: string;
+      employmentType?: string;
+      location?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      description?: string;
+    }
+  ): Promise<CandidateExperience> {
+    if (this.isMysql) return mysqlRepository.createCandidateExperience(candidateId, data);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1) throw new Error('Candidate not found.');
+
+    const newId = `exp-${uuidv4().substring(0, 8)}`;
+    const now = new Date().toISOString();
+    const newRecord: CandidateExperience = {
+      id: newId,
+      candidateId,
+      company: data.company,
+      title: data.title,
+      employmentType: data.employmentType,
+      location: data.location,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      isCurrent: Boolean(data.isCurrent),
+      description: data.description,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (!Array.isArray(this.data.users[userIdx].experience)) {
+      this.data.users[userIdx].experience = [];
+    }
+
+    this.data.users[userIdx].experience!.push({
+      ...newRecord,
+      period: data.startDate ? (data.isCurrent ? `${data.startDate} - Present` : (data.endDate ? `${data.startDate} - ${data.endDate}` : data.startDate)) : '',
+      description: data.description || '',
+    });
+    this.persistJson();
+    return newRecord;
+  }
+
+  async updateCandidateExperience(
+    id: string,
+    candidateId: string,
+    updates: Partial<{
+      company: string;
+      title: string;
+      employmentType?: string;
+      location?: string;
+      startDate?: string;
+      endDate?: string;
+      isCurrent?: boolean;
+      description?: string;
+    }>
+  ): Promise<CandidateExperience | undefined> {
+    if (this.isMysql) return mysqlRepository.updateCandidateExperience(id, candidateId, updates);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1 || !Array.isArray(this.data.users[userIdx].experience)) return undefined;
+
+    const expIdx = this.data.users[userIdx].experience!.findIndex(
+      (e, idx) => (e.id || `exp-${candidateId}-${idx + 1}`) === id
+    );
+    if (expIdx === -1) return undefined;
+
+    const current = this.data.users[userIdx].experience![expIdx];
+    const now = new Date().toISOString();
+    const updatedExp = {
+      ...current,
+      id: current.id || id,
+      candidateId,
+      company: updates.company !== undefined ? updates.company : current.company,
+      title: updates.title !== undefined ? updates.title : current.title,
+      employmentType: updates.employmentType !== undefined ? updates.employmentType : current.employmentType,
+      location: updates.location !== undefined ? updates.location : current.location,
+      startDate: updates.startDate !== undefined ? updates.startDate : current.startDate,
+      endDate: updates.endDate !== undefined ? updates.endDate : current.endDate,
+      isCurrent: updates.isCurrent !== undefined ? Boolean(updates.isCurrent) : Boolean(current.isCurrent),
+      description: updates.description !== undefined ? updates.description : (current.description || ''),
+      updatedAt: now,
+    };
+
+    this.data.users[userIdx].experience![expIdx] = updatedExp;
+    this.persistJson();
+
+    return {
+      id: updatedExp.id,
+      candidateId,
+      company: updatedExp.company,
+      title: updatedExp.title,
+      employmentType: updatedExp.employmentType,
+      location: updatedExp.location,
+      startDate: updatedExp.startDate,
+      endDate: updatedExp.endDate,
+      isCurrent: updatedExp.isCurrent,
+      description: updatedExp.description,
+      createdAt: updatedExp.createdAt || current.createdAt,
+      updatedAt: updatedExp.updatedAt,
+    };
+  }
+
+  async deleteCandidateExperience(id: string, candidateId: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteCandidateExperience(id, candidateId);
+    const userIdx = this.data.users.findIndex((u) => u.id === candidateId);
+    if (userIdx === -1 || !Array.isArray(this.data.users[userIdx].experience)) return false;
+
+    const initialLen = this.data.users[userIdx].experience!.length;
+    this.data.users[userIdx].experience = this.data.users[userIdx].experience!.filter(
+      (e, idx) => (e.id || `exp-${candidateId}-${idx + 1}`) !== id
+    );
+
+    if (this.data.users[userIdx].experience!.length !== initialLen) {
+      this.persistJson();
+      return true;
+    }
+    return false;
+  }
+
+  async getRecruiters(companyId?: string): Promise<User[]> {
   async getRecruiters(paramsOrCompanyId?: string | { search?: string; companyId?: string }): Promise<User[]> {
     const params = typeof paramsOrCompanyId === 'string'
       ? { companyId: paramsOrCompanyId }
@@ -337,11 +654,41 @@ class DatabaseManager {
     return this.data.companies.find((c) => c.id === id);
   }
 
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    if (this.isMysql) return mysqlRepository.getCompanyByName(name);
+    const normalized = name.trim().toLowerCase();
+    return this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+  }
+
   async createCompany(company: Company): Promise<Company> {
     if (this.isMysql) return mysqlRepository.createCompany(company);
     this.data.companies.push(company);
     this.persistJson();
     return company;
+  }
+
+  async registerRecruiterWithCompany(user: User, company: Company): Promise<{ user: User; company: Company }> {
+    if (this.isMysql) return mysqlRepository.registerRecruiterWithCompany(user, company);
+    const normalized = company.name.trim().toLowerCase();
+    const existing = this.data.companies.find((c) => c.name.trim().toLowerCase() === normalized);
+    if (existing) {
+      const err: any = new Error(
+        'A company with this name already exists. To join an existing organization, please have your Company Administrator add your account from Recruiter Management.'
+      );
+      err.code = 'COMPANY_ALREADY_EXISTS';
+      throw err;
+    }
+    this.data.companies.push(company);
+    const recruiterUser: User = {
+      ...user,
+      role: 'recruiter',
+      companyId: company.id,
+      companyName: company.name,
+      companyRole: 'admin',
+    };
+    this.data.users.push(recruiterUser);
+    this.persistJson();
+    return { user: recruiterUser, company };
   }
 
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
@@ -425,14 +772,14 @@ class DatabaseManager {
   // ==========================================
   // JOBS
   // ==========================================
-  async getJobs(): Promise<Job[]> {
-    if (this.isMysql) return mysqlRepository.getJobs();
-    return this.data.jobs;
+  async getJobs(includeDeleted: boolean = false): Promise<Job[]> {
+    if (this.isMysql) return mysqlRepository.getJobs(includeDeleted);
+    return includeDeleted ? [...this.data.jobs] : this.data.jobs.filter((j) => !j.deletedAt);
   }
 
-  async getJobById(id: string): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.getJobById(id);
-    return this.data.jobs.find((j) => j.id === id);
+  async getJobById(id: string, includeDeleted: boolean = false): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.getJobById(id, includeDeleted);
+    return this.data.jobs.find((j) => j.id === id && (includeDeleted || !j.deletedAt));
   }
 
   async createJob(job: Job): Promise<Job> {
@@ -444,28 +791,173 @@ class DatabaseManager {
     return job;
   }
 
-  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
-    if (this.isMysql) return mysqlRepository.updateJob(id, updates);
-    const idx = this.data.jobs.findIndex((j) => j.id === id);
-    if (idx === -1) return undefined;
-    this.data.jobs[idx] = {
-      ...this.data.jobs[idx],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-    this.persistJson();
-    return this.data.jobs[idx];
+  async createJobWithAudit(job: Job, audit: ActivityLog): Promise<Job> {
+    if (this.isMysql) return mysqlRepository.createJobWithAudit(job, audit);
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    // In-memory transactional rollback safety
+    const backupJobs = [...this.data.jobs];
+    const backupCategories = this.data.categories.map((c) => ({ ...c }));
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs.unshift(job);
+      const cat = this.data.categories.find((c) => c.id === job.categoryId);
+      if (cat) cat.jobCount = (cat.jobCount || 0) + 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return job;
+    } catch (err) {
+      this.data.jobs = backupJobs;
+      this.data.categories = backupCategories;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
   }
 
-  async deleteJob(id: string): Promise<boolean> {
-    if (this.isMysql) return mysqlRepository.deleteJob(id);
-    const job = this.data.jobs.find((j) => j.id === id);
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    return this.updateJobWithAudit(id, updates, null);
+  }
+
+  async updateJobWithAudit(id: string, updates: Partial<Job>, audit: ActivityLog | null): Promise<Job | undefined> {
+    if (this.isMysql) return mysqlRepository.updateJobWithAudit(id, updates, audit);
+
+    const idx = this.data.jobs.findIndex((j) => j.id === id && !j.deletedAt);
+    if (idx === -1) return undefined;
+
+    if (audit && (!audit.id || !audit.companyId || !audit.action)) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const backupJob = { ...this.data.jobs[idx] };
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      this.data.jobs[idx] = {
+        ...this.data.jobs[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (audit) {
+        if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+        this.data.activityLogs.unshift(audit);
+      }
+
+      this.persistJson(true);
+      return this.data.jobs[idx];
+    } catch (err) {
+      this.data.jobs[idx] = backupJob;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  async deleteJob(id: string, deletedBy?: string): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJob(id, deletedBy);
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
     if (!job) return false;
+    job.deletedAt = new Date().toISOString();
+    job.deletedBy = deletedBy || 'system';
     const cat = this.data.categories.find((c) => c.id === job.categoryId);
     if (cat && cat.jobCount > 0) cat.jobCount -= 1;
-    this.data.jobs = this.data.jobs.filter((j) => j.id !== id);
     this.persistJson();
     return true;
+  }
+
+  async deleteJobWithAudit(id: string, deletedBy: string, audit: ActivityLog): Promise<boolean> {
+    if (this.isMysql) return mysqlRepository.deleteJobWithAudit(id, deletedBy, audit);
+
+    const job = this.data.jobs.find((j) => j.id === id && !j.deletedAt);
+    if (!job) return false;
+
+    if (!audit || !audit.id || !audit.companyId || !audit.action) {
+      throw new Error('Invalid audit log: required fields missing.');
+    }
+
+    const prevDeletedAt = job.deletedAt;
+    const prevDeletedBy = job.deletedBy;
+    const cat = this.data.categories.find((c) => c.id === job.categoryId);
+    const prevCatCount = cat ? cat.jobCount : 0;
+    const backupAudit = [...(this.data.activityLogs || [])];
+
+    try {
+      job.deletedAt = new Date().toISOString();
+      job.deletedBy = deletedBy;
+      if (cat && cat.jobCount > 0) cat.jobCount -= 1;
+
+      if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+      this.data.activityLogs.unshift(audit);
+
+      this.persistJson(true);
+      return true;
+    } catch (err) {
+      job.deletedAt = prevDeletedAt;
+      job.deletedBy = prevDeletedBy;
+      if (cat) cat.jobCount = prevCatCount;
+      this.data.activityLogs = backupAudit;
+      throw err;
+    }
+  }
+
+  // ==========================================
+  // ACTIVITY LOGS
+  // ==========================================
+  async createActivityLog(audit: ActivityLog): Promise<ActivityLog> {
+    if (this.isMysql) return mysqlRepository.createActivityLog(audit);
+    if (!Array.isArray(this.data.activityLogs)) this.data.activityLogs = [];
+    this.data.activityLogs.unshift(audit);
+    this.persistJson();
+    return audit;
+  }
+
+  async getActivityLogs(filters?: ActivityLogFilter): Promise<{ logs: ActivityLog[]; total: number }> {
+    if (this.isMysql) return mysqlRepository.getActivityLogs(filters);
+
+    let logs = [...(this.data.activityLogs || [])];
+
+    if (filters?.companyId) {
+      logs = logs.filter((l) => l.companyId === filters.companyId);
+    }
+    if (filters?.action && filters.action !== 'all') {
+      logs = logs.filter((l) => l.action.toUpperCase() === filters.action?.toUpperCase());
+    }
+    if (filters?.module && filters.module !== 'all') {
+      logs = logs.filter((l) => l.module.toLowerCase() === filters.module?.toLowerCase());
+    }
+    if (filters?.actorUserId) {
+      logs = logs.filter((l) => l.actorUserId === filters.actorUserId);
+    }
+    if (filters?.actor) {
+      const q = filters.actor.toLowerCase();
+      logs = logs.filter((l) => l.actorName.toLowerCase().includes(q) || l.actorUserId.toLowerCase() === q);
+    }
+    if (filters?.startDate) {
+      const start = new Date(filters.startDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() >= start);
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate).getTime();
+      logs = logs.filter((l) => new Date(l.createdAt).getTime() <= end);
+    }
+
+    logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = logs.length;
+    const page = Math.max(1, filters?.page || 1);
+    const limit = Math.max(1, Math.min(100, filters?.limit || 20));
+    const offset = (page - 1) * limit;
+
+    return {
+      logs: logs.slice(offset, offset + limit),
+      total,
+    };
   }
 
   async incrementJobViews(id: string): Promise<void> {

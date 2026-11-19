@@ -63,8 +63,7 @@ export const RecruiterManagement: React.FC = () => {
 
   const isCompanyAdmin =
     user?.role === 'admin' ||
-    user?.companyRole === 'admin' ||
-    !user?.companyRole;
+    user?.companyRole === 'admin';
 
   const fetchRecruiters = async () => {
     try {
@@ -575,14 +574,11 @@ export const RecruiterManagement: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Company Role
                   </label>
-                  <select
-                    value={addForm.companyRole}
-                    onChange={(e) => setAddForm({ ...addForm, companyRole: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="recruiter">Recruiter (Standard)</option>
-                    <option value="admin">Company Administrator</option>
-                  </select>
+                  <div className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-500 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Regular HR (default)</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">New members join as Regular HR. Promote to Company Admin via Edit.</p>
                 </div>
 
                 <div>
@@ -700,27 +696,39 @@ export const RecruiterManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Company Role</label>
-                  <select
-                    value={editForm.companyRole}
-                    onChange={(e) => setEditForm({ ...editForm, companyRole: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="recruiter">Recruiter</option>
-                    <option value="admin">Company Administrator</option>
-                  </select>
+                  {isCompanyAdmin ? (
+                    <select
+                      value={editForm.companyRole}
+                      onChange={(e) => setEditForm({ ...editForm, companyRole: e.target.value as any })}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="recruiter">Recruiter (Regular HR)</option>
+                      <option value="admin">Company Administrator</option>
+                    </select>
+                  ) : (
+                    <div className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
+                      {editForm.companyRole === 'admin' ? 'Company Administrator' : 'Recruiter (Regular HR)'}
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Account Status</label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="suspended">Suspended</option>
-                  </select>
+                  {isCompanyAdmin ? (
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  ) : (
+                    <div className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
+                      {editForm.status.charAt(0).toUpperCase() + editForm.status.slice(1)}
+                    </div>
+                  )}
                 </div>
               </div>
 

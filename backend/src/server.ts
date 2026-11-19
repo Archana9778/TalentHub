@@ -19,6 +19,7 @@ import adminRoutes from './routes/adminRoutes';
 import resumeRoutes from './routes/resumeRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 import candidateRoutes from './routes/candidateRoutes';
+import activityLogRoutes from './routes/activityLogRoutes';
 
 const app = express();
 
@@ -90,6 +91,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/resume', resumeRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/candidate', candidateRoutes);
+app.use('/api/activity-logs', activityLogRoutes);
 
 // Root greeting
 app.get('/api', (req: Request, res: Response) => {

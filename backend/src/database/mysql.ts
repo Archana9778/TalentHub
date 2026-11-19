@@ -137,6 +137,8 @@ class MySqlDatabase {
           }
         }
       }
+      migrationStep = 'profile_tables';
+      await this.ensureProfileTables();
       migrationStep = 'V4__user_profile_fields.sql';
       await this.ensureProfileColumns();
       migrationStep = 'V5__auth_hardening.sql';
@@ -145,6 +147,8 @@ class MySqlDatabase {
       await this.ensureAdminStories();
       migrationStep = 'V6__candidate_personal_info.sql';
       await this.ensureCandidatePersonalInfoColumns();
+      migrationStep = 'V7__candidate_education_experience.sql';
+      await this.ensureEducationExperienceTables();
     } catch (migrationErr: any) {
       const code = typeof migrationErr?.code === 'string' ? ` (${migrationErr.code})` : '';
       throw new Error(`MySQL migration step ${migrationStep} failed${code}. Check database permissions, existing schema compatibility, and migration files; existing data was not intentionally deleted.`);
@@ -229,6 +233,170 @@ class MySqlDatabase {
     `);
   }
 
+  private async ensureProfileTables(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    // 1. Ensure candidates table exists
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS candidates (
+        id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        title VARCHAR(150) NULL,
+        location VARCHAR(150) NULL,
+        phone VARCHAR(50) NULL,
+        bio TEXT NULL,
+        date_of_birth DATE NULL,
+        gender VARCHAR(32) NULL,
+        resume_url VARCHAR(500) NULL,
+        resume_original_name VARCHAR(255) NULL,
+        skills_json JSON NULL,
+        experience_json JSON NULL,
+        education_json JSON NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_candidates_user_id (user_id),
+        KEY idx_candidates_title (title),
+        CONSTRAINT fk_candidates_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 2. Ensure recruiters table exists
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS recruiters (
+        id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NOT NULL,
+        company_id VARCHAR(64) NULL,
+        company_name VARCHAR(150) NULL,
+        title VARCHAR(150) NULL,
+        location VARCHAR(150) NULL,
+        phone VARCHAR(50) NULL,
+        bio TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_recruiters_user_id (user_id),
+        KEY idx_recruiters_company_id (company_id),
+        CONSTRAINT fk_recruiters_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        CONSTRAINT fk_recruiters_company FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 3. Backfill existing users into candidates and recruiters
+    const [userCols] = await this.pool.query<any[]>(
+      'SELECT column_name FROM information_schema.columns WHERE table_schema = ? AND table_name = ?',
+      [config.db.database, 'users']
+    );
+    const existingColNames = new Set((userCols || []).map((r: any) => (r.column_name || r.COLUMN_NAME || '').toLowerCase()));
+
+    const candCols = ['id', 'user_id', 'created_at', 'updated_at'];
+    const candSelects = ['id', 'id', 'created_at', 'updated_at'];
+    for (const c of ['title', 'location', 'phone', 'bio', 'resume_url', 'resume_original_name', 'skills_json', 'experience_json', 'education_json', 'date_of_birth', 'gender']) {
+      if (existingColNames.has(c.toLowerCase())) {
+        candCols.push(c);
+        candSelects.push(c);
+      }
+    }
+
+    await this.pool.query(`
+      INSERT IGNORE INTO candidates (${candCols.join(', ')})
+      SELECT ${candSelects.join(', ')}
+      FROM users WHERE role = 'candidate'
+    `);
+
+    const recCols = ['id', 'user_id', 'created_at', 'updated_at'];
+    const recSelects = ['id', 'id', 'created_at', 'updated_at'];
+    for (const c of ['company_id', 'company_name', 'title', 'location', 'phone', 'bio']) {
+      if (existingColNames.has(c.toLowerCase())) {
+        recCols.push(c);
+        recSelects.push(c);
+      }
+    }
+
+    await this.pool.query(`
+      INSERT IGNORE INTO recruiters (${recCols.join(', ')})
+      SELECT ${recSelects.join(', ')}
+      FROM users WHERE role = 'recruiter'
+    `);
+
+    // 4. Ensure resume_documents table exists
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS resume_documents (
+        id VARCHAR(64) NOT NULL,
+        candidate_id VARCHAR(64) NOT NULL,
+        original_filename VARCHAR(255) NOT NULL,
+        blob_name VARCHAR(500) NOT NULL,
+        container_name VARCHAR(100) NOT NULL DEFAULT 'talenthub-resumes',
+        file_extension VARCHAR(10) NOT NULL,
+        mime_type VARCHAR(100) NOT NULL,
+        file_size_bytes BIGINT UNSIGNED NOT NULL,
+        checksum_sha256 CHAR(64) NOT NULL,
+        upload_status VARCHAR(32) NOT NULL DEFAULT 'uploaded',
+        is_current TINYINT(1) NOT NULL DEFAULT 1,
+        current_guard VARCHAR(64) GENERATED ALWAYS AS (
+          CASE WHEN is_current = 1 THEN candidate_id ELSE NULL END
+        ) VIRTUAL,
+        uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_rd_one_current_per_candidate (current_guard),
+        KEY idx_rd_candidate_uploaded (candidate_id, uploaded_at DESC),
+        KEY idx_rd_status (upload_status),
+        KEY idx_rd_checksum (checksum_sha256),
+        CONSTRAINT fk_rd_candidate FOREIGN KEY (candidate_id) REFERENCES candidates (user_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 5. Ensure relational views exist
+    await this.pool.query(`
+      CREATE OR REPLACE VIEW candidate_view AS
+      SELECT
+        u.id AS user_id,
+        c.id AS candidate_id,
+        u.email,
+        u.name,
+        u.role,
+        u.status,
+        u.avatar_url,
+        c.title,
+        c.location,
+        c.phone,
+        c.bio,
+        c.resume_url,
+        c.resume_original_name,
+        c.skills_json,
+        c.experience_json,
+        c.education_json,
+        u.created_at,
+        u.updated_at
+      FROM users u
+      LEFT JOIN candidates c ON u.id = c.user_id
+      WHERE u.role = 'candidate';
+    `);
+
+    await this.pool.query(`
+      CREATE OR REPLACE VIEW recruiter_view AS
+      SELECT
+        u.id AS user_id,
+        r.id AS recruiter_id,
+        u.email,
+        u.name,
+        u.role,
+        u.status,
+        u.avatar_url,
+        r.company_id,
+        r.company_name,
+        r.title,
+        r.location,
+        r.phone,
+        r.bio,
+        u.created_at,
+        u.updated_at
+      FROM users u
+      LEFT JOIN recruiters r ON u.id = r.user_id
+      WHERE u.role = 'recruiter';
+    `);
   private async ensureAdminStories(): Promise<void> {
     if (!this.pool) throw new Error('MySQL pool is not initialized.');
 
@@ -279,13 +447,20 @@ class MySqlDatabase {
       ['gender', 'VARCHAR(32) NULL'],
     ];
 
-    for (const [column, definition] of candColumns) {
-      const [rows] = await this.pool.query<any[]>(
-        'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
-        [config.db.database, 'candidates', column]
-      );
-      if (Number(rows?.[0]?.count || 0) === 0) {
-        await this.pool.query(`ALTER TABLE candidates ADD COLUMN ${column} ${definition}`);
+    const [candTableRows] = await this.pool.query<any[]>(
+      "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'candidates'",
+      [config.db.database]
+    );
+
+    if (Number(candTableRows?.[0]?.count || 0) > 0) {
+      for (const [column, definition] of candColumns) {
+        const [rows] = await this.pool.query<any[]>(
+          'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+          [config.db.database, 'candidates', column]
+        );
+        if (Number(rows?.[0]?.count || 0) === 0) {
+          await this.pool.query(`ALTER TABLE candidates ADD COLUMN ${column} ${definition}`);
+        }
       }
     }
 
@@ -295,15 +470,64 @@ class MySqlDatabase {
       ['gender', 'VARCHAR(32) NULL'],
     ];
 
-    for (const [column, definition] of userColumns) {
-      const [rows] = await this.pool.query<any[]>(
-        'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
-        [config.db.database, 'users', column]
-      );
-      if (Number(rows?.[0]?.count || 0) === 0) {
-        await this.pool.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+    const [userTableRows] = await this.pool.query<any[]>(
+      "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'users'",
+      [config.db.database]
+    );
+
+    if (Number(userTableRows?.[0]?.count || 0) > 0) {
+      for (const [column, definition] of userColumns) {
+        const [rows] = await this.pool.query<any[]>(
+          'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+          [config.db.database, 'users', column]
+        );
+        if (Number(rows?.[0]?.count || 0) === 0) {
+          await this.pool.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+        }
       }
     }
+  }
+
+  private async ensureEducationExperienceTables(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS candidate_education (
+        id VARCHAR(64) PRIMARY KEY,
+        candidate_id VARCHAR(64) NOT NULL,
+        institution VARCHAR(200) NOT NULL,
+        degree VARCHAR(150) NOT NULL,
+        field_of_study VARCHAR(150) NULL,
+        start_date VARCHAR(50) NULL,
+        end_date VARCHAR(50) NULL,
+        is_current BOOLEAN NOT NULL DEFAULT FALSE,
+        grade VARCHAR(50) NULL,
+        description TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_education_candidate (candidate_id),
+        CONSTRAINT fk_education_candidate FOREIGN KEY (candidate_id) REFERENCES users (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS candidate_experience (
+        id VARCHAR(64) PRIMARY KEY,
+        candidate_id VARCHAR(64) NOT NULL,
+        company VARCHAR(200) NOT NULL,
+        title VARCHAR(150) NOT NULL,
+        employment_type VARCHAR(50) NULL,
+        location VARCHAR(150) NULL,
+        start_date VARCHAR(50) NULL,
+        end_date VARCHAR(50) NULL,
+        is_current BOOLEAN NOT NULL DEFAULT FALSE,
+        description TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_experience_candidate (candidate_id),
+        CONSTRAINT fk_experience_candidate FOREIGN KEY (candidate_id) REFERENCES users (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
   }
 
   async close(): Promise<void> {

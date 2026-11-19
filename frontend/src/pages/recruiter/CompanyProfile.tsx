@@ -225,8 +225,7 @@ export const CompanyProfile: React.FC = () => {
 
   const isCompanyAdmin =
     user?.role === 'admin' ||
-    user?.companyRole === 'admin' ||
-    !user?.companyRole; // default to true if sole recruiter
+    user?.companyRole === 'admin';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
