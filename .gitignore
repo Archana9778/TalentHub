@@ -14,8 +14,8 @@ target/
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE & Editor files
 .vscode/
@@ -45,3 +45,10 @@ backend/data/*.tmp
 crash.log
 crash.*.log
 
+
+
+# Local database backups and inspection files
+*.sql
+activity-log-final-inspection.txt
+activity-log-inspection.txt
+missing-inspection.txt
