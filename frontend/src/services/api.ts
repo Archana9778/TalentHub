@@ -14,6 +14,8 @@ import {
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
+  CandidateEducation,
+  CandidateExperience,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -146,6 +148,66 @@ export const api = {
       '/candidate/profile',
       updates
     );
+    return res.data;
+  },
+
+  // --- Candidate Education ---
+  getEducation: async () => {
+    const res = await apiClient.get<{ education: CandidateEducation[] }>('/candidate/education');
+    return res.data;
+  },
+
+  addEducation: async (data: Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
+    const res = await apiClient.post<{ message: string; education: CandidateEducation }>(
+      '/candidate/education',
+      data
+    );
+    return res.data;
+  },
+
+  updateEducation: async (
+    id: string,
+    data: Partial<Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
+  ) => {
+    const res = await apiClient.put<{ message: string; education: CandidateEducation }>(
+      `/candidate/education/${id}`,
+      data
+    );
+    return res.data;
+  },
+
+  deleteEducation: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/candidate/education/${id}`);
+    return res.data;
+  },
+
+  // --- Candidate Work Experience ---
+  getExperience: async () => {
+    const res = await apiClient.get<{ experience: CandidateExperience[] }>('/candidate/experience');
+    return res.data;
+  },
+
+  addExperience: async (data: Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
+    const res = await apiClient.post<{ message: string; experience: CandidateExperience }>(
+      '/candidate/experience',
+      data
+    );
+    return res.data;
+  },
+
+  updateExperience: async (
+    id: string,
+    data: Partial<Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
+  ) => {
+    const res = await apiClient.put<{ message: string; experience: CandidateExperience }>(
+      `/candidate/experience/${id}`,
+      data
+    );
+    return res.data;
+  },
+
+  deleteExperience: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/candidate/experience/${id}`);
     return res.data;
   },
 

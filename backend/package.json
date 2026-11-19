@@ -10,6 +10,7 @@
     "test": "tsx src/tests/featureTest.ts",
     "test:profile": "tsx src/tests/candidateProfile.test.ts",
     "test:profile:mysql": "tsx src/tests/mysqlCandidateProfile.test.ts",
+    "test:edu-exp": "tsx src/tests/educationExperience.test.ts",
     "test:auth": "node ../scripts/test-advanced-auth.js",
     "db:test": "tsx src/database/test-connection.ts",
     "db:verify": "tsx src/database/verify-schema.ts",
@@ -24,7 +25,7 @@
     "test:validation": "tsx src/tests/resumeValidation.test.ts",
     "test:integration": "tsx src/tests/integration.test.ts",
     "test:unit": "SKIP_INTEGRATION=true tsx src/tests/integration.test.ts",
-    "test:all": "tsx src/tests/featureTest.ts && tsx src/tests/resumeValidation.test.ts && tsx src/tests/candidateProfile.test.ts && tsx src/tests/mysqlCandidateProfile.test.ts"
+    "test:all": "tsx src/tests/featureTest.ts && tsx src/tests/resumeValidation.test.ts && tsx src/tests/candidateProfile.test.ts && tsx src/tests/mysqlCandidateProfile.test.ts && tsx src/tests/educationExperience.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.14.1",

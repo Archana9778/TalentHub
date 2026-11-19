@@ -412,6 +412,9 @@ async function main() {
     assert(res.data.analytics !== undefined, 'Analytics must be present');
   });
 
+  // Restore candidate email
+  await db.updateUser(candUser.id, { email: 'candidate@talenthub.com' });
+
   // ────────────────────────────────────────────────────────────────────────────
   // Summary
   // ────────────────────────────────────────────────────────────────────────────
