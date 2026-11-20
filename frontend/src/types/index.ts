@@ -4,67 +4,19 @@ export type CompanyRole = 'admin' | 'recruiter';
 
 export interface UserExperience {
   id?: string;
-
-  candidateId?: string;
   title: string;
   company: string;
-  employmentType?: string;
+  period?: string;
+  description?: string;
   location?: string;
+  employmentType?: string;
   startDate?: string;
   endDate?: string;
-  isCurrent?: boolean;
   currentlyWorking?: boolean;
-  description?: string;
-  period?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface UserEducation {
   id?: string;
-  candidateId?: string;
-  degree: string;
-  institution?: string;
-  school?: string;
-  fieldOfStudy?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  grade?: string;
-  description?: string;
-  year?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface CandidateEducation {
-  id: string;
-  candidateId: string;
-  institution: string;
-  degree: string;
-  fieldOfStudy?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  grade?: string;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface CandidateExperience {
-  id: string;
-  candidateId: string;
-  company: string;
-  title: string;
-  employmentType?: string;
-  location?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
   degree: string;
   school: string;
   year?: string;
@@ -79,31 +31,96 @@ export interface ExtractedExperienceItem {
   company: string;
   title: string;
   duration: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
   description?: string;
+  responsibilities?: string[];
+  technologies?: string[];
+  achievements?: string[];
 }
 
 export interface ExtractedEducationItem {
   degree: string;
   institution: string;
   year: string;
+  qualification?: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: 'Completed' | 'Pursuing' | string;
+  grade?: string;
 }
 
-export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export interface ExtractedProjectItem {
+  name: string;
+  description: string;
+  technologies?: string[];
+  link?: string;
+}
+
+export interface CategorizedSkills {
+  programmingLanguages: string[];
+  frameworks: string[];
+  cloudPlatforms: string[];
+  devOpsTools: string[];
+  databases: string[];
+  networking: string[];
+  tools?: string[];
+  softSkills?: string[];
+  other: string[];
+}
+
+export type ExtractionStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed';
 
 export interface ExtractedCandidateProfile {
   fullName: string;
   email: string;
   phone: string;
   location: string;
+  linkedinUrl?: string | null;
+  linkedInUrl?: string | null;
+  githubUrl?: string | null;
+  portfolioUrl?: string | null;
+
   summary: string;
-  skills: string[];
+  currentTitle?: string | null;
+  currentJobTitle?: string | null;
+  totalYearsExperience?: number | null;
   experience: ExtractedExperienceItem[];
+
   education: ExtractedEducationItem[];
+
+  skills: string[];
+  softSkills?: string[];
+  categorizedSkills?: CategorizedSkills;
+  skillsCategorized?: CategorizedSkills;
+
   certifications: string[];
-  extractedAt: string;
+  projects?: ExtractedProjectItem[];
+  languages?: string[];
+  achievements?: string[];
+
+  extractedText?: string;
   rawTextPreview?: string;
   confidence?: number;
   modelUsed?: string;
+  extractedAt: string;
+
+  // Recruiter correction & audit tracking
+  isCorrected?: boolean;
+  correctedAt?: string;
+  correctedById?: string;
+  correctedByName?: string;
+  originalExtractedData?: ExtractedCandidateProfile;
 }
 
 export interface CandidateExtractionResponse {
@@ -111,11 +128,17 @@ export interface CandidateExtractionResponse {
   resumeId: string | null;
   filename: string;
   status: ExtractionStatus;
+  reviewStatus?: 'Pending' | 'Extracted' | 'Reviewed';
   isVerified: boolean;
+  isCorrected?: boolean;
+  correctedById?: string;
+  correctedByName?: string;
+  correctedAt?: string;
   verifiedById?: string;
   verifiedByName?: string;
   verifiedAt?: string;
   extractedData: ExtractedCandidateProfile;
+  originalExtractedData?: ExtractedCandidateProfile;
   error?: string;
 }
 
@@ -443,4 +466,36 @@ export interface ActivityLogsResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+// ─── Candidate Education & Experience ────────────────────────────────────────
+
+export interface CandidateEducation {
+  id: string;
+  candidateId: string;
+  institution: string;
+  degree: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  grade?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CandidateExperience {
+  id: string;
+  candidateId: string;
+  company: string;
+  title: string;
+  employmentType?: string;
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

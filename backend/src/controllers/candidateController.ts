@@ -1,24 +1,12 @@
 import { Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { AuthRequest } from '../middleware/auth';
 import { db } from '../database/db';
-import { CandidateProfile, User, UserEducation, UserExperience } from '../types';
+import { CandidateProfile, User } from '../types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_CHARS_REGEX = /^[0-9+\-().\s]+$/;
 
 export function formatCandidateProfile(user: User): CandidateProfile {
-  // Ensure education and experience items have id attributes
-  const education = (user.education || []).map((edu, idx) => ({
-    ...edu,
-    id: edu.id || `edu-${idx + 1}-${user.id.substring(0, 8)}`,
-  }));
-
-  const experience = (user.experience || []).map((exp, idx) => ({
-    ...exp,
-    id: exp.id || `exp-${idx + 1}-${user.id.substring(0, 8)}`,
-  }));
-
   return {
     id: user.id,
     userId: user.id,
@@ -31,8 +19,8 @@ export function formatCandidateProfile(user: User): CandidateProfile {
     location: user.location || undefined,
     bio: user.bio || undefined,
     skills: user.skills || [],
-    experience,
-    education,
+    experience: user.experience || [],
+    education: user.education || [],
     resumeUrl: user.resumeUrl || undefined,
     resumeOriginalName: user.resumeOriginalName || undefined,
     avatarUrl: user.avatarUrl || undefined,
@@ -80,7 +68,7 @@ export const getCandidateProfile = async (req: AuthRequest, res: Response): Prom
 /**
  * PUT /api/candidate/profile
  * Updates the authenticated candidate's personal information.
- * Validates required and optional fields, saves in database, returns updated profile.
+ * Validates required and optional fields, saves in MySQL, returns updated profile.
  */
 export const updateCandidateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -175,6 +163,7 @@ export const updateCandidateProfile = async (req: AuthRequest, res: Response): P
         res.status(400).json({ message: 'Date of birth must be in the past.' });
         return;
       }
+      // Check maximum age (e.g. at most 130 years ago)
       const minDate = new Date();
       minDate.setFullYear(minDate.getFullYear() - 130);
       if (dobDate < minDate) {
@@ -212,64 +201,18 @@ export const updateCandidateProfile = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    // Skills, experience, education processing
-    let processedSkills: string[] | undefined = undefined;
-    if (skills !== undefined) {
-      if (!Array.isArray(skills) || skills.some((s) => typeof s !== 'string')) {
-        res.status(400).json({ message: 'Skills must be an array of strings.' });
-        return;
-      }
-      const seen = new Set<string>();
-      const sanitized: string[] = [];
-      for (const s of skills) {
-        const trimmed = s.trim();
-        if (trimmed && !seen.has(trimmed.toLowerCase())) {
-          seen.add(trimmed.toLowerCase());
-          sanitized.push(trimmed);
-        }
-      }
-      processedSkills = sanitized;
+    // Skills, experience, education type checks if provided
+    if (skills !== undefined && (!Array.isArray(skills) || skills.some((s) => typeof s !== 'string'))) {
+      res.status(400).json({ message: 'Skills must be an array of strings.' });
+      return;
     }
-
-    let processedExperience: UserExperience[] | undefined = undefined;
-    if (experience !== undefined) {
-      if (!Array.isArray(experience)) {
-        res.status(400).json({ message: 'Experience must be an array.' });
-        return;
-      }
-      processedExperience = experience.map((exp: any) => ({
-        id: exp.id || `exp-${uuidv4()}`,
-        title: String(exp.title || '').trim(),
-        company: String(exp.company || '').trim(),
-        employmentType: exp.employmentType ? String(exp.employmentType).trim() : undefined,
-        location: exp.location ? String(exp.location).trim() : undefined,
-        startDate: exp.startDate ? String(exp.startDate).trim() : undefined,
-        endDate: exp.endDate ? String(exp.endDate).trim() : undefined,
-        currentlyWorking: Boolean(exp.currentlyWorking),
-        period: exp.period ? String(exp.period).trim() : (
-          `${exp.startDate || ''} - ${exp.currentlyWorking ? 'Present' : (exp.endDate || '')}`.trim() || 'N/A'
-        ),
-        description: exp.description ? String(exp.description).trim() : '',
-      }));
+    if (experience !== undefined && !Array.isArray(experience)) {
+      res.status(400).json({ message: 'Experience must be an array.' });
+      return;
     }
-
-    let processedEducation: UserEducation[] | undefined = undefined;
-    if (education !== undefined) {
-      if (!Array.isArray(education)) {
-        res.status(400).json({ message: 'Education must be an array.' });
-        return;
-      }
-      processedEducation = education.map((edu: any) => ({
-        id: edu.id || `edu-${uuidv4()}`,
-        degree: String(edu.degree || '').trim(),
-        school: String(edu.school || '').trim(),
-        fieldOfStudy: edu.fieldOfStudy ? String(edu.fieldOfStudy).trim() : undefined,
-        startDate: edu.startDate ? String(edu.startDate).trim() : undefined,
-        endDate: edu.endDate ? String(edu.endDate).trim() : undefined,
-        year: edu.year ? String(edu.year).trim() : (edu.endDate ? String(edu.endDate).substring(0, 4) : 'N/A'),
-        grade: edu.grade ? String(edu.grade).trim() : undefined,
-        description: edu.description ? String(edu.description).trim() : undefined,
-      }));
+    if (education !== undefined && !Array.isArray(education)) {
+      res.status(400).json({ message: 'Education must be an array.' });
+      return;
     }
 
     // Build updates payload
@@ -282,9 +225,9 @@ export const updateCandidateProfile = async (req: AuthRequest, res: Response): P
       ...(title !== undefined && { title: typeof title === 'string' ? title.trim() : undefined }),
       ...(location !== undefined && { location: typeof location === 'string' ? location.trim() : undefined }),
       ...(bio !== undefined && { bio: typeof bio === 'string' ? bio.trim() : undefined }),
-      ...(processedSkills !== undefined && { skills: processedSkills }),
-      ...(processedExperience !== undefined && { experience: processedExperience }),
-      ...(processedEducation !== undefined && { education: processedEducation }),
+      ...(skills !== undefined && { skills }),
+      ...(experience !== undefined && { experience }),
+      ...(education !== undefined && { education }),
       updatedAt: new Date().toISOString(),
     };
 
@@ -305,21 +248,9 @@ export const updateCandidateProfile = async (req: AuthRequest, res: Response): P
   }
 };
 
-// ==========================================
-// CANDIDATE EDUCATION CONTROLLERS
-// ==========================================
-
-/**
- * GET /api/candidate/education
- * Retrieves all education records for the authenticated candidate.
- */
-export const getCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
-// ─── Technical Skills Endpoints ───────────────────────────────────────────────
-
 /**
  * POST /api/candidate/skills
- * Adds a new technical skill to candidate profile.
- * Trims whitespace, prevents empty and duplicate skills.
+ * Adds a new technical skill to the candidate's profile.
  */
 export const addSkill = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -327,24 +258,6 @@ export const addSkill = async (req: AuthRequest, res: Response): Promise<void> =
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
       return;
     }
-    if (req.user.role !== 'candidate' && req.user.role !== 'admin') {
-      res.status(403).json({ message: 'Forbidden: Access restricted to candidates.' });
-      return;
-    }
-
-    const education = await db.getCandidateEducation(req.user.id);
-    res.json({ education });
-  } catch (error: any) {
-    console.error('[Candidate Education] Error retrieving education:', error);
-    res.status(500).json({ message: 'Server error while retrieving education records.', error: error.message });
-  }
-};
-
-/**
- * POST /api/candidate/education
- * Creates a new education record for the authenticated candidate.
- */
-export const addCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
     if (req.user.role !== 'candidate') {
       res.status(403).json({ message: 'Forbidden: Only candidates can manage technical skills.' });
       return;
@@ -390,9 +303,79 @@ export const addCandidateEducation = async (req: AuthRequest, res: Response): Pr
 
 /**
  * DELETE /api/candidate/skills/:skill
- * Removes a technical skill from candidate profile.
+ * Removes a technical skill from the candidate's profile.
  */
 export const removeSkill = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized: Authentication required.' });
+      return;
+    }
+    if (req.user.role !== 'candidate') {
+      res.status(403).json({ message: 'Forbidden: Only candidates can manage technical skills.' });
+      return;
+    }
+
+    const rawSkill = req.params.skill || req.body?.skill;
+    if (!rawSkill || typeof rawSkill !== 'string') {
+      res.status(400).json({ message: 'Skill name is required to remove.' });
+      return;
+    }
+
+    const targetSkill = decodeURIComponent(rawSkill).trim();
+    const user = await db.getUserById(req.user.id);
+    if (!user) {
+      res.status(404).json({ message: 'Candidate profile not found.' });
+      return;
+    }
+
+    const currentSkills = user.skills || [];
+    const updatedSkills = currentSkills.filter((s) => s.toLowerCase() !== targetSkill.toLowerCase());
+
+    await db.updateUser(req.user.id, { skills: updatedSkills });
+
+    res.status(200).json({
+      message: 'Technical skill removed successfully.',
+      skills: updatedSkills,
+    });
+  } catch (error: any) {
+    console.error('[Candidate Skills] Error removing skill:', error);
+    res.status(500).json({ message: 'Server error while removing skill.', error: error.message });
+  }
+};
+
+// ==========================================
+// CANDIDATE EDUCATION CONTROLLERS
+// ==========================================
+
+/**
+ * GET /api/candidate/education
+ * Retrieves all education records for the authenticated candidate.
+ */
+export const getCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized: Authentication required.' });
+      return;
+    }
+    if (req.user.role !== 'candidate' && req.user.role !== 'admin') {
+      res.status(403).json({ message: 'Forbidden: Access restricted to candidates.' });
+      return;
+    }
+
+    const education = await db.getCandidateEducation(req.user.id);
+    res.json({ education });
+  } catch (error: any) {
+    console.error('[Candidate Education] Error retrieving education:', error);
+    res.status(500).json({ message: 'Server error while retrieving education records.', error: error.message });
+  }
+};
+
+/**
+ * POST /api/candidate/education
+ * Creates a new education record for the authenticated candidate.
+ */
+export const addCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
@@ -464,6 +447,17 @@ export const removeSkill = async (req: AuthRequest, res: Response): Promise<void
     res.status(201).json({
       message: 'Education record added successfully.',
       education: newRecord,
+      entry: {
+        id: newRecord.id,
+        degree: newRecord.degree,
+        school: (newRecord as any).institution || (newRecord as any).school,
+        institution: (newRecord as any).institution || (newRecord as any).school,
+        fieldOfStudy: newRecord.fieldOfStudy,
+        startDate: newRecord.startDate,
+        endDate: newRecord.endDate,
+        grade: newRecord.grade,
+        description: newRecord.description,
+      },
     });
   } catch (error: any) {
     console.error('[Candidate Education] Error adding education:', error);
@@ -476,104 +470,6 @@ export const removeSkill = async (req: AuthRequest, res: Response): Promise<void
  * Updates an existing education record belonging to the authenticated candidate.
  */
 export const updateCandidateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage technical skills.' });
-      return;
-    }
-
-    const rawSkill = req.params.skill || req.body?.skill;
-    if (!rawSkill || typeof rawSkill !== 'string') {
-      res.status(400).json({ message: 'Skill name is required to remove.' });
-      return;
-    }
-
-    const targetSkill = decodeURIComponent(rawSkill).trim();
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
-      return;
-    }
-
-    const currentSkills = user.skills || [];
-    const updatedSkills = currentSkills.filter((s) => s.toLowerCase() !== targetSkill.toLowerCase());
-
-    await db.updateUser(req.user.id, { skills: updatedSkills });
-
-    res.status(200).json({
-      message: 'Technical skill removed successfully.',
-      skills: updatedSkills,
-    });
-  } catch (error: any) {
-    console.error('[Candidate Skills] Error removing skill:', error);
-    res.status(500).json({ message: 'Server error while removing skill.', error: error.message });
-  }
-};
-
-// ─── Educational Qualifications Endpoints ─────────────────────────────────────
-
-/**
- * POST /api/candidate/education
- * Adds a new educational qualification.
- */
-export const addEducation = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized: Authentication required.' });
-      return;
-    }
-    if (req.user.role !== 'candidate') {
-      res.status(403).json({ message: 'Forbidden: Only candidates can manage educational qualifications.' });
-      return;
-    }
-
-    const { degree, school, fieldOfStudy, startDate, endDate, year, grade, description } = req.body;
-
-    if (!degree || typeof degree !== 'string' || !degree.trim()) {
-      res.status(400).json({ message: 'Degree or qualification is required.' });
-      return;
-    }
-    if (!school || typeof school !== 'string' || !school.trim()) {
-      res.status(400).json({ message: 'Institution or school name is required.' });
-      return;
-    }
-
-    const user = await db.getUserById(req.user.id);
-    if (!user) {
-      res.status(404).json({ message: 'Candidate profile not found.' });
-      return;
-    }
-
-    const currentEdu = user.education || [];
-    const newEntry: UserEducation = {
-      id: `edu-${uuidv4()}`,
-      degree: degree.trim(),
-      school: school.trim(),
-      fieldOfStudy: fieldOfStudy && typeof fieldOfStudy === 'string' ? fieldOfStudy.trim() : undefined,
-      startDate: startDate && typeof startDate === 'string' ? startDate.trim() : undefined,
-      endDate: endDate && typeof endDate === 'string' ? endDate.trim() : undefined,
-      year: year && typeof year === 'string' ? year.trim() : (endDate ? String(endDate).substring(0, 4) : 'N/A'),
-      grade: grade && typeof grade === 'string' ? grade.trim() : undefined,
-      description: description && typeof description === 'string' ? description.trim() : undefined,
-    };
-
-    const updatedEdu = [...currentEdu, newEntry];
-    await db.updateUser(req.user.id, { education: updatedEdu });
-
-    res.status(201).json({
-      message: 'Educational qualification added successfully.',
-      education: updatedEdu,
-      entry: newEntry,
-    });
-  } catch (error: any) {
-    console.error('[Candidate Education] Error adding education:', error);
-    res.status(500).json({ message: 'Server error while adding education.', error: error.message });
-  }
-};
-
-/**
- * PUT /api/candidate/education/:id
- * Updates an existing educational qualification entry.
- */
-export const updateEducation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized: Authentication required.' });
@@ -672,6 +568,19 @@ export const updateEducation = async (req: AuthRequest, res: Response): Promise<
     res.json({
       message: 'Education record updated successfully.',
       education: updated,
+      entry: updated
+        ? {
+            id: updated.id,
+            degree: updated.degree,
+            school: (updated as any).institution || (updated as any).school,
+            institution: (updated as any).institution || (updated as any).school,
+            fieldOfStudy: updated.fieldOfStudy,
+            startDate: updated.startDate,
+            endDate: updated.endDate,
+            grade: updated.grade,
+            description: updated.description,
+          }
+        : undefined,
     });
   } catch (error: any) {
     console.error('[Candidate Education] Error updating education:', error);
@@ -712,7 +621,11 @@ export const deleteCandidateEducation = async (req: AuthRequest, res: Response):
       return;
     }
 
-    res.json({ message: 'Education record deleted successfully.' });
+    const remaining = await db.getCandidateEducation(req.user.id);
+    res.json({
+      message: 'Education record deleted successfully.',
+      education: remaining,
+    });
   } catch (error: any) {
     console.error('[Candidate Education] Error deleting education:', error);
     res.status(500).json({ message: 'Server error while deleting education record.', error: error.message });
@@ -807,6 +720,15 @@ export const addCandidateExperience = async (req: AuthRequest, res: Response): P
       return;
     }
 
+    if (startDate && endDate && !isCurrent) {
+      const s = new Date(startDate).getTime();
+      const e = new Date(endDate).getTime();
+      if (!isNaN(s) && !isNaN(e) && e < s) {
+        res.status(400).json({ message: 'End date cannot be earlier than start date.' });
+        return;
+      }
+    }
+
     const newRecord = await db.createCandidateExperience(req.user.id, {
       company: finalCompany,
       title: finalTitle,
@@ -821,6 +743,18 @@ export const addCandidateExperience = async (req: AuthRequest, res: Response): P
     res.status(201).json({
       message: 'Work experience record added successfully.',
       experience: newRecord,
+      entry: {
+        id: newRecord.id,
+        title: newRecord.title,
+        company: newRecord.company,
+        employmentType: newRecord.employmentType,
+        location: newRecord.location,
+        startDate: newRecord.startDate,
+        endDate: newRecord.endDate,
+        currentlyWorking: (req.body as any).currentlyWorking ?? newRecord.isCurrent,
+        isCurrent: newRecord.isCurrent,
+        description: newRecord.description,
+      },
     });
   } catch (error: any) {
     console.error('[Candidate Experience] Error adding experience:', error);
@@ -931,6 +865,20 @@ export const updateCandidateExperience = async (req: AuthRequest, res: Response)
     res.json({
       message: 'Work experience record updated successfully.',
       experience: updated,
+      entry: updated
+        ? {
+            id: updated.id,
+            title: updated.title,
+            company: updated.company,
+            employmentType: updated.employmentType,
+            location: updated.location,
+            startDate: updated.startDate,
+            endDate: updated.endDate,
+            currentlyWorking: (req.body as any).currentlyWorking ?? updated.isCurrent,
+            isCurrent: updated.isCurrent,
+            description: updated.description,
+          }
+        : undefined,
     });
   } catch (error: any) {
     console.error('[Candidate Experience] Error updating experience:', error);
@@ -971,7 +919,11 @@ export const deleteCandidateExperience = async (req: AuthRequest, res: Response)
       return;
     }
 
-    res.json({ message: 'Work experience record deleted successfully.' });
+    const remaining = await db.getCandidateExperience(req.user.id);
+    res.json({
+      message: 'Work experience record deleted successfully.',
+      experience: remaining,
+    });
   } catch (error: any) {
     console.error('[Candidate Experience] Error deleting experience:', error);
     res.status(500).json({ message: 'Server error while deleting work experience record.', error: error.message });

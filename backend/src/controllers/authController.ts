@@ -219,7 +219,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         title: title?.trim() || 'Software Engineer',
         location: location?.trim() || 'Remote, US',
         avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
-        skills: ['React', 'TypeScript', 'Node.js'],
+        skills: [],
         experience: [],
         education: [],
         createdAt: new Date().toISOString(),
@@ -551,6 +551,92 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     message: 'Profile updated successfully.',
     user: sanitizeUser(updated),
   });
+};
+
+// ==========================================
+// AUTHENTICATED PASSWORD CHANGE
+// ==========================================
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized: Authentication required.' });
+      return;
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      res.status(400).json({ message: 'Current password is required.' });
+      return;
+    }
+
+    if (!newPassword || typeof newPassword !== 'string') {
+      res.status(400).json({ message: 'New password is required.' });
+      return;
+    }
+
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      res.status(400).json({ message: 'New passwords do not match.' });
+      return;
+    }
+
+    const userWithPassword = await db.getUserByEmail(req.user.email);
+    if (!userWithPassword || !userWithPassword.password) {
+      res.status(404).json({ message: 'User account not found.' });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, userWithPassword.password);
+    if (!isMatch) {
+      res.status(400).json({ message: 'Incorrect current password.' });
+      return;
+    }
+
+    const policyResult = validatePasswordPolicy(newPassword);
+    if (!policyResult.valid) {
+      res.status(400).json({
+        message: policyResult.errors[0] || 'New password does not meet security requirements.',
+        errors: policyResult.errors,
+      });
+      return;
+    }
+
+    const newHashedPassword = await bcrypt.hash(newPassword, 10);
+    const nextTokenVersion = (userWithPassword.tokenVersion || 1) + 1;
+
+    await db.updateUser(userWithPassword.id, {
+      password: newHashedPassword,
+      tokenVersion: nextTokenVersion,
+      passwordChangedAt: new Date().toISOString(),
+    });
+
+    try {
+      if (userWithPassword.role === 'recruiter' && userWithPassword.companyId) {
+        await db.createActivityLog({
+          id: `act-${uuidv4().substring(0, 8)}`,
+          companyId: userWithPassword.companyId,
+          actorUserId: userWithPassword.id,
+          actorName: userWithPassword.name,
+          action: 'UPDATE',
+          module: 'RECRUITER',
+          recordId: userWithPassword.id,
+          recordName: userWithPassword.name,
+          oldValues: null,
+          newValues: { event: 'PASSWORD_CHANGED' },
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (logErr) {
+      console.error('Failed to log password change activity:', logErr);
+    }
+
+    res.json({
+      message: 'Password changed successfully.',
+    });
+  } catch (error: any) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ message: 'Server error while changing password.', error: error.message });
+  }
 };
 
 // ==========================================

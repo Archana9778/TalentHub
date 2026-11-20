@@ -397,6 +397,8 @@ class MySqlDatabase {
       LEFT JOIN recruiters r ON u.id = r.user_id
       WHERE u.role = 'recruiter';
     `);
+  }
+
   private async ensureAdminStories(): Promise<void> {
     if (!this.pool) throw new Error('MySQL pool is not initialized.');
 

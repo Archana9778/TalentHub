@@ -283,7 +283,6 @@ async function checkMysqlAvailable(): Promise<boolean> {
     const { getDb } = await import('../database/knex');
     const db = getDb();
     await db.raw('SELECT 1');
-    await db.destroy();
     return true;
   } catch {
     return false;
