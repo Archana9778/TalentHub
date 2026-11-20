@@ -62,17 +62,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle }) => {
           </Link>
         </div>
 
-        {/* Center: Contextual Role Portal Indicator */}
-        {user && currentRoleInfo && (
-          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-            <span className="font-medium text-slate-500 text-[11px]">Active Portal:</span>
-            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${currentRoleInfo.badge}`}>
-              <currentRoleInfo.icon className="w-3 h-3" />
-              <span>{currentRoleInfo.text}</span>
-            </span>
-          </div>
-        )}
-
         {/* Right: User Profile & Actions */}
         <div className="flex items-center gap-3">
           {user ? (

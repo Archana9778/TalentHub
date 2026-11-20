@@ -22,6 +22,7 @@ import {
   CandidateExtractionResponse,
   CandidateEducation,
   CandidateExperience,
+  ExtractionStatus,
 } from '../types';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '/api';
@@ -295,6 +296,9 @@ export const api = {
       resume: any;
       user: User;
       parsedData: any;
+      extractionStatus?: ExtractionStatus;
+      extractedData?: ExtractedCandidateProfile;
+      extractionError?: string;
     }>('/resume/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: onProgress
