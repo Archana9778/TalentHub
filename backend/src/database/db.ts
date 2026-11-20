@@ -15,6 +15,10 @@ import {
   ResumeDocument,
   CandidateEducation,
   CandidateExperience,
+  ActivityLog,
+  ActivityLogFilter,
+  ExtractionStatus,
+  ExtractedCandidateProfile,
 } from '../types';
 import {
   initialUsers,
@@ -601,7 +605,6 @@ class DatabaseManager {
     return false;
   }
 
-  async getRecruiters(companyId?: string): Promise<User[]> {
   async getRecruiters(paramsOrCompanyId?: string | { search?: string; companyId?: string }): Promise<User[]> {
     const params = typeof paramsOrCompanyId === 'string'
       ? { companyId: paramsOrCompanyId }

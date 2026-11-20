@@ -3,7 +3,7 @@
     {
       "id": "user-admin-1",
       "email": "admin@talenthub.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "Eleanor Vance",
       "role": "admin",
       "companyRole": "admin",
@@ -16,13 +16,13 @@
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
       "bio": "TalentHub System Director & Governance Lead",
       "createdAt": "2026-01-10T08:00:00Z",
-      "lastLoginAt": "2026-11-11T08:57:09.737Z",
-      "updatedAt": "2026-11-11T08:57:09.742Z"
+      "lastLoginAt": "2026-11-20T05:01:53.616Z",
+      "updatedAt": "2026-11-20T05:01:53.617Z"
     },
     {
       "id": "user-recruiter-1",
       "email": "recruiter@techcorp.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "Sarah Jenkins",
       "role": "recruiter",
       "companyRole": "admin",
@@ -37,13 +37,13 @@
       "avatarUrl": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
       "bio": "Hiring top engineering talent for cloud infrastructure and distributed systems.",
       "createdAt": "2026-01-15T09:30:00Z",
-      "lastLoginAt": "2026-11-19T13:03:41.512Z",
-      "updatedAt": "2026-11-19T13:03:41.512Z"
+      "lastLoginAt": "2026-11-20T05:02:13.093Z",
+      "updatedAt": "2026-11-20T05:02:13.093Z"
     },
     {
       "id": "user-recruiter-2",
       "email": "hiring@nexusaidata.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "Michael Chang",
       "role": "recruiter",
       "companyRole": "admin",
@@ -58,13 +58,13 @@
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
       "bio": "Building world-class AI, ML and LLM product teams.",
       "createdAt": "2026-01-20T10:15:00Z",
-      "lastLoginAt": "2026-11-11T08:57:10.015Z",
-      "updatedAt": "2026-11-11T08:57:10.015Z"
+      "lastLoginAt": "2026-11-20T05:01:53.743Z",
+      "updatedAt": "2026-11-20T05:01:53.743Z"
     },
     {
       "id": "user-recruiter-3",
       "email": "marcus.recruiter@techcorp.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "Marcus Vance",
       "role": "recruiter",
       "companyRole": "recruiter",
@@ -79,20 +79,20 @@
       "avatarUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
       "bio": "Focused on backend, cloud engineering, and Kubernetes talent.",
       "createdAt": "2026-01-25T09:00:00Z",
-      "lastLoginAt": "2026-11-11T08:57:10.139Z",
-      "updatedAt": "2026-11-11T08:57:10.139Z"
+      "lastLoginAt": "2026-11-20T05:01:53.805Z",
+      "updatedAt": "2026-11-20T05:01:53.805Z"
     },
     {
       "id": "user-candidate-1",
       "email": "candidate@talenthub.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
-      "name": "Jane Candidate Senior",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
+      "name": "Alex Morgan",
       "role": "candidate",
       "status": "active",
       "title": "Lead Full Stack TypeScript Architect",
       "designation": "Senior Full-Stack Cloud Engineer",
       "location": "San Francisco, CA",
-      "phone": "+1 (555) 234-5678",
+      "phone": "+1 (555) 987-6543",
       "contactNumber": "+1 (555) 432-8765",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
       "bio": "Seasoned full stack engineer with deep expertise in cloud architectures and TypeScript ecosystems.",
@@ -106,7 +106,8 @@
         "Azure",
         "Docker",
         "Kubernetes",
-        "Tailwind CSS"
+        "Tailwind CSS",
+        "Terraform"
       ],
       "experience": [
         {
@@ -152,15 +153,13 @@
         "extractedAt": "2026-01-22T14:30:00Z"
       },
       "createdAt": "2026-01-22T11:00:00Z",
-      "lastLoginAt": "2026-11-19T13:03:41.406Z",
-      "updatedAt": "2026-11-19T13:03:41.700Z",
-      "dateOfBirth": "1993-05-18",
-      "gender": "Female"
+      "lastLoginAt": "2026-11-20T05:02:13.224Z",
+      "updatedAt": "2026-11-20T05:02:13.234Z"
     },
     {
       "id": "user-candidate-2",
       "email": "david.chen@example.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "David Chen",
       "role": "candidate",
       "status": "active",
@@ -200,14 +199,12 @@
       ],
       "resumeUrl": "/uploads/resumes/sample-david-chen.pdf",
       "resumeOriginalName": "David_Chen_DevOps.pdf",
-      "createdAt": "2026-01-25T14:00:00Z",
-      "lastLoginAt": "2026-11-19T13:03:41.601Z",
-      "updatedAt": "2026-11-19T13:03:41.601Z"
+      "createdAt": "2026-01-25T14:00:00Z"
     },
     {
       "id": "user-candidate-3",
       "email": "priya.patel@example.com",
-      "password": "$2a$10$Q2NPH5OzQdeOAVJWH2lwBu4ONiLNvy1IY5hU/U6Vxyjq1./vgtJvu",
+      "password": "$2a$10$cF8cGOyP6pv7Lmq.x3ccX..y4bcpC7uOUqptlu9duUjBF9yORF/sK",
       "name": "Priya Patel",
       "role": "candidate",
       "status": "active",
@@ -249,9 +246,9 @@
       "createdAt": "2026-02-01T16:20:00Z"
     },
     {
-      "id": "user-recruiter-ba96b959",
+      "id": "user-recruiter-44fb0a98",
       "email": "elena.rostova@techcorp.com",
-      "password": "$2a$10$OJoAWtKPrs1us9Ai2vKM/O0wCmDHjaBPRz4mcqOWklk0z1ootIuMC",
+      "password": "$2a$10$rWNC2zR/Jud7O2wMo7VzdOSOQAsxAh/SBJRno7fbZZy8/5A6xP29e",
       "name": "Elena Rostova",
       "role": "recruiter",
       "companyRole": "recruiter",
@@ -264,29 +261,8 @@
       "designation": "Lead Global Sourcing Partner",
       "location": "San Francisco, CA & Remote",
       "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Elena%20Rostova",
-      "createdAt": "2026-11-11T08:57:10.414Z",
-      "updatedAt": "2026-11-11T08:57:10.440Z"
-    },
-    {
-      "id": "user-beb3b7fe",
-      "email": "archana12@gmail.com",
-      "password": "$2a$10$MJ01AtdIhiZmpAUuDzWofOsqGXzEDhHyovy0bu.xiE9usllf7YjwG",
-      "name": "Archana",
-      "role": "candidate",
-      "status": "active",
-      "tokenVersion": 1,
-      "lastLoginAt": "2026-11-11T09:51:41.945Z",
-      "title": "mm",
-      "location": "kerala",
-      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Archana",
-      "skills": [
-        "React",
-        "TypeScript",
-        "Node.js"
-      ],
-      "experience": [],
-      "education": [],
-      "createdAt": "2026-11-11T09:51:41.946Z"
+      "createdAt": "2026-11-20T05:01:53.942Z",
+      "updatedAt": "2026-11-20T05:01:53.954Z"
     }
   ],
   "companies": [
@@ -355,7 +331,7 @@
       "createdAt": "2026-01-18T15:00:00Z"
     },
     {
-      "id": "comp-fa348325",
+      "id": "comp-a122ddb0",
       "name": "Apex Quantum Cloud",
       "description": "Updated description for Apex Quantum Cloud enterprise platforms.",
       "logo": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120",
@@ -368,8 +344,8 @@
       "industry": "Quantum Computing",
       "size": "200-500 employees",
       "verified": true,
-      "createdAt": "2026-11-11T08:57:10.277Z",
-      "updatedAt": "2026-11-11T08:57:10.285Z"
+      "createdAt": "2026-11-20T05:01:53.874Z",
+      "updatedAt": "2026-11-20T05:01:53.878Z"
     }
   ],
   "categories": [
@@ -451,7 +427,7 @@
       "viewsCount": 248,
       "expiresAt": "2026-12-31T23:59:59Z",
       "createdAt": "2026-02-01T10:00:00Z",
-      "updatedAt": "2026-11-11T08:57:10.467Z"
+      "updatedAt": "2026-11-20T05:01:53.963Z"
     },
     {
       "id": "job-2",
@@ -656,14 +632,14 @@
           "previousStage": "Applied",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.560Z",
+          "changedAt": "2026-11-20T05:01:53.992Z",
           "comment": "Valid move",
           "reason": "Valid move",
           "isAdminOverride": false
         }
       ],
-      "createdAt": "2026-11-11T08:57:10.554Z",
-      "updatedAt": "2026-11-11T08:57:10.565Z"
+      "createdAt": "2026-11-20T05:01:53.988Z",
+      "updatedAt": "2026-11-20T05:01:53.994Z"
     },
     {
       "id": "app-1",
@@ -730,7 +706,7 @@
         }
       ],
       "createdAt": "2026-02-02T11:00:00Z",
-      "updatedAt": "2026-11-11T08:57:10.474Z"
+      "updatedAt": "2026-11-20T05:01:53.964Z"
     },
     {
       "id": "app-2",
@@ -862,14 +838,14 @@
           "previousStage": "Screening",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.547Z",
+          "changedAt": "2026-11-20T05:01:53.986Z",
           "comment": "Position closed due to team budget restructuring.",
           "reason": "Position closed due to team budget restructuring.",
           "isAdminOverride": false
         }
       ],
       "createdAt": "2026-02-14T09:15:00Z",
-      "updatedAt": "2026-11-11T08:57:10.550Z"
+      "updatedAt": "2026-11-20T05:01:53.987Z"
     },
     {
       "id": "app-4",
@@ -920,7 +896,7 @@
           "previousStage": "Applied",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.500Z",
+          "changedAt": "2026-11-20T05:01:53.972Z",
           "comment": "Candidate background checked. Moving to initial screening.",
           "reason": "Candidate background checked. Moving to initial screening.",
           "isAdminOverride": false
@@ -930,7 +906,7 @@
           "previousStage": "Screening",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.510Z",
+          "changedAt": "2026-11-20T05:01:53.976Z",
           "comment": "Screening passed. Scheduling technical round.",
           "reason": "Screening passed. Scheduling technical round.",
           "isAdminOverride": false
@@ -940,7 +916,7 @@
           "previousStage": "Interview",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.523Z",
+          "changedAt": "2026-11-20T05:01:53.979Z",
           "comment": "Candidate aced all rounds. Formal offer extended.",
           "reason": "Candidate aced all rounds. Formal offer extended.",
           "isAdminOverride": false
@@ -950,14 +926,14 @@
           "previousStage": "Offer",
           "changedBy": "user-recruiter-1",
           "changedByName": "Sarah Jenkins",
-          "changedAt": "2026-11-11T08:57:10.536Z",
+          "changedAt": "2026-11-20T05:01:53.982Z",
           "comment": "Offer accepted! Candidate signed contract.",
           "reason": "Offer accepted! Candidate signed contract.",
           "isAdminOverride": false
         }
       ],
       "createdAt": "2026-02-05T12:00:00Z",
-      "updatedAt": "2026-11-11T08:57:10.541Z",
+      "updatedAt": "2026-11-20T05:01:53.983Z",
       "interviewDate": "2026-03-01T14:00:00Z",
       "interviewType": "Technical Round"
     }
@@ -1094,25 +1070,25 @@
       "reason": "Application received."
     },
     {
-      "id": "hist-d1c4ac0f",
+      "id": "hist-f31d60a4",
       "applicationId": "app-4",
       "previousStatus": "Applied",
       "newStatus": "Screening",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.500Z",
+      "timestamp": "2026-11-20T05:01:53.972Z",
       "reason": "Candidate background checked. Moving to initial screening.",
       "comments": "Candidate background checked. Moving to initial screening.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-e8b48429",
+      "id": "hist-484cf726",
       "applicationId": "app-4",
       "previousStatus": "Screening",
       "newStatus": "Interview",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.510Z",
+      "timestamp": "2026-11-20T05:01:53.976Z",
       "reason": "Screening passed. Scheduling technical round.",
       "comments": "Screening passed. Scheduling technical round.",
       "isAdminOverride": false,
@@ -1120,48 +1096,48 @@
       "interviewType": "Technical Round"
     },
     {
-      "id": "hist-847d1e1f",
+      "id": "hist-386a9c3f",
       "applicationId": "app-4",
       "previousStatus": "Interview",
       "newStatus": "Offer",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.523Z",
+      "timestamp": "2026-11-20T05:01:53.979Z",
       "reason": "Candidate aced all rounds. Formal offer extended.",
       "comments": "Candidate aced all rounds. Formal offer extended.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-313dbe6f",
+      "id": "hist-b547307f",
       "applicationId": "app-4",
       "previousStatus": "Offer",
       "newStatus": "Hired",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.536Z",
+      "timestamp": "2026-11-20T05:01:53.982Z",
       "reason": "Offer accepted! Candidate signed contract.",
       "comments": "Offer accepted! Candidate signed contract.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-6b9209e4",
+      "id": "hist-3c78965e",
       "applicationId": "app-3",
       "previousStatus": "Screening",
       "newStatus": "Rejected",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.547Z",
+      "timestamp": "2026-11-20T05:01:53.986Z",
       "reason": "Position closed due to team budget restructuring.",
       "isAdminOverride": false
     },
     {
-      "id": "hist-a4feeac6",
+      "id": "hist-5607a2fe",
       "applicationId": "app-test-invalid",
       "previousStatus": "Applied",
       "newStatus": "Screening",
       "changedBy": "user-recruiter-1",
       "changedByName": "Sarah Jenkins",
-      "timestamp": "2026-11-11T08:57:10.560Z",
+      "timestamp": "2026-11-20T05:01:53.992Z",
       "reason": "Valid move",
       "comments": "Valid move",
       "isAdminOverride": false
@@ -1169,51 +1145,162 @@
   ],
   "passwordResetTokens": [],
   "revokedTokens": [],
-  "resumeDocuments": [
+  "resumeDocuments": [],
+  "activityLogs": [
     {
-      "id": "rdoc-3f44bc0e-aa3",
-      "candidateId": "candidate-uuid-101",
-      "originalFilename": "Alice_Resume.pdf",
-      "blobName": "resumes/candidate-uuid-101/1794387457068-06758e6e-c0f8-4f6a-bb69-f5269cc5b32f-Alice_Resume.pdf",
-      "containerName": "talenthub-resumes",
-      "fileExtension": "pdf",
-      "mimeType": "application/pdf",
-      "fileSizeBytes": 83,
-      "checksumSha256": "78a89c6ac3d0fb6e94ff83c65f0bcc6e0ab50baf3ad1ff0f4c4cc47da4eab656",
-      "uploadStatus": "uploaded",
-      "isCurrent": false,
-      "uploadedAt": "2026-11-11T08:57:37.069Z",
-      "createdAt": "2026-11-11T08:57:37.069Z"
+      "id": "act-5fbe807b",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "UPDATE",
+      "module": "jobs",
+      "recordId": "job-1",
+      "recordName": "Senior Full Stack Engineer (React + Spring Boot)",
+      "oldValues": {
+        "recruiterId": "user-recruiter-3",
+        "recruiterName": "Marcus Vance"
+      },
+      "newValues": {
+        "recruiterId": "user-recruiter-1",
+        "recruiterName": "Sarah Jenkins"
+      },
+      "createdAt": "2026-11-20T05:01:53.963Z"
     },
     {
-      "id": "rdoc-01badbe1-f0c",
-      "candidateId": "candidate-uuid-101",
-      "originalFilename": "Alice_Profile.docx",
-      "blobName": "resumes/candidate-uuid-101/1794387457079-ef8628fd-12dd-45e7-b0bd-d6eedf5fe86c-Alice_Profile.docx",
-      "containerName": "talenthub-resumes",
-      "fileExtension": "docx",
-      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "fileSizeBytes": 139,
-      "checksumSha256": "55b3cb599c2b037ead2b9b14a2b2d9f832d9d2d864fdeb87aa0e3e996c25224d",
-      "uploadStatus": "uploaded",
-      "isCurrent": false,
-      "uploadedAt": "2026-11-11T08:57:37.079Z",
-      "createdAt": "2026-11-11T08:57:37.079Z"
+      "id": "act-d381e976",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "UPDATE",
+      "module": "jobs",
+      "recordId": "job-1",
+      "recordName": "Senior Full Stack Engineer (React + Spring Boot)",
+      "oldValues": {
+        "recruiterId": "user-recruiter-1",
+        "recruiterName": "Sarah Jenkins"
+      },
+      "newValues": {
+        "recruiterId": "user-recruiter-3",
+        "recruiterName": "Marcus Vance"
+      },
+      "createdAt": "2026-11-20T05:01:53.957Z"
     },
     {
-      "id": "rdoc-1d588e87-c54",
-      "candidateId": "candidate-uuid-101",
-      "originalFilename": "Alice_Resume.pdf",
-      "blobName": "resumes/candidate-uuid-101/1794387457094-36bf57af-a4ae-481a-a621-2edbdc3336f8-Alice_Resume.pdf",
-      "containerName": "talenthub-resumes",
-      "fileExtension": "pdf",
-      "mimeType": "application/pdf",
-      "fileSizeBytes": 83,
-      "checksumSha256": "78a89c6ac3d0fb6e94ff83c65f0bcc6e0ab50baf3ad1ff0f4c4cc47da4eab656",
-      "uploadStatus": "deleted",
-      "isCurrent": false,
-      "uploadedAt": "2026-11-11T08:57:37.094Z",
-      "createdAt": "2026-11-11T08:57:37.094Z"
+      "id": "act-508f315c",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "UPDATE",
+      "module": "RECRUITERS",
+      "recordId": "user-recruiter-44fb0a98",
+      "recordName": "Elena Rostova",
+      "oldValues": {
+        "status": "inactive"
+      },
+      "newValues": {
+        "status": "active"
+      },
+      "createdAt": "2026-11-20T05:01:53.955Z"
+    },
+    {
+      "id": "act-d74aba63",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "UPDATE",
+      "module": "RECRUITERS",
+      "recordId": "user-recruiter-44fb0a98",
+      "recordName": "Elena Rostova",
+      "oldValues": {
+        "status": "active"
+      },
+      "newValues": {
+        "status": "inactive"
+      },
+      "createdAt": "2026-11-20T05:01:53.952Z"
+    },
+    {
+      "id": "act-af3d181f",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "UPDATE",
+      "module": "RECRUITERS",
+      "recordId": "user-recruiter-44fb0a98",
+      "recordName": "Elena Rostova",
+      "oldValues": {
+        "phone": "+1 (555) 444-3322",
+        "contactNumber": "+1 (555) 444-3322",
+        "title": "Senior Cloud Talent Partner",
+        "designation": "Senior Cloud Talent Partner"
+      },
+      "newValues": {
+        "phone": "+1 (555) 444-9999",
+        "contactNumber": "+1 (555) 444-9999",
+        "title": "Lead Global Sourcing Partner",
+        "designation": "Lead Global Sourcing Partner"
+      },
+      "createdAt": "2026-11-20T05:01:53.947Z"
+    },
+    {
+      "id": "act-b518ac53",
+      "companyId": "comp-1",
+      "actorUserId": "user-recruiter-1",
+      "actorName": "Sarah Jenkins",
+      "action": "CREATE",
+      "module": "RECRUITERS",
+      "recordId": "user-recruiter-44fb0a98",
+      "recordName": "Elena Rostova",
+      "oldValues": null,
+      "newValues": {
+        "id": "user-recruiter-44fb0a98",
+        "name": "Elena Rostova",
+        "email": "elena.rostova@techcorp.com",
+        "companyRole": "recruiter",
+        "designation": "Senior Cloud Talent Partner",
+        "status": "active"
+      },
+      "createdAt": "2026-11-20T05:01:53.944Z"
+    },
+    {
+      "id": "act-a0284cda",
+      "companyId": "comp-a122ddb0",
+      "actorUserId": "user-admin-1",
+      "actorName": "Eleanor Vance",
+      "action": "UPDATE",
+      "module": "COMPANY",
+      "recordId": "comp-a122ddb0",
+      "recordName": "Apex Quantum Cloud",
+      "oldValues": {
+        "description": "Next generation quantum computing algorithms and cloud infrastructure.",
+        "location": "San Jose, CA",
+        "size": "50-200 employees"
+      },
+      "newValues": {
+        "description": "Updated description for Apex Quantum Cloud enterprise platforms.",
+        "location": "San Jose, CA & Remote",
+        "size": "200-500 employees"
+      },
+      "createdAt": "2026-11-20T05:01:53.879Z"
+    },
+    {
+      "id": "act-29693d36",
+      "companyId": "comp-a122ddb0",
+      "actorUserId": "user-admin-1",
+      "actorName": "Eleanor Vance",
+      "action": "CREATE",
+      "module": "COMPANY",
+      "recordId": "comp-a122ddb0",
+      "recordName": "Apex Quantum Cloud",
+      "oldValues": null,
+      "newValues": {
+        "id": "comp-a122ddb0",
+        "name": "Apex Quantum Cloud",
+        "industry": "Quantum Computing",
+        "location": "San Jose, CA",
+        "email": "hiring@apexquantum.example.com"
+      },
+      "createdAt": "2026-11-20T05:01:53.875Z"
     }
   ]
 }

@@ -67,8 +67,8 @@ export const RecruiterDashboard: React.FC = () => {
   if (loading) return <Loading message="Loading recruiter dashboard & hiring funnel..." />;
 
   // Real backend metrics
-  const totalRecruiters = analytics?.totalRecruiters ?? 2;
-  const activeRecruiters = analytics?.activeRecruiters ?? 2;
+  const totalRecruiters = analytics?.totalRecruiters ?? 1;
+  const activeRecruiters = analytics?.activeRecruiters ?? 1;
   const totalCompanyJobs = analytics?.totalCompanyJobs ?? jobs.length;
   const assignedJobsCount = analytics?.assignedJobsCount ?? jobs.filter((j) => j.recruiterId === user?.id).length;
   const activeJobsCount = analytics?.activeJobs ?? jobs.filter((j) => j.status === 'active').length;
@@ -101,7 +101,7 @@ export const RecruiterDashboard: React.FC = () => {
           <div className="flex-1 max-w-3xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-semibold mb-3 border border-indigo-500/30">
               <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{company?.name || user?.companyName || 'CloudScale Technologies'} • Recruiter Workspace</span>
+              <span>{company?.name || user?.companyName || 'Company'} • Recruiter Workspace</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
               Recruiter Dashboard

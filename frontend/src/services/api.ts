@@ -16,12 +16,12 @@ import {
   MatchDetails,
   CandidateJobMatch,
   SkillComparisonResult,
-  CandidateEducation,
-  CandidateExperience,
   ActivityLogFilter,
   ActivityLogsResponse,
   ExtractedCandidateProfile,
   CandidateExtractionResponse,
+  CandidateEducation,
+  CandidateExperience,
   ExtractionStatus,
 } from '../types';
 
@@ -132,6 +132,15 @@ export const api = {
     return res.data;
   },
 
+  changePassword: async (payload: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword?: string;
+  }) => {
+    const res = await apiClient.post<{ message: string }>('/auth/change-password', payload);
+    return res.data;
+  },
+
   getMe: async () => {
     const res = await apiClient.get<{ user: User }>('/auth/me');
     return res.data;
@@ -158,16 +167,6 @@ export const api = {
     return res.data;
   },
 
-  // --- Candidate Education ---
-  getEducation: async () => {
-    const res = await apiClient.get<{ education: CandidateEducation[] }>('/candidate/education');
-    return res.data;
-  },
-
-  addEducation: async (data: Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
-    const res = await apiClient.post<{ message: string; education: CandidateEducation }>(
-      '/candidate/education',
-      data
   addCandidateSkill: async (skill: string) => {
     const res = await apiClient.post<{ message: string; skills: string[] }>(
       '/candidate/skills',
@@ -183,68 +182,21 @@ export const api = {
     return res.data;
   },
 
-updateEducation: async (
-  id: string,
-  data: Partial<Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
-) => {
-  const res = await apiClient.put<{ message: string; education: CandidateEducation }>(
-    `/candidate/education/${id}`,
-    data
-  );
-  return res.data;
-},
+  addCandidateEducation: async (edu: Partial<UserEducation>) => {
+    const res = await apiClient.post<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+      '/candidate/education',
+      edu
+    );
+    return res.data;
+  },
 
-addCandidateEducation: async (edu: Partial<UserEducation>) => {
-  const res = await apiClient.post<{ message: string; education: UserEducation[]; entry: UserEducation }>(
-    '/candidate/education',
-    edu
-  );
-  return res.data;
-},
-
-deleteEducation: async (id: string) => {
-  const res = await apiClient.delete<{ message: string }>(`/candidate/education/${id}`);
-  return res.data;
-},
-
-// --- Candidate Work Experience ---
-getExperience: async () => {
-  const res = await apiClient.get<{ experience: CandidateExperience[] }>('/candidate/experience');
-  return res.data;
-},
-
-addExperience: async (
-  data: Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>
-) => {
-  const res = await apiClient.post<{ message: string; experience: CandidateExperience }>(
-    '/candidate/experience',
-    data
-  );
-  return res.data;
-},
-
-updateCandidateEducation: async (id: string, edu: Partial<UserEducation>) => {
-  const res = await apiClient.put<{ message: string; education: UserEducation[]; entry: UserEducation }>(
-    `/candidate/education/${encodeURIComponent(id)}`,
-    edu
-  );
-  return res.data;
-},
-
-deleteCandidateEducation: async (id: string) => {
-  const res = await apiClient.delete<{ message: string; education: UserEducation[] }>(
-    `/candidate/education/${encodeURIComponent(id)}`
-  );
-  return res.data;
-},
-
-addCandidateExperience: async (exp: Partial<UserExperience>) => {
-  const res = await apiClient.post<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
-    '/candidate/experience',
-    exp
-  );
-  return res.data;
-},
+  updateCandidateEducation: async (id: string, edu: Partial<UserEducation>) => {
+    const res = await apiClient.put<{ message: string; education: UserEducation[]; entry: UserEducation }>(
+      `/candidate/education/${encodeURIComponent(id)}`,
+      edu
+    );
+    return res.data;
+  },
 
   deleteCandidateEducation: async (id: string) => {
     const res = await apiClient.delete<{ message: string; education: UserEducation[] }>(
@@ -261,13 +213,6 @@ addCandidateExperience: async (exp: Partial<UserExperience>) => {
     return res.data;
   },
 
-  updateExperience: async (
-    id: string,
-    data: Partial<Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
-  ) => {
-    const res = await apiClient.put<{ message: string; experience: CandidateExperience }>(
-      `/candidate/experience/${id}`,
-      data
   updateCandidateExperience: async (id: string, exp: Partial<UserExperience>) => {
     const res = await apiClient.put<{ message: string; experience: UserExperience[]; entry: UserExperience }>(
       `/candidate/experience/${encodeURIComponent(id)}`,
@@ -276,19 +221,72 @@ addCandidateExperience: async (exp: Partial<UserExperience>) => {
     return res.data;
   },
 
- deleteExperience: async (id: string) => {
-  const res = await apiClient.delete<{ message: string }>(
-    `/candidate/experience/${id}`
-  );
-  return res.data;
-},
+  deleteCandidateExperience: async (id: string) => {
+    const res = await apiClient.delete<{ message: string; experience: UserExperience[] }>(
+      `/candidate/experience/${encodeURIComponent(id)}`
+    );
+    return res.data;
+  },
 
-deleteCandidateExperience: async (id: string) => {
-  const res = await apiClient.delete<{ message: string; experience: UserExperience[] }>(
-    `/candidate/experience/${encodeURIComponent(id)}`
-  );
-  return res.data;
-},
+  // --- Candidate Education (new endpoints) ---
+  getEducation: async () => {
+    const res = await apiClient.get<{ education: CandidateEducation[] }>('/candidate/education');
+    return res.data;
+  },
+
+  addEducation: async (data: Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
+    const res = await apiClient.post<{ message: string; education: CandidateEducation }>(
+      '/candidate/education',
+      data
+    );
+    return res.data;
+  },
+
+  updateEducation: async (
+    id: string,
+    data: Partial<Omit<CandidateEducation, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
+  ) => {
+    const res = await apiClient.put<{ message: string; education: CandidateEducation }>(
+      `/candidate/education/${id}`,
+      data
+    );
+    return res.data;
+  },
+
+  deleteEducation: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/candidate/education/${id}`);
+    return res.data;
+  },
+
+  // --- Candidate Work Experience (new endpoints) ---
+  getExperience: async () => {
+    const res = await apiClient.get<{ experience: CandidateExperience[] }>('/candidate/experience');
+    return res.data;
+  },
+
+  addExperience: async (data: Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>) => {
+    const res = await apiClient.post<{ message: string; experience: CandidateExperience }>(
+      '/candidate/experience',
+      data
+    );
+    return res.data;
+  },
+
+  updateExperience: async (
+    id: string,
+    data: Partial<Omit<CandidateExperience, 'id' | 'candidateId' | 'createdAt' | 'updatedAt'>>
+  ) => {
+    const res = await apiClient.put<{ message: string; experience: CandidateExperience }>(
+      `/candidate/experience/${id}`,
+      data
+    );
+    return res.data;
+  },
+
+  deleteExperience: async (id: string) => {
+    const res = await apiClient.delete<{ message: string }>(`/candidate/experience/${id}`);
+    return res.data;
+  },
 
   uploadResume: async (file: File, onProgress?: (pct: number) => void) => {
     const formData = new FormData();
@@ -349,11 +347,6 @@ deleteCandidateExperience: async (id: string) => {
     return res.data;
   },
 
-  getCandidateExtractedResume: async (candidateId: string) => {
-    const res = await apiClient.get<CandidateExtractionResponse>(`/resume/candidate/${candidateId}/extracted`);
-    return res.data;
-  },
-
   getResumeProcessingStatus: async (candidateId: string) => {
     const res = await apiClient.get<{
       candidateId: string;
@@ -374,6 +367,11 @@ deleteCandidateExperience: async (id: string) => {
       extractedData?: ExtractedCandidateProfile;
       error?: string;
     }>(`/resume/candidate/${candidateId}/retry`);
+    return res.data;
+  },
+
+  getCandidateExtractedResume: async (candidateId: string) => {
+    const res = await apiClient.get<CandidateExtractionResponse>(`/resume/candidate/${candidateId}/extracted`);
     return res.data;
   },
 

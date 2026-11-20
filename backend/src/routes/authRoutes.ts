@@ -7,6 +7,7 @@ import {
   resetPassword,
   getMe,
   updateProfile,
+  changePassword,
   uploadCandidateResume,
 } from '../controllers/authController';
 import { authenticateToken } from '../middleware/auth';
@@ -31,6 +32,7 @@ router.post('/reset-password', passwordResetRateLimiter, resetPassword);
 // Profile and session
 router.get('/me', authenticateToken, getMe);
 router.put('/profile', authenticateToken, updateProfile);
+router.post('/change-password', authenticateToken, changePassword);
 router.post('/resume', authenticateToken, uploadResume.single('resume'), uploadCandidateResume);
 
 export default router;

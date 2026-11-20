@@ -52,6 +52,44 @@ export const CompanyProfile: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Password change state
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordFeedback(null);
+
+    if (!passwordForm.currentPassword) {
+      setPasswordFeedback({ type: 'error', message: 'Current password is required.' });
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordFeedback({ type: 'error', message: 'New password must be at least 8 characters long.' });
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordFeedback({ type: 'error', message: 'New passwords do not match.' });
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      const res = await api.changePassword(passwordForm);
+      setPasswordFeedback({ type: 'success', message: res.message || 'Password changed successfully.' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      setPasswordFeedback({ type: 'error', message: err.message || 'Failed to change password.' });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -69,13 +107,19 @@ export const CompanyProfile: React.FC = () => {
   const fetchCompany = async () => {
     try {
       if (!user?.companyId) {
-        // Recruiter without company: load companies list or allow creation
-        const companiesRes = await api.getCompanies();
-        if (companiesRes.companies.length > 0) {
-          const first = companiesRes.companies[0];
-          const details = await api.getCompanyById(first.id);
-          populateCompany(details.company, details.stats);
-        }
+        setCompany(null);
+        setFormData({
+          name: user?.companyName || '',
+          description: '',
+          industry: 'Technology & Software',
+          website: '',
+          email: user?.email || '',
+          contactNumber: '',
+          address: '',
+          location: '',
+          size: '1-50 employees',
+          logo: '',
+        });
       } else {
         const details = await api.getCompanyById(user.companyId);
         populateCompany(details.company, details.stats);
@@ -577,6 +621,86 @@ export const CompanyProfile: React.FC = () => {
               </button>
             </div>
           )}
+        </form>
+      </div>
+
+      {/* Recruiter Security & Password Management */}
+      <div className="saas-card p-6 bg-white border border-slate-200 rounded-xl shadow-xs">
+        <div className="flex items-center gap-2 pb-4 border-b border-slate-100 mb-6">
+          <ShieldCheck className="w-5 h-5 text-indigo-600" />
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Account Security & Password</h2>
+            <p className="text-xs text-slate-500">Update your recruiter account credentials</p>
+          </div>
+        </div>
+
+        {passwordFeedback && (
+          <div
+            className={`p-3 rounded-lg text-xs flex items-center gap-2 mb-4 ${
+              passwordFeedback.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`}
+          >
+            {passwordFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{passwordFeedback.message}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordChange} className="space-y-4 max-w-xl">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Current Password <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+              placeholder="Enter your current password"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                New Password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                placeholder="Minimum 8 characters"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Confirm New Password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                placeholder="Re-enter new password"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors"
+            >
+              {changingPassword ? 'Updating Password...' : 'Change Password'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

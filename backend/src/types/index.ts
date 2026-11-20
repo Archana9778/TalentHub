@@ -7,79 +7,33 @@ export interface UserExperience {
   candidateId?: string;
   title: string;
   company: string;
-  employmentType?: string;
-  location?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  description: string;
-  period?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  title: string;
-  company: string;
   period?: string;
   description?: string;
   location?: string;
   employmentType?: string;
   startDate?: string;
   endDate?: string;
+  isCurrent?: boolean;
   currentlyWorking?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UserEducation {
   id?: string;
   candidateId?: string;
   degree: string;
-  institution?: string;
   school?: string;
-  fieldOfStudy?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  grade?: string;
-  description?: string;
-  year?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface CandidateEducation {
-  id: string;
-  candidateId: string;
-  institution: string;
-  degree: string;
-  fieldOfStudy?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  grade?: string;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface CandidateExperience {
-  id: string;
-  candidateId: string;
-  company: string;
-  title: string;
-  employmentType?: string;
-  location?: string;
-  startDate?: string;
-  endDate?: string;
-  isCurrent?: boolean;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  degree: string;
-  school: string;
+  institution?: string;
   year?: string;
   fieldOfStudy?: string;
   startDate?: string;
   endDate?: string;
+  isCurrent?: boolean;
   grade?: string;
   description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface User {
@@ -594,4 +548,36 @@ export interface ActivityLogsResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+// ─── Candidate Education & Experience ────────────────────────────────────────
+
+export interface CandidateEducation {
+  id: string;
+  candidateId: string;
+  institution: string;
+  degree: string;
+  fieldOfStudy?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  grade?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CandidateExperience {
+  id: string;
+  candidateId: string;
+  company: string;
+  title: string;
+  employmentType?: string;
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

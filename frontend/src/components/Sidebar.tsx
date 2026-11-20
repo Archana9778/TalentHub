@@ -88,24 +88,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           );
         })}
       </nav>
-
-      {/* Infrastructure Health Pill */}
-      <div className="mt-auto pt-4 border-t border-slate-100">
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
-          <div className="flex items-center justify-between text-slate-700 font-semibold mb-1 text-[11px]">
-            <span>System Health</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>ONLINE</span>
-            </span>
-          </div>
-          <div className="text-[10px] text-slate-500 space-y-0.5">
-            <div>Tier 1: React 18 SPA (Vite)</div>
-            <div>Tier 2: Node.js + Express + TypeScript</div>
-            <div>Tier 3: MySQL 8 persistent database</div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 
