@@ -49,7 +49,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Health probes (matches Azure Application Gateway, Spring Actuator, and container orchestrators)
-app.get(['/health', '/actuator/health'], async (req: Request, res: Response) => {
+app.get(['/health', '/api/health', '/actuator/health'], async (req: Request, res: Response) => {
   try {
     const databaseHealthy = await db.checkHealth();
     const status = databaseHealthy ? 'UP' : 'DOWN';
