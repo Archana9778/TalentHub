@@ -34,6 +34,47 @@ export const JobDetails: React.FC = () => {
   const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
+  // Candidate resume verification state
+  const [hasResume, setHasResume] = useState<boolean>(false);
+  const [checkingResume, setCheckingResume] = useState<boolean>(true);
+  const [currentResumeName, setCurrentResumeName] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getMyResume()
+      .then((res) => {
+        if (!isMounted) return;
+        const valid = Boolean(
+          res?.resume &&
+          res.resume.uploadStatus === 'uploaded' &&
+          res.resume.isCurrent === true
+        );
+        if (valid) {
+          setHasResume(true);
+          setCurrentResumeName(res.resume.originalFilename || '');
+        } else {
+          setHasResume(false);
+          setCurrentResumeName('');
+        }
+      })
+      .catch(() => {
+        // Set hasResume to false if the API fails or the response is missing or invalid
+        if (isMounted) {
+          setHasResume(false);
+          setCurrentResumeName('');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setCheckingResume(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
   // Report job state
   const [reportingOpen, setReportingOpen] = useState(false);
   const [reportReason, setReportReason] = useState('Misleading salary or job requirements');
@@ -82,6 +123,10 @@ export const JobDetails: React.FC = () => {
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasResume) {
+      setApplyError('Please upload your resume to your profile before applying for a job.');
+      return;
+    }
     setApplying(true);
     setApplyError(null);
 
@@ -89,7 +134,7 @@ export const JobDetails: React.FC = () => {
       await api.applyForJob(job.id, coverLetter, resumeFile || undefined);
       setAppliedSuccess(true);
     } catch (err: any) {
-      setApplyError(err.message || 'Failed to submit application.');
+      setApplyError(err.response?.data?.message || err.message || 'Failed to submit application.');
     } finally {
       setApplying(false);
     }
@@ -289,6 +334,29 @@ export const JobDetails: React.FC = () => {
                   </div>
                 )}
 
+                {!checkingResume && !hasResume && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-800 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-amber-900">
+                          Please upload your resume to your profile before applying for a job.
+                        </p>
+                        <p className="text-amber-700 text-[11px] mt-0.5">
+                          An active resume on your candidate profile is required before submitting applications.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/candidate/profile"
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs shrink-0 transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Resume</span>
+                    </Link>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                     Cover Letter / Personal Statement
@@ -313,27 +381,41 @@ export const JobDetails: React.FC = () => {
                       </div>
                       <div>
                         <div className="text-xs font-semibold text-slate-800">
-                          {resumeFile ? resumeFile.name : user?.resumeOriginalName || 'Use Saved Profile Resume'}
+                          {resumeFile
+                            ? resumeFile.name
+                            : hasResume
+                            ? currentResumeName
+                            : 'No resume on file'}
                         </div>
                         <div className="text-[11px] text-slate-400">
-                          PDF, DOCX up to 10MB
+                          {hasResume ? 'PDF, DOCX up to 10MB' : 'Please upload your resume to your profile first'}
                         </div>
                       </div>
                     </div>
 
-                    <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-medium cursor-pointer transition-colors shrink-0">
-                      <span>Choose Different File</span>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            setResumeFile(e.target.files[0]);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </label>
+                    {hasResume ? (
+                      <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-medium cursor-pointer transition-colors shrink-0">
+                        <span>Choose Different File</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setResumeFile(e.target.files[0]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    ) : (
+                      <Link
+                        to="/candidate/profile"
+                        className="px-3 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors shrink-0 flex items-center gap-1.5"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload to Profile</span>
+                      </Link>
+                    )}
                   </div>
                 </div>
 
@@ -349,8 +431,9 @@ export const JobDetails: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={applying}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md disabled:opacity-50 transition-colors"
+                    disabled={applying || checkingResume || !hasResume}
+                    title={!hasResume ? 'Please upload your resume to your profile before applying for a job.' : undefined}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Send className="w-4 h-4" />
                     <span>{applying ? 'Submitting Application...' : 'Apply Now'}</span>

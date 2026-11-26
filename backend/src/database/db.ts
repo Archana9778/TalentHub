@@ -1016,7 +1016,7 @@ class DatabaseManager {
     const newDoc: ResumeDocument = { ...doc, isCurrent: true };
     this.data.resumeDocuments.push(newDoc);
     const user = this.data.users.find((u) => u.id === doc.candidateId);
-    if (user) {
+    if (user && doc.uploadStatus === 'uploaded') {
       user.resumeUrl = `blob://${doc.containerName || 'talenthub-resumes'}/${doc.blobName}`;
       user.resumeOriginalName = doc.originalFilename;
     }
@@ -1031,6 +1031,11 @@ class DatabaseManager {
     if (doc) {
       doc.uploadStatus = 'deleted';
       doc.isCurrent = false;
+      const user = this.data.users.find((u) => u.id === (candidateId || doc.candidateId));
+      if (user) {
+        user.resumeUrl = undefined;
+        user.resumeOriginalName = undefined;
+      }
       this.persistJson();
     }
   }
