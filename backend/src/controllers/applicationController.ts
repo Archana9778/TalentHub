@@ -54,10 +54,63 @@ export const applyForJob = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    let resumeUrl = req.user.resumeUrl || '/uploads/resumes/sample-alex-morgan-resume.pdf';
-    if (req.file) {
-      resumeUrl = `/uploads/${req.file.filename}`;
+    // ── Mandatory Resume Validation ──────────────────────────────────────────
+    // 1. If a resumeId is supplied by the frontend, verify ownership and validity
+    const { resumeId } = req.body;
+    if (resumeId) {
+      const suppliedDoc = await db.getResumeDocById(String(resumeId));
+      if (!suppliedDoc || suppliedDoc.candidateId !== req.user.id) {
+        res.status(403).json({
+          success: false,
+          message: 'Forbidden: You cannot use another candidate’s resume.',
+        });
+        return;
+      }
+      if (suppliedDoc.uploadStatus !== 'uploaded') {
+        res.status(400).json({
+          success: false,
+          message: 'Please upload your resume to your profile before applying for a job.',
+        });
+        return;
+      }
     }
+
+    // 2. Retrieve candidate's active resume from Azure MySQL / database
+    let validResumeUrl = '';
+    const currentDoc = await db.getCurrentResume(req.user.id);
+
+    if (currentDoc) {
+      const isOwner = currentDoc.candidateId === req.user.id;
+      const isUploaded = currentDoc.uploadStatus === 'uploaded';
+      const isCurrent = Boolean(currentDoc.isCurrent);
+      const hasValidBlob = typeof currentDoc.blobName === 'string' && currentDoc.blobName.trim().length > 0;
+
+      if (isOwner && isUploaded && isCurrent && hasValidBlob) {
+        validResumeUrl = currentDoc.blobName.trim();
+      }
+    } else {
+      // 3. Fallback check on user profile (e.g. for existing seed candidates without resume_documents)
+      const candidateUser = await db.getUserById(req.user.id);
+      if (
+        candidateUser &&
+        candidateUser.resumeUrl &&
+        typeof candidateUser.resumeUrl === 'string' &&
+        candidateUser.resumeUrl.trim().length > 0
+      ) {
+        validResumeUrl = candidateUser.resumeUrl.trim();
+      }
+    }
+
+    // 4. Reject if no valid resume exists
+    if (!validResumeUrl) {
+      res.status(400).json({
+        success: false,
+        message: 'Please upload your resume to your profile before applying for a job.',
+      });
+      return;
+    }
+
+    const resumeUrl = validResumeUrl;
 
     // Candidate skills and experience calculation
     const candidateSkills =

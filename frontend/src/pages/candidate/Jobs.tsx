@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal, DollarSign, Tag, Plus, ArrowUpDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, Filter, MapPin, Briefcase, X, SlidersHorizontal, DollarSign, Tag, Plus, ArrowUpDown, AlertTriangle, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, JobCategory } from '../../types';
 import { JobCard } from '../../components/JobCard';
@@ -40,6 +41,47 @@ export const Jobs: React.FC = () => {
   const [applying, setApplying] = useState(false);
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+
+  // Candidate resume verification state
+  const [hasResume, setHasResume] = useState<boolean>(false);
+  const [checkingResume, setCheckingResume] = useState<boolean>(true);
+  const [currentResumeName, setCurrentResumeName] = useState<string>('');
+
+  const checkCandidateResume = useCallback(async () => {
+    setCheckingResume(true);
+    try {
+      const res = await api.getMyResume();
+      const valid = Boolean(
+        res?.resume &&
+        res.resume.uploadStatus === 'uploaded' &&
+        res.resume.isCurrent === true
+      );
+      if (valid) {
+        setHasResume(true);
+        setCurrentResumeName(res.resume.originalFilename || '');
+      } else {
+        setHasResume(false);
+        setCurrentResumeName('');
+      }
+    } catch {
+      // Set hasResume to false if the API fails or the response is missing or invalid
+      setHasResume(false);
+      setCurrentResumeName('');
+    } finally {
+      // Always finish the loading state in a finally block
+      setCheckingResume(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkCandidateResume();
+  }, [checkCandidateResume]);
+
+  useEffect(() => {
+    if (applyModalJob) {
+      checkCandidateResume();
+    }
+  }, [applyModalJob, checkCandidateResume]);
 
   const fetchJobs = useCallback(async () => {
     // --- Salary validation: block API call when values are invalid ---
@@ -102,6 +144,11 @@ export const Jobs: React.FC = () => {
     e.preventDefault();
     if (!applyModalJob) return;
 
+    if (!hasResume) {
+      setApplyError('Please upload your resume to your profile before applying for a job.');
+      return;
+    }
+
     setApplying(true);
     setApplyError(null);
     try {
@@ -113,7 +160,7 @@ export const Jobs: React.FC = () => {
         setCoverLetter('');
       }, 2000);
     } catch (err: any) {
-      setApplyError(err.message || 'Failed to submit application.');
+      setApplyError(err.response?.data?.message || err.message || 'Failed to submit application.');
     } finally {
       setApplying(false);
     }
@@ -504,16 +551,48 @@ export const Jobs: React.FC = () => {
                   </div>
                 )}
 
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 text-xs">
-                  <div className="font-semibold text-slate-700 mb-1">
-                    Application Profile Details:
+                {checkingResume ? (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 text-center">
+                    Verifying resume on file...
                   </div>
-                  <div className="text-slate-600 space-y-0.5">
-                    <div><span className="font-medium">Name:</span> {user?.name}</div>
-                    <div><span className="font-medium">Email:</span> {user?.email}</div>
-                    <div><span className="font-medium">Resume on file:</span> {user?.resumeOriginalName || 'Uploaded Profile Resume'}</div>
+                ) : !hasResume ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3 text-xs text-amber-800">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-amber-900">
+                          Please upload your resume to your profile before applying for a job.
+                        </p>
+                        <p className="text-amber-700 text-[11px] mt-0.5">
+                          An active resume on your candidate profile is required before submitting applications.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-1">
+                      <Link
+                        to="/candidate/profile"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-xs"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Resume</span>
+                      </Link>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 text-xs">
+                    <div className="font-semibold text-slate-700 mb-1">
+                      Application Profile Details:
+                    </div>
+                    <div className="text-slate-600 space-y-0.5">
+                      <div><span className="font-medium">Name:</span> {user?.name}</div>
+                      <div><span className="font-medium">Email:</span> {user?.email}</div>
+                      <div>
+                        <span className="font-medium">Resume on file:</span>{' '}
+                        {currentResumeName}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -538,8 +617,9 @@ export const Jobs: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={applying}
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50"
+                    disabled={applying || checkingResume || !hasResume}
+                    title={!hasResume ? 'Please upload your resume to your profile before applying for a job.' : undefined}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {applying ? 'Submitting Application...' : 'Submit Application'}
                   </button>
