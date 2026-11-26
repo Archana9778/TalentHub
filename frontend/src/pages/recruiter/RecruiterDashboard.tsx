@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import { getCompanyLogoUrl } from '../../utils/logo';
 import { Job, Application, ApplicationStage, Company } from '../../types';
 import { Loading } from '../../components/Loading';
 
@@ -160,7 +161,7 @@ export const RecruiterDashboard: React.FC = () => {
               <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
                 {company.logo ? (
                   <img
-                    src={company.logo}
+                    src={getCompanyLogoUrl(company.logo, company.id)}
                     alt={company.name}
                     className="w-full h-full object-cover"
                   />

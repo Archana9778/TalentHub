@@ -64,17 +64,18 @@ export function getClient(): BlobServiceClient {
 
 // ─── Container Initialisation ────────────────────────────────────────────────
 
-let _containerEnsured = false;
+const _ensuredContainers = new Set<string>();
 
-export async function ensureContainer(): Promise<ContainerClient> {
+export async function ensureContainer(
+  containerName: string = config.storage.containerName
+): Promise<ContainerClient> {
   const client = getClient();
-  const containerName = config.storage.containerName;
   const containerClient = client.getContainerClient(containerName);
 
-  if (!_containerEnsured) {
+  if (!_ensuredContainers.has(containerName)) {
     // Create private container (no anonymous access)
     await containerClient.createIfNotExists({ access: undefined });
-    _containerEnsured = true;
+    _ensuredContainers.add(containerName);
     console.log(`[BlobStorage] Container '${containerName}' ready.`);
   }
 
@@ -82,6 +83,49 @@ export async function ensureContainer(): Promise<ContainerClient> {
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
+
+export async function uploadBlobBuffer(
+  containerName: string,
+  blobName: string,
+  buffer: Buffer,
+  mimeType: string,
+  metadata?: Record<string, string>
+): Promise<UploadResult> {
+  const containerClient = await ensureContainer(containerName);
+  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+  await blockBlobClient.uploadData(buffer, {
+    blobHTTPHeaders: {
+      blobContentType: mimeType,
+    },
+    metadata: metadata || {
+      uploadedAt: new Date().toISOString(),
+    },
+  });
+
+  return {
+    blobName,
+    blobUrl: blockBlobClient.url,
+    containerName,
+    contentType: mimeType,
+    sizeBytes: buffer.length,
+  };
+}
+
+export async function uploadLogoBuffer(
+  blobName: string,
+  buffer: Buffer,
+  mimeType: string,
+  metadata?: Record<string, string>
+): Promise<UploadResult> {
+  return uploadBlobBuffer(
+    config.storage.logoContainerName,
+    blobName,
+    buffer,
+    mimeType,
+    metadata
+  );
+}
 
 export async function uploadResumeBuffer(
   blobName: string,
@@ -122,14 +166,17 @@ export async function uploadResumeBuffer(
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export async function deleteBlob(blobName: string): Promise<boolean> {
+export async function deleteBlob(
+  blobName: string,
+  containerName: string = config.storage.containerName
+): Promise<boolean> {
   try {
-    const containerClient = await ensureContainer();
+    const containerClient = await ensureContainer(containerName);
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     const result = await blockBlobClient.deleteIfExists();
     return result.succeeded;
   } catch (err) {
-    console.error(`[BlobStorage] deleteBlob(${blobName}) failed:`, err);
+    console.error(`[BlobStorage] deleteBlob(${blobName}, ${containerName}) failed:`, err);
     return false;
   }
 }
@@ -225,10 +272,32 @@ async function _generateAzureSasUrl(
   return `https://${accountName}.blob.core.windows.net/${containerName}/${blobName}?${sasQueryParams.toString()}`;
 }
 
-export async function downloadBlobToBuffer(blobName: string): Promise<Buffer> {
-  const containerClient = await ensureContainer();
+export async function downloadBlobToBuffer(
+  blobName: string,
+  containerName: string = config.storage.containerName
+): Promise<Buffer> {
+  const containerClient = await ensureContainer(containerName);
   const blockBlobClient = containerClient.getBlockBlobClient(blobName);
   return await blockBlobClient.downloadToBuffer();
+}
+
+export async function downloadBlobWithProperties(
+  blobName: string,
+  containerName: string = config.storage.containerName
+): Promise<{ buffer: Buffer; contentType?: string; etag?: string; lastModified?: Date; contentLength?: number }> {
+  const containerClient = await ensureContainer(containerName);
+  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+  const [properties, buffer] = await Promise.all([
+    blockBlobClient.getProperties(),
+    blockBlobClient.downloadToBuffer(),
+  ]);
+  return {
+    buffer,
+    contentType: properties.contentType,
+    etag: properties.etag,
+    lastModified: properties.lastModified,
+    contentLength: properties.contentLength,
+  };
 }
 
 /** Health-check: returns true if the Blob service endpoint is reachable. */
@@ -260,8 +329,11 @@ export class BlobStorageService {
   static getClient = getClient;
   static ensureContainer = ensureContainer;
   static uploadResumeBuffer = uploadResumeBuffer;
+  static uploadLogoBuffer = uploadLogoBuffer;
+  static uploadBlobBuffer = uploadBlobBuffer;
   static deleteBlob = deleteBlob;
   static generateReadSasUrl = generateReadSasUrl;
   static downloadBlobToBuffer = downloadBlobToBuffer;
+  static downloadBlobWithProperties = downloadBlobWithProperties;
   static pingBlobStorage = pingBlobStorage;
 }

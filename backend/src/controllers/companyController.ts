@@ -1,8 +1,34 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 import { db } from '../database/db';
 import { AuthRequest } from '../middleware/auth';
 import { Company } from '../types';
+import { BlobStorageService } from '../services/blobStorageService';
+import { validateImageBuffer } from '../services/imageValidationService';
+import { config } from '../config';
+
+export function isAzureLogoBlob(ref?: string | null): boolean {
+  if (!ref || typeof ref !== 'string') return false;
+  const trimmed = ref.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return false;
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) return false;
+  if (trimmed.startsWith('data:')) return false;
+  if (trimmed.startsWith('/api/')) return false;
+  return trimmed.startsWith('logos/') || trimmed.startsWith('blob://');
+}
+
+export function extractLogoBlobName(ref?: string | null): string | null {
+  if (!ref || !isAzureLogoBlob(ref)) return null;
+  let trimmed = ref.trim();
+  if (trimmed.startsWith('blob://')) {
+    const parts = trimmed.replace('blob://', '').split('/');
+    parts.shift(); // remove container name
+    return parts.join('/');
+  }
+  return trimmed;
+}
 
 export const getAllCompanies = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -244,10 +270,16 @@ export const updateCompany = async (req: AuthRequest, res: Response): Promise<vo
 
     const resolvedPhone = contactNumber !== undefined ? contactNumber : phone;
 
+    // Preserve existing logo if incoming logo is the retrieval URL endpoint (e.g. /api/companies/:id/logo)
+    let logoToUpdate = logo;
+    if (logo !== undefined && typeof logo === 'string' && (logo.startsWith('/api/companies/') || logo.includes('/logo'))) {
+      logoToUpdate = target.logo;
+    }
+
     const updates: Partial<Company> = {
       ...(name !== undefined && { name: name.trim() }),
       ...(description !== undefined && { description: description.trim() }),
-      ...(logo !== undefined && { logo }),
+      ...(logoToUpdate !== undefined && { logo: logoToUpdate }),
       ...(website !== undefined && { website: website.trim() }),
       ...(compEmail !== undefined && { email: compEmail }),
       ...(resolvedPhone !== undefined && { contactNumber: resolvedPhone.trim(), phone: resolvedPhone.trim() }),
@@ -325,34 +357,160 @@ export const uploadCompanyLogo = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    // Isolation check
+    // Isolation check: Recruiter can only upload for their own company; Admin can upload for any company
     if (req.user.role !== 'admin' && req.user.companyId !== id) {
       res.status(403).json({ message: 'Forbidden: You cannot upload logos for other companies.' });
       return;
     }
 
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       res.status(400).json({ message: 'Please select an image file to upload as the company logo.' });
       return;
     }
 
-    const logoUrl = `/uploads/${req.file.filename}`;
-    const updated = await db.updateCompany(id, { logo: logoUrl });
+    const validation = validateImageBuffer(
+      req.file.buffer,
+      req.file.originalname,
+      config.storage.maxLogoSizeBytes
+    );
 
-    // Update company logo on active jobs
-    const jobs = await db.getJobsByCompanyId(id);
-    for (const j of jobs) {
-      await db.updateJob(j.id, { companyLogo: logoUrl });
+    if (!validation.isValid) {
+      res.status(400).json({ message: validation.error || 'Invalid image file.' });
+      return;
     }
 
+    const oldLogo = company.logo;
+    const ext = validation.extension || path.extname(req.file.originalname).toLowerCase() || '.png';
+    const safeBase = path.basename(req.file.originalname, path.extname(req.file.originalname))
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 50) || 'logo';
+    const uniqueFilename = `${Date.now()}-${uuidv4().substring(0, 8)}-${safeBase}${ext}`;
+    const blobName = `logos/${id}/${uniqueFilename}`;
+
+    // 1. Upload new blob successfully to talenthub-company-logos
+    await BlobStorageService.uploadLogoBuffer(blobName, validation.buffer, validation.mimeType, {
+      companyId: id,
+      originalFilename: req.file.originalname,
+    });
+
+    let updated: Company;
+    try {
+      // 2. Update company and related job references in database
+      const result = await db.updateCompany(id, { logo: blobName });
+      if (!result) {
+        throw new Error('Failed to update company in database');
+      }
+      updated = result;
+
+      const jobs = await db.getJobsByCompanyId(id);
+      for (const j of jobs) {
+        await db.updateJob(j.id, { companyLogo: blobName });
+      }
+    } catch (dbErr) {
+      // If the database update fails, clean up the newly uploaded blob and preserve the old logo
+      console.error('[companyController] Database update failed after logo upload — cleaning up blob:', blobName, dbErr);
+      await BlobStorageService.deleteBlob(blobName, config.storage.logoContainerName).catch((cleanupErr) => {
+        console.warn('[companyController] Failed to clean up newly uploaded blob after DB error:', cleanupErr);
+      });
+      res.status(500).json({ message: 'Failed to update company logo in database', error: (dbErr as any).message });
+      return;
+    }
+
+    // 3. Delete old Azure blob only after the database update succeeds
+    if (oldLogo && isAzureLogoBlob(oldLogo)) {
+      const oldBlobName = extractLogoBlobName(oldLogo);
+      if (oldBlobName && oldBlobName !== blobName) {
+        await BlobStorageService.deleteBlob(oldBlobName, config.storage.logoContainerName).catch((err) => {
+          console.warn('[companyController] Warning: Could not delete old logo blob:', oldBlobName, err);
+        });
+      }
+    }
+
+    const displayUrl = `/api/companies/${id}/logo?t=${Date.now()}`;
     res.json({
       message: 'Company logo uploaded and updated successfully.',
-      logoUrl,
+      logoUrl: displayUrl,
       company: updated,
     });
   } catch (err: any) {
     console.error('[companyController] uploadCompanyLogo error:', err);
     res.status(500).json({ message: 'Error uploading company logo', error: err.message });
+  }
+};
+
+export const getCompanyLogo = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const company = await db.getCompanyById(id);
+
+    if (!company) {
+      res.status(404).json({ message: 'Company not found.' });
+      return;
+    }
+
+    if (!company.logo || company.logo.trim() === '') {
+      res.status(404).json({ message: 'Company logo not found.' });
+      return;
+    }
+
+    const logo = company.logo.trim();
+
+    // 1. External URL compatibility (Unsplash, external CDNs, etc.)
+    if (logo.startsWith('http://') || logo.startsWith('https://')) {
+      res.redirect(302, logo);
+      return;
+    }
+
+    // 2. Legacy local /uploads compatibility
+    if (logo.startsWith('/uploads/') || logo.startsWith('uploads/')) {
+      const relativePath = logo.startsWith('/') ? logo.substring(1) : logo;
+      const localFilePath = path.resolve(__dirname, '../../', relativePath);
+      if (fs.existsSync(localFilePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.sendFile(localFilePath);
+        return;
+      }
+      res.status(404).json({ message: 'Legacy logo file not found.' });
+      return;
+    }
+
+    // 3. Azure Blob reference
+    const blobName = extractLogoBlobName(logo);
+    if (!blobName) {
+      res.status(404).json({ message: 'Invalid company logo reference.' });
+      return;
+    }
+
+    try {
+      const blobData = await BlobStorageService.downloadBlobWithProperties(
+        blobName,
+        config.storage.logoContainerName
+      );
+
+      // Handle conditional requests (ETag)
+      if (blobData.etag && req.headers['if-none-match'] === blobData.etag) {
+        res.status(304).end();
+        return;
+      }
+
+      if (blobData.etag) {
+        res.setHeader('ETag', blobData.etag);
+      }
+      if (blobData.lastModified) {
+        res.setHeader('Last-Modified', blobData.lastModified.toUTCString());
+      }
+
+      res.setHeader('Content-Type', blobData.contentType || 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+      res.setHeader('Content-Length', String(blobData.contentLength || blobData.buffer.length));
+      res.send(blobData.buffer);
+    } catch (blobErr: any) {
+      console.warn(`[companyController] Logo blob '${blobName}' not found or error:`, blobErr.message || blobErr);
+      res.status(404).json({ message: 'Company logo image not found in storage.' });
+    }
+  } catch (err: any) {
+    console.error('[companyController] getCompanyLogo error:', err);
+    res.status(500).json({ message: 'Error retrieving company logo', error: err.message });
   }
 };
 
@@ -395,11 +553,29 @@ export const getCompanyRecruiters = async (req: AuthRequest, res: Response): Pro
 export const deleteCompany = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
+    const company = await db.getCompanyById(id);
+    if (!company) {
+      res.status(404).json({ message: 'Company not found.' });
+      return;
+    }
+
+    const oldLogo = company.logo;
     const deleted = await db.deleteCompany(id);
     if (!deleted) {
       res.status(404).json({ message: 'Company not found.' });
       return;
     }
+
+    // Safely delete associated Azure logo blob if it exists
+    if (oldLogo && isAzureLogoBlob(oldLogo)) {
+      const blobName = extractLogoBlobName(oldLogo);
+      if (blobName) {
+        await BlobStorageService.deleteBlob(blobName, config.storage.logoContainerName).catch((err) => {
+          console.warn('[companyController] Warning: Could not delete logo blob during company deletion:', blobName, err);
+        });
+      }
+    }
+
     res.json({ message: 'Company deleted successfully.' });
   } catch (err: any) {
     console.error('[companyController] deleteCompany error:', err);

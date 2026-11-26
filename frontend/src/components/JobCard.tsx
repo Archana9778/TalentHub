@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, DollarSign, Clock, Building2, Sparkles, ArrowRight } from 'lucide-react';
 import { Job } from '../types';
+import { getCompanyLogoUrl } from '../utils/logo';
 
 interface JobCardProps {
   job: Job;
@@ -22,7 +23,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, candidateSkills = [], onA
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <img
-              src={job.companyLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120'}
+              src={getCompanyLogoUrl(job.companyLogo, job.companyId)}
               alt={job.companyName}
               className="w-12 h-12 rounded-lg object-cover border border-slate-100 p-0.5 shadow-xs shrink-0"
               onError={(e) => {
