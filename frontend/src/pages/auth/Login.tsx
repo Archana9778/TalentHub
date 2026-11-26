@@ -10,7 +10,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldCheck,
-  Info,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -224,28 +223,7 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          {/* Seeded Accounts Reference (Guidance without hardcoded password bypasses) */}
-          <div className="pt-3 border-t border-slate-200">
-            <div className="bg-slate-100/80 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>Default Seed Accounts for Evaluation:</span>
-              </div>
-              <div className="grid grid-cols-1 gap-1 text-slate-500 text-[11px]">
-                <div>
-                  • Candidate: <button type="button" onClick={() => setEmail('candidate@talenthub.com')} className="text-blue-600 underline font-mono">candidate@talenthub.com</button>
-                </div>
-                <div>
-                  • Recruiter: <button type="button" onClick={() => setEmail('recruiter@techcorp.com')} className="text-blue-600 underline font-mono">recruiter@techcorp.com</button>
-                </div>
-                <div>
-                  • Admin: <button type="button" onClick={() => setEmail('admin@talenthub.com')} className="text-blue-600 underline font-mono">admin@talenthub.com</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center text-xs text-slate-500">
+          <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-200">
             Don't have an account yet?{' '}
             <Link to="/register" className="font-semibold text-blue-600 hover:underline">
               Create an account
