@@ -108,10 +108,14 @@ export const config = {
         : ''),
     /** Azure production account name (used with DefaultAzureCredential) */
     accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME || 'devstoreaccount1',
-    /** Private container name */
+    /** Private container name for resumes */
     containerName: process.env.AZURE_STORAGE_CONTAINER_NAME || 'talenthub-resumes',
+    /** Dedicated private container name for company logos */
+    logoContainerName: process.env.AZURE_STORAGE_LOGO_CONTAINER_NAME || 'talenthub-company-logos',
     /** Maximum resume file size in bytes (default 5 MB) */
     maxResumeSizeBytes: parseInt(process.env.RESUME_MAX_FILE_SIZE_MB || process.env.MAX_RESUME_SIZE_MB || '5', 10) * 1024 * 1024,
+    /** Maximum logo file size in bytes (default 5 MB) */
+    maxLogoSizeBytes: parseInt(process.env.LOGO_MAX_FILE_SIZE_MB || '5', 10) * 1024 * 1024,
     /** Short-lived SAS URL expiry in minutes (default 5 min) */
     sasExpiryMinutes: parseInt(process.env.RESUME_SAS_EXPIRY_MINUTES || process.env.AZURE_STORAGE_SAS_EXPIRY_MINUTES || '5', 10),
   },

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getAllCompanies,
   getCompanyById,
+  getCompanyLogo,
   createCompany,
   updateCompany,
   deleteCompany,
@@ -16,6 +17,7 @@ const router = Router();
 // Public / Candidate view
 router.get('/', getAllCompanies);
 router.get('/:id', getCompanyById);
+router.get('/:id/logo', getCompanyLogo);
 
 // Recruiter & Admin management
 router.post('/', authenticateToken, requireRoles('recruiter', 'admin'), createCompany);

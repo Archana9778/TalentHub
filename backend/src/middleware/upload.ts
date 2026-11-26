@@ -43,22 +43,6 @@ export const uploadResume = multer({
   fileFilter,
 });
 
-const logoUploadDir = path.resolve(__dirname, '../../uploads');
-
-const logoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    if (!fs.existsSync(logoUploadDir)) {
-      fs.mkdirSync(logoUploadDir, { recursive: true });
-    }
-    cb(null, logoUploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    cb(null, `${Date.now()}_${safeName}${ext}`);
-  },
-});
-
 const imageFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
   const ext = path.extname(file.originalname).toLowerCase();
@@ -71,7 +55,7 @@ const imageFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFi
 };
 
 export const uploadLogo = multer({
-  storage: logoStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  storage: memoryStorage,
+  limits: { fileSize: config.storage.maxLogoSizeBytes },
   fileFilter: imageFileFilter,
 });

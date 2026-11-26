@@ -17,6 +17,7 @@ import { api } from '../../services/api';
 import { Job, Company } from '../../types';
 import { Loading } from '../../components/Loading';
 import { useAuth } from '../../context/AuthContext';
+import { getCompanyLogoUrl } from '../../utils/logo';
 
 export const JobDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -170,7 +171,7 @@ export const JobDetails: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
           <div className="flex items-start gap-4">
             <img
-              src={job.companyLogo || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120'}
+              src={getCompanyLogoUrl(job.companyLogo, job.companyId)}
               alt={job.companyName}
               className="w-16 h-16 rounded-2xl object-cover border border-slate-100 p-1 shadow-xs shrink-0"
             />
