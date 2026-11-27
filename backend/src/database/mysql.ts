@@ -149,6 +149,10 @@ class MySqlDatabase {
       await this.ensureCandidatePersonalInfoColumns();
       migrationStep = 'V7__candidate_education_experience.sql';
       await this.ensureEducationExperienceTables();
+      migrationStep = 'ensureCompanyProfileColumns';
+      await this.ensureCompanyProfileColumns();
+      migrationStep = 'syncRecruiterCompanyAssociations';
+      await this.syncRecruiterCompanyAssociations();
     } catch (migrationErr: any) {
       const code = typeof migrationErr?.code === 'string' ? ` (${migrationErr.code})` : '';
       throw new Error(`MySQL migration step ${migrationStep} failed${code}. Check database permissions, existing schema compatibility, and migration files; existing data was not intentionally deleted.`);
@@ -530,6 +534,66 @@ class MySqlDatabase {
         CONSTRAINT fk_experience_candidate FOREIGN KEY (candidate_id) REFERENCES users (id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+  }
+
+  private async ensureCompanyProfileColumns(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    const compColumns: Array<[string, string]> = [
+      ['email', 'VARCHAR(150) NULL'],
+      ['contact_number', 'VARCHAR(50) NULL'],
+      ['address', 'TEXT NULL'],
+      ['updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'],
+    ];
+
+    const [tableRows] = await this.pool.query<any[]>(
+      "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'companies'",
+      [config.db.database]
+    );
+
+    if (Number(tableRows?.[0]?.count || 0) > 0) {
+      for (const [column, definition] of compColumns) {
+        const [rows] = await this.pool.query<any[]>(
+          'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+          [config.db.database, 'companies', column]
+        );
+        if (Number(rows?.[0]?.count || 0) === 0) {
+          await this.pool.query(`ALTER TABLE companies ADD COLUMN ${column} ${definition}`);
+          console.log(`[TalentHub MySQL] Added column ${column} to companies.`);
+        }
+      }
+    }
+  }
+
+  private async syncRecruiterCompanyAssociations(): Promise<void> {
+    if (!this.pool) throw new Error('MySQL pool is not initialized.');
+
+    try {
+      // 1. Link recruiters with missing company_id based on matching company_name
+      await this.pool.query(`
+        UPDATE recruiters r
+        JOIN companies c ON LOWER(TRIM(c.name)) = LOWER(TRIM(r.company_name))
+        SET r.company_id = c.id
+        WHERE r.company_id IS NULL AND r.company_name IS NOT NULL AND TRIM(r.company_name) != '';
+      `);
+
+      // 2. Sync company_name if missing in recruiters
+      await this.pool.query(`
+        UPDATE recruiters r
+        JOIN companies c ON r.company_id = c.id
+        SET r.company_name = c.name
+        WHERE (r.company_name IS NULL OR TRIM(r.company_name) = '') AND r.company_id IS NOT NULL;
+      `);
+
+      // 3. Ensure primary recruiter for seeded/existing company is company admin if not set
+      await this.pool.query(`
+        UPDATE recruiters
+        SET company_role = 'admin'
+        WHERE company_role IS NULL OR TRIM(company_role) = '';
+      `);
+    } catch (syncErr) {
+      console.warn('[TalentHub MySQL] Non-fatal warning syncing recruiter company associations:', syncErr);
+    }
   }
 
   async close(): Promise<void> {

@@ -50,7 +50,9 @@ const imageFileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFi
   if (allowedExtensions.includes(ext) || file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files (.png, .jpg, .jpeg, .webp, .svg) are allowed!'));
+    const error = new Error('Only image files (.png, .jpg, .jpeg, .webp, .svg) are allowed!') as Error & { status?: number };
+    error.status = 400;
+    cb(error);
   }
 };
 

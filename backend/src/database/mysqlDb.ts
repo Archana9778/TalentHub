@@ -92,9 +92,13 @@ export class MySqlDatabase {
   }
 
   private userQuery() {
+    const knex = this.db;
     return this.db('users as u')
       .leftJoin('candidates as c', 'u.id', 'c.user_id')
       .leftJoin('recruiters as r', 'u.id', 'r.user_id')
+      .leftJoin('companies as comp', function () {
+        this.on(knex.raw('r.company_id IS NULL AND r.company_name IS NOT NULL AND LOWER(TRIM(comp.name)) = LOWER(TRIM(r.company_name))'));
+      })
       .select(
         'u.id',
         'u.email',
@@ -120,8 +124,9 @@ export class MySqlDatabase {
         'r.location as recruiter_location',
         'r.phone as recruiter_phone',
         'r.bio as recruiter_bio',
-        'r.company_id',
-        'r.company_name'
+        this.db.raw('COALESCE(r.company_id, comp.id) as company_id'),
+        this.db.raw('COALESCE(r.company_name, comp.name) as company_name'),
+        this.db.raw("COALESCE(r.company_role, 'admin') as recruiter_company_role")
       );
   }
 
@@ -275,11 +280,17 @@ export class MySqlDatabase {
       description: r.description || '',
       logo: r.logo || '',
       website: r.website || '',
+      email: r.email || undefined,
+      contactNumber: r.contact_number || undefined,
+      phone: r.contact_number || undefined,
+      address: r.address || undefined,
       location: r.location || '',
       industry: r.industry || '',
       size: r.company_size || '',
       verified: Boolean(r.verified),
+      status: (r.status as 'active' | 'suspended') || 'active',
       createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
     };
   }
 
@@ -300,6 +311,9 @@ export class MySqlDatabase {
       description: company.description || null,
       logo: company.logo || null,
       website: company.website || null,
+      email: company.email || null,
+      contact_number: company.contactNumber || company.phone || null,
+      address: company.address || null,
       location: company.location || null,
       industry: company.industry || null,
       company_size: company.size || null,
@@ -315,10 +329,15 @@ export class MySqlDatabase {
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
     if (updates.website !== undefined) dbUpdates.website = updates.website;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.contactNumber !== undefined) dbUpdates.contact_number = updates.contactNumber;
+    else if (updates.phone !== undefined) dbUpdates.contact_number = updates.phone;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
     if (updates.location !== undefined) dbUpdates.location = updates.location;
     if (updates.industry !== undefined) dbUpdates.industry = updates.industry;
     if (updates.size !== undefined) dbUpdates.company_size = updates.size;
     if (updates.verified !== undefined) dbUpdates.verified = Boolean(updates.verified);
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
 
     if (Object.keys(dbUpdates).length > 0) {
       const count = await this.db('companies').where('id', id).update(dbUpdates);

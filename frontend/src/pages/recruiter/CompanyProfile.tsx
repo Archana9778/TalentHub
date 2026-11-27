@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { Company } from '../../types';
 import { Loading } from '../../components/Loading';
+import { getCompanyLogoUrl } from '../../utils/logo';
 
 const INDUSTRY_OPTIONS = [
   'Technology & Software',
@@ -106,7 +107,24 @@ export const CompanyProfile: React.FC = () => {
 
   const fetchCompany = async () => {
     try {
-      if (!user?.companyId) {
+      let compId = user?.companyId;
+
+      // If user doesn't have companyId directly in session, search by company name if available
+      if (!compId && user?.companyName) {
+        try {
+          const searchRes = await api.getCompanies({ search: user.companyName });
+          const matched = searchRes.companies?.find(
+            (c) => c.name.trim().toLowerCase() === user.companyName?.trim().toLowerCase()
+          );
+          if (matched) {
+            compId = matched.id;
+          }
+        } catch {
+          // ignore lookup fallback error
+        }
+      }
+
+      if (!compId) {
         setCompany(null);
         setFormData({
           name: user?.companyName || '',
@@ -121,7 +139,7 @@ export const CompanyProfile: React.FC = () => {
           logo: '',
         });
       } else {
-        const details = await api.getCompanyById(user.companyId);
+        const details = await api.getCompanyById(compId);
         populateCompany(details.company, details.stats);
       }
     } catch (err: any) {
@@ -280,7 +298,7 @@ export const CompanyProfile: React.FC = () => {
             <div className="w-16 h-16 rounded-xl bg-slate-800 border-2 border-indigo-500/30 overflow-hidden flex items-center justify-center shrink-0">
               {formData.logo ? (
                 <img
-                  src={formData.logo}
+                  src={getCompanyLogoUrl(formData.logo, company?.id)}
                   alt={formData.name || 'Company Logo'}
                   className="w-full h-full object-cover"
                 />
@@ -374,7 +392,7 @@ export const CompanyProfile: React.FC = () => {
             <div className="w-20 h-20 rounded-xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
               {formData.logo ? (
                 <img
-                  src={formData.logo}
+                  src={getCompanyLogoUrl(formData.logo, company?.id)}
                   alt="Company Logo Preview"
                   className="w-full h-full object-cover"
                 />

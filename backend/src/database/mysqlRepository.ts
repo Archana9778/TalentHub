@@ -48,10 +48,13 @@ export class MySqlRepository {
         c.bio as candidate_bio, c.date_of_birth, c.gender, c.resume_url, c.resume_original_name, c.skills_json,
         c.experience_json, c.education_json,
         r.title as recruiter_title, r.location as recruiter_location, r.phone as recruiter_phone,
-        r.bio as recruiter_bio, r.company_id, r.company_name, r.company_role as recruiter_company_role
+        r.bio as recruiter_bio, COALESCE(r.company_id, comp.id) as company_id,
+        COALESCE(r.company_name, comp.name) as company_name,
+        COALESCE(r.company_role, 'admin') as recruiter_company_role
       FROM users u
       LEFT JOIN candidates c ON u.id = c.user_id
       LEFT JOIN recruiters r ON u.id = r.user_id
+      LEFT JOIN companies comp ON (r.company_id IS NULL AND r.company_name IS NOT NULL AND LOWER(TRIM(comp.name)) = LOWER(TRIM(r.company_name)))
     `;
   }
 
@@ -844,6 +847,15 @@ export class MySqlRepository {
     if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
     if (updates.logo !== undefined) { fields.push('logo = ?'); values.push(updates.logo); }
     if (updates.website !== undefined) { fields.push('website = ?'); values.push(updates.website); }
+    if (updates.email !== undefined) { fields.push('email = ?'); values.push(updates.email); }
+    if (updates.contactNumber !== undefined) {
+      fields.push('contact_number = ?');
+      values.push(updates.contactNumber);
+    } else if (updates.phone !== undefined) {
+      fields.push('contact_number = ?');
+      values.push(updates.phone);
+    }
+    if (updates.address !== undefined) { fields.push('address = ?'); values.push(updates.address); }
     if (updates.location !== undefined) { fields.push('location = ?'); values.push(updates.location); }
     if (updates.industry !== undefined) { fields.push('industry = ?'); values.push(updates.industry); }
     if (updates.size !== undefined) { fields.push('company_size = ?'); values.push(updates.size); }
@@ -1997,12 +2009,17 @@ export class MySqlRepository {
       description: row.description || '',
       logo: row.logo || '',
       website: row.website || '',
+      email: row.email || undefined,
+      contactNumber: row.contact_number || undefined,
+      phone: row.contact_number || undefined,
+      address: row.address || undefined,
       location: row.location || '',
       industry: row.industry || '',
       size: row.company_size || '',
       verified: Boolean(row.verified),
       status: (row.status as 'active' | 'suspended') || 'active',
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
     };
   }
 
